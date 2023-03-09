@@ -1,0 +1,1427 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@using System.Web.Script.Serialization
+
+@{
+    Layout = null;
+    ViewData["Title"] = "PackMaterialMaster2";
+
+    var PackingMaterialsPopupData = @Html.Raw(Json.Encode(ViewBag.PackingMaterialsPopupData.Data));
+    var PackingMaterialsVenderPopupData = @Html.Raw(Json.Encode(ViewBag.PackingMaterialsVenderPopupData.Data));
+    var PackingMaterialssuppliersData = @Html.Raw(Json.Encode(ViewBag.suppliersPopupData.Data));
+
+    JavaScriptSerializer serializer = new JavaScriptSerializer();
+    serializer.MaxJsonLength = Int32.MaxValue;
+    var PackingMaterials = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.PackingMaterials)));
+
+}
+
+@*자재 관리*@
+
+<script id="PackMaterialMaster2Js">
+
+        var _packMaterialMaster2MakerCellClickEvent;
+        var _packMaterialMaster2MakerEditData = new Array();
+        var _packMaterialDuplicatedCheck = false;
+        var _packMaterialCRUDGubun;
+        var _packMaterialMaster2ImageSeq;
+        var _packMaterialMaster2ImageCnt;
+
+        // 온 로드
+        $(function () {
+            if ((@PackingMaterials).length > 0) {
+                $("#PackMaterialMaster2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@PackingMaterials));
+                $("#PackMaterialMaster2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#PackMaterialMaster2Grid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            PackMaterialMasterEditCheck(false);
+
+            var columns1 = [
+                { dataField: "item_cd", caption: "자재코드" },
+                { dataField: "item_nm", caption: "자재명" }
+            ];
+
+            createPopup("PackMaterial", "자재 조회", @PackingMaterialsPopupData, columns1, "item_cd");
+
+            var columns2 = [
+                { dataField: "vender_cd", caption: "코드" },
+                { dataField: "vender_nm", caption: "공급사" }
+            ];
+
+            createPopup("PackMaterialSuppliers", "공급사 조회", @PackingMaterialssuppliersData, columns2, "vender_cd");
+
+            var columns3 = [
+                { dataField: "vender_cd", caption: "구입업체코드" },
+                { dataField: "vender_nm", caption: "구입업체명" }
+            ];
+
+            createPopup("PackMaterialMaster2Maker", "구입업체 조회", @PackingMaterialsVenderPopupData, columns3, "vender_cd");
+
+
+            $($("#PackMaterialMaster2UploadBtn1")).click(function (event) {
+                var fileUploader = $('#PackMaterialMaster2UpperImageUploader').dxFileUploader('instance');
+
+                _packMaterialMaster2ImageSeq = 1;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#PackMaterialMaster2UploadBtn2")).click(function (event) {
+                var fileUploader = $('#PackMaterialMaster2MiddleImageUploader').dxFileUploader('instance');
+
+                _packMaterialMaster2ImageSeq = 2;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#PackMaterialMaster2UploadBtn3")).click(function (event) {
+                var fileUploader = $('#PackMaterialMaster2LowerImageUploader').dxFileUploader('instance');
+
+                _packMaterialMaster2ImageSeq = 3;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#PackMaterialMaster2DeleteBtn1")).click(function (event) {
+                PackMaterialMaster2DeleteImage(1);
+            });
+
+            $($("#PackMaterialMaster2DeleteBtn2")).click(function (event) {
+                PackMaterialMaster2DeleteImage(2);
+            });
+
+            $($("#PackMaterialMaster2DeleteBtn3")).click(function (event) {
+                PackMaterialMaster2DeleteImage(3);
+            });
+
+        });
+
+        // 자재 그리드 포커스 이동시 우측 디테일
+        function packMaterialMasterSelectPackMaterial() {
+
+            $("#PackMeterialMasterForm")[0].reset();
+
+            $("#PackMaterialMaster2_checkResText").text("");
+
+            var grid = $("#PackMaterialMaster2Grid").dxDataGrid("instance");
+            var data = getGridRowByKey('PackMaterialMaster2Grid', grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(data)) return;
+
+            // === 기본정보 ===
+            $('#PackMeterialMasterForm input[name="item_cd"]').val(data.item_cd);
+            $('#PackMeterialMasterForm input[name="selected_item_cd"]').val(data.item_cd);
+            $('#PackMeterialMasterForm input[name="item_nm"]').val(data.item_nm);
+            $('#PackMeterialMasterForm input[name="abbreviation_cd"]').val(data.abbreviation_cd);
+            $('#PackMeterialMasterForm input[name="item_s_nm"]').val(data.item_s_nm);
+            $('#PackMeterialMasterForm input[name="item_enm"]').val(data.item_enm);
+            $('#PackMeterialMasterForm input[name="item_jnm"]').val(data.item_jnm);
+
+            if (data.prod_end === "Y") {
+                $('#PackMeterialMasterForm input[name="prod_end"]').attr("checked", true);
+            } else {
+                $('#PackMeterialMasterForm input[name="prod_end"]').attr("checked", false);
+            }
+
+            $('#PackMeterialMasterForm select[name="break_type"]').val(data.break_type);
+
+            // === 분류정보 ===
+            if (data.print_item != "") {
+                $('#PackMeterialMasterForm input[name="print_item"][value=' + data.print_item + ']').prop("checked", true);
+            }
+            if (data.outer_process != "") {
+                $('#PackMeterialMasterForm input[name="outer_process"][value=' + data.outer_process + ']').prop("checked", true);
+            }
+            if (data.in_out_ck != "") {
+                $('#PackMeterialMasterForm input[name="in_out_ck"][value=' + data.in_out_ck + ']').prop("checked", true);
+            }
+
+            $('#PackMeterialMasterForm select[name="abc_gubun"]').val(data.abc_gubun).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="plant_cd"]').val(data.plant_cd).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="item_type1"]').val(data.item_type1).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="item_type2"]').val(data.item_type2).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="unit_price"]').val(data.unit_price);
+            $('#PackMeterialMasterForm select[name="management_type"]').val(data.management_type).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="item_form_cd"]').val(data.item_form_cd).prop("selected", true);
+
+            // === 주요정보 ===
+            $('#PackMeterialMasterForm select[name="item_unit"]').val(data.item_unit_cd).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="item_validity_period"]').val(data.item_validity_period);
+            $('#PackMeterialMasterForm select[name="item_validity_period_unit"]').val(data.item_validity_period_unit).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="item_keeping_term"]').val(data.kepping_term);
+            $('#PackMeterialMasterForm select[name="item_keeping_unit"]').val(data.kepping_term_unit).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="item_keep_condition"]').val(data.item_keep_condition).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="item_keep_temperature"]').val(data.item_keep_temperature).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="keeping_warehouse"]').val(data.keeping_warehouse).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="container_shape"]').val(data.container_shape).prop("selected", true);
+            $('#PackMeterialMasterForm select[name="material_out_type"]').val(data.material_out_type).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="scale_factor"]').val(data.scale_factor);
+            $('#PackMeterialMasterForm input[name="item_pack_barcode"]').val(data.item_pack_barcode);
+            $('#PackMeterialMasterForm select[name="item_type3"]').val(data.item_type3).prop("selected", true);
+
+            // === 시험정보 ===
+            if (data.item_exam_yn == "Y") {
+                $('#PackMeterialMasterForm input[name="item_exam_yn"]').attr("checked", true);
+            }
+            else {
+                $('#PackMeterialMasterForm input[name="item_exam_yn"]').attr("checked", false);
+            }
+
+            if (data.pack_sampling_ck == "Y") {
+                $('#PackMeterialMasterForm input[name="item_sampling"]').attr("checked", true);
+            }
+            else {
+                $('#PackMeterialMasterForm input[name="item_sampling"]').attr("checked", false);
+            }
+
+            $('#PackMeterialMasterForm select[name="sampling_calc"]').val(data.sampling_calc).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="item_pack_size"]').val(data.item_pack_size);
+
+            // === 구매정보 ===
+            $('#PackMeterialMasterForm input[name="basic_purchase_qty"]').val(data.basic_purchase_qty);
+            $('#PackMeterialMasterForm select[name="basic_purchase_unit"]').val(data.basic_purchase_unit).prop("selected", true);
+            $('#PackMeterialMasterForm input[name="delivery_period"]').val(data.delivery_period);
+            $('#PackMeterialMasterForm input[name="test_period"]').val(data.test_period);
+            $('#PackMeterialMasterForm input[name="item_safety_day"]').val(data.item_safety_day);
+            $('#PackMeterialMasterForm input[name="item_spec_qty"]').val(data.item_spec_qty);
+            $('#PackMeterialMasterForm select[name="item_spec_type"]').val(data.item_spec_type).prop("selected", true);
+
+            $('#PackMeterialMasterForm input[name="trade_cd"]').val(data.trade_cd);
+            $('#PackMeterialMasterForm input[name="trade_nm"]').val(data.trade_nm);
+
+            if (data.taxfree_yn == "Y") {
+                $('#PackMeterialMasterForm input[name="taxfree_yn"]').attr("checked", true);
+            }
+            else {
+                $('#PackMeterialMasterForm input[name="taxfree_yn"]').attr("checked", false);
+            }
+
+            PackMaterialMaster2SelectMaker();
+            PackMaterialMaster2SelectImage();
+        }
+
+        // 제조처 조회
+        function PackMaterialMaster2SelectMaker() {
+
+            var grid = $("#PackMaterialMaster2Grid").dxDataGrid("instance");
+            var data = getGridRowByKey('PackMaterialMaster2Grid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'GET',
+                url: '/SysItem/PackMaterialMaster2SelectMaker',
+                data: {
+                    packMaterial_cd: data.item_cd
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "PackMaterialMaster2MakerGrid", true);
+        }
+
+        // 제제 이미지 조회
+        function PackMaterialMaster2SelectImage() {
+
+            $.ajax({
+                type: 'GET',
+                url: '/SysItem/SelectMaterialImage',
+                data: {
+                    item_cd: $("#PackMeterialMasterForm input[name=item_cd]").val()
+                },
+                success: function (result) {
+
+                    try {
+
+                        var jsonData = JSON.parse(result);
+
+                        _packMaterialMaster2ImageCnt = jsonData.length;
+
+                        $("#PackMaterialMaster2UpperImage").attr('src', jsonData[0].upper_image);
+
+                        $("#PackMaterialMaster2MiddleImage").attr('src', jsonData[0].middle_image);
+
+                        $("#PackMaterialMaster2LowerImage").attr('src', jsonData[0].lower_image);
+
+                    } catch (e) {
+
+                        _packMaterialMaster2ImageCnt = 0;
+
+                        $("#PackMaterialMaster2UpperImage").attr('src', '/Content/image/defaultSign.png');
+                        $("#PackMaterialMaster2MiddleImage").attr('src', '/Content/image/defaultSign.png');
+                        $("#PackMaterialMaster2LowerImage").attr('src', '/Content/image/defaultSign.png');
+                    }
+                }
+            })
+        }
+
+        // 수정중인지 체크
+        function PackMaterialMasterEditCheck(nowEdit) {
+            //$("#PackMeterialMasterForm input[name=item_cd]").attr("readonly", false);
+
+            if (nowEdit) {
+                $("#PackMaterialMaster2Save").dxButton().parent().parent().removeClass("display-none");
+                $("#PackMaterialMaster2Undo").dxButton().parent().parent().removeClass("display-none");
+                $("#PackMaterialMaster2Search").dxButton().parent().parent().addClass("display-none");
+                $("#PackMaterialMaster2Input").dxButton().parent().parent().addClass("display-none");
+                $("#PackMaterialMaster2Edit").dxButton().parent().parent().addClass("display-none");
+                $("#PackMaterialMaster2Delete").dxButton().parent().parent().addClass("display-none");
+
+                $("#PackMeterialMasterForm :disabled").attr('disabled', false);
+
+                var grid = $("#PackMaterialMaster2Grid").dxDataGrid("instance");
+                var data = getGridRowByKey('PackMaterialMaster2Grid', grid.option("focusedRowKey"));
+
+                if (data.prod_end === "Y") {
+                    console.log(1);
+                    $('#PackMeterialMasterForm select[name=break_type]').attr('disabled', true);
+                } else {
+                    console.log(2);
+                    $('#PackMeterialMasterForm select[name=break_type]').attr('disabled', false);
+                }
+
+                $("#PackMaterialMaster2Grid").dxDataGrid("option", "disabled", true);
+
+                var editing = {
+                    allowUpdating: true,
+                    allowAdding: true,
+                    allowDeleting: true,
+                    mode: 'batch'
+                }
+
+                $("#PackMaterialMaster2MakerGrid").dxDataGrid("option", "editing", editing);
+
+            }
+            if (!nowEdit) {
+                $("#PackMaterialMaster2Save").dxButton().parent().parent().addClass("display-none");
+                $("#PackMaterialMaster2Undo").dxButton().parent().parent().addClass("display-none");
+                $("#PackMaterialMaster2Search").dxButton().parent().parent().removeClass("display-none");
+                $("#PackMaterialMaster2Input").dxButton().parent().parent().removeClass("display-none");
+                $("#PackMaterialMaster2Edit").dxButton().parent().parent().removeClass("display-none");
+                $("#PackMaterialMaster2Delete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#PackMeterialMasterForm :enabled").attr('disabled', true);
+                $("#PackMaterialMaster2Grid").dxDataGrid("option", "disabled", false);
+
+                if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                    _packMaterialDuplicatedCheck = false;
+                }
+
+                var editing = {
+                    allowUpdating: false,
+                    allowAdding: false,
+                    allowDeleting: false
+                }
+
+                $("#PackMaterialMaster2MakerGrid").dxDataGrid("option", "editing", editing);
+            }
+        }
+
+        // 자재 코드 중복 확인
+        function packCdDuplicateCheck() {
+
+            if (!$('#PackMeterialMasterForm input[name=item_cd]').val()) {
+
+                _packMaterialDuplicatedCheck = false;
+
+                $("#PackMaterialMaster2_checkResText").text("빈 문자열 입니다.");
+                $("#PackMaterialMaster2_checkResText").css("color", "red");
+
+                return;
+            }
+
+            $.ajax({
+                type: 'GET',
+                url: '/SysItem/PackItemCdDuplicateCheck',
+                data: {
+                    gubun: _packMaterialCRUDGubun,
+                    item_cd: $('#PackMeterialMasterForm input[name=item_cd]').val(),
+                    selected_item_cd: $('#PackMeterialMasterForm input[name=selected_item_cd]').val()
+                },
+                success: function (result) {
+                    $("#PackMaterialMaster2_checkResText").text(result[1]);
+
+                    if (result[0] == "0") {
+                        _packMaterialDuplicatedCheck = false;
+                        $("#PackMaterialMaster2_checkResText").css("color", "red");
+                    }
+                    else if (result[0] == "1") {
+                        _packMaterialDuplicatedCheck = true;
+                        $("#PackMaterialMaster2_checkResText").css("color", "green");
+                    }
+                }
+            })
+        };
+
+        // 검색용 자재 팝업 show
+        function packMaterialSearchPackMaterial() {
+            $("#PackMaterialPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 자재 팝업 로우 더블클릭
+        function PackMaterialRowDblClick(selectedItems) {
+
+            $("#PackMaterialMaster2SearchForm input[name=item_cd]").val(selectedItems.data.item_cd);
+
+            var popup = $("#PackMaterialPopup").dxPopup("instance");
+
+            popup.hide();
+        }
+
+
+    function searchSupplier_PackMaterial() {
+
+        var popup = $("#PackMaterialSuppliersPopup").dxPopup("instance");
+
+        popup.show();
+
+
+    }
+
+    // 공급사 팝업 선택
+    function PackMaterialSuppliersRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $('#PackMeterialMasterForm input[name="trade_cd"]').val(data.vender_cd);
+        $('#PackMeterialMasterForm input[name="trade_nm"]').val(data.vender_nm);
+
+        var popup = $("#PackMaterialSuppliersPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+        // 조회
+        function PackMaterialMaster2Search() {
+
+            var form = $('#PackMaterialMaster2SearchForm')[0];
+            var data = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysItem/SelectPackMaterial',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#PackMaterialMaster2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#PackMaterialMaster2Grid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "PackMaterialMaster2Grid");
+
+        }
+
+        // 입력
+        function PackMaterialMaster2Input() {
+            _packMaterialCRUDGubun = "I";
+            $("#PackMeterialMasterForm")[0].reset();
+
+            $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+            $("#PackMaterialMaster2UpperImage").attr('src', '/Content/image/defaultSign.png');
+            $("#PackMaterialMaster2MiddleImage").attr('src', '/Content/image/defaultSign.png');
+            $("#PackMaterialMaster2LowerImage").attr('src', '/Content/image/defaultSign.png');
+
+            $('#PackMeterialMasterForm select[name="plant_cd"]').val("PC001");
+            $("#PackMeterialMasterForm input:radio[name='in_out_ck']:radio[value='Y']").prop('checked', true);
+            $("#PackMeterialMasterForm input:radio[name='print_item']:radio[value='Y']").prop('checked', true);
+            $("#PackMeterialMasterForm input:radio[name='outer_process']:radio[value='1']").prop('checked', true);
+
+            PackMaterialMasterEditCheck(true);
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $("#PackMeterialMasterForm input[name=item_cd]").attr("readonly", false);
+            }
+        }
+
+        // 수정
+        function PackMaterialMaster2Edit() {
+            _packMaterialCRUDGubun = "U";
+
+            PackMaterialMasterEditCheck(true);
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $("#PackMeterialMasterForm input[name=item_cd]").attr("readonly", true);
+            }
+        }
+
+        // 저장
+        async function PackMaterialMaster2Save() {
+
+            if (!UtilView.checkValidForm("PackMeterialMasterForm")) {
+                return;
+            }
+
+
+            if ($('#PackMeterialMasterForm select[name="basic_purchase_unit"]').val() == "M") {
+
+                var item_spec_qty = $('#PackMeterialMasterForm input[name="item_spec_qty"]').val();
+                var item_spec_type = $('#PackMeterialMasterForm select[name="item_spec_type"]').val();
+                if (item_spec_qty == null || item_spec_qty == "") {
+                    alert("발주단위가 M인 경우 규격은 필수 입력 사항입니다.");
+                    return;
+                }
+                if (item_spec_type == null || item_spec_type == "") {
+                    alert("발주단위가 M인 경우 규격타입은 필수 입력 사항입니다.");
+                    return;
+                }
+            }
+
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                if (!_packMaterialDuplicatedCheck && _packMaterialCRUDGubun === "I") {
+                    alert("자재 코드 중복확인을 진행해주십시오.");
+                    return;
+                }
+            }
+
+            var form = $('#PackMeterialMasterForm')[0];
+            var data = new FormData(form);
+            data.set("gubun", _packMaterialCRUDGubun);
+            // checkbox 값 제어
+            data.set("prod_end", $('#PackMeterialMasterForm input:checkbox[name=prod_end]').is(':checked') ? 'Y' : 'N');
+
+            //저장시에 공급사 필드(trade_nm) 빈 값일때, trade_cd도 빈값으로 설정해주어야 공급사가 사라짐. 
+            if (UtilView.isEmpty(data.get("trade_nm"))) {
+                data.set("trade_cd", "");
+            }
+
+            await $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance").saveEditData();
+
+            //원료 마스터 입력
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/PackMaterialCRUD',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    if (result) {
+
+                        // 제조처 그리드 데이터 입력
+                        if (_packMaterialMaster2MakerEditData.length > 0) {
+
+                            //원료입력일땐, item_cd가 만들어지지 않은 상태이므로, db에서 받아온 item_cd를 그리드 데이터에 넣어주어야함
+                            if (_packMaterialCRUDGubun == "I") {
+                                $.map(_packMaterialMaster2MakerEditData, function (value, index) {
+                                    value.item_cd = result;//db 리턴 item_cd
+                                });
+                            }
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/SysItem/PackMaterialMakerCRUD',
+                                data: {
+                                    packMaterials: JSON.stringify(_packMaterialMaster2MakerEditData)
+                                },
+                                dataType: 'json',
+                                async: false,
+                                success: function (result) {
+
+
+                                }
+                            });
+                        }
+
+                        alert("저장되었습니다.");
+
+                        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                            MaterialMaster2_duplicatedCheck = false;
+                            $("#PackMaterialMaster2_checkResText").text("");
+                        }
+                        PackMaterialMasterEditCheck(false);
+                        PackMaterialMaster2Search();
+
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+
+                    //기존
+                    @*if (result.length > 0 || result == "1") {
+                        alert("저장되었습니다.");
+
+                        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                            MaterialMaster2_duplicatedCheck = false;
+                            $("#PackMaterialMaster2_checkResText").text("");
+                        }
+                        PackMaterialMasterEditCheck(false);
+                        PackMaterialMaster2Search();
+                    }
+                    else {
+                        alert("실패하였습니다.");
+                    }*@
+                }
+            })
+        }
+
+        // 삭제
+        function PackMaterialMaster2Delete() {
+
+            var isOK = confirm("자재를 삭제하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            var grid = $("#PackMaterialMaster2Grid").dxDataGrid("instance");
+            var data = getGridRowByKey('PackMaterialMaster2Grid', grid.option("focusedRowKey"));
+
+            _packMaterialCRUDGubun = "D";
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/PackMaterialCRUD',
+                data: {
+                    item_cd: data.item_cd,
+                    gubun: _packMaterialCRUDGubun
+                },
+                success: function (result) {
+
+                    alert(result);
+
+                    PackMaterialMasterEditCheck(false);
+                    if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                        $("#PackMaterialMaster2_checkResText").text("");
+                    }
+
+                    PackMaterialMaster2Search();
+                }
+            });
+
+        }
+
+        // 취소
+        function PackMaterialMaster2Undo() {
+
+            PackMaterialMasterEditCheck(false);
+            packMaterialMasterSelectPackMaterial();
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $("#PackMaterialMaster2_checkResText").text("");
+            }
+        }
+
+        // 사용여부 체크에 따른 중지사유 셀렉트 박스 제어
+        function packMaterialProdEndCk() {
+            if ($('#PackMeterialMasterForm input[name=prod_end]').is(":checked") == true) {
+
+                $('#PackMeterialMasterForm select[name=break_type]').val("1");
+                $('#PackMeterialMasterForm select[name=break_type]').attr('disabled', true);
+            } else {
+                $('#PackMeterialMasterForm select[name=break_type]').attr('disabled', false);
+            }
+        }
+
+        // 자재 코드 수정했을시
+        function rewritePackItemCd() {
+            _packMaterialDuplicatedCheck = false;
+            $("#PackMaterialMaster2_checkResText").text("");
+        }
+
+        // 제조처 그리드 팝업 이벤트
+        function PackMaterialMaster2MakerGridPopup(e) {
+            _packMaterialMaster2MakerCellClickEvent = e;
+
+            if (e.hasOwnProperty("row") && e.row.hasOwnProperty("isEditing") && e.row.isEditing) {
+                if (e.columnIndex == 0) {
+                    $("#PackMaterialMaster2MakerPopup").dxPopup("instance").show();
+                }
+            }
+        }
+
+        // 제조처 그리드 팝업 로우 더블클릭
+        function PackMaterialMaster2MakerRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            var dataGrid = $("#PackMaterialMaster2MakerGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_packMaterialMaster2MakerCellClickEvent.rowIndex, "material_maker_cd", data.vender_cd);
+            dataGrid.cellValue(_packMaterialMaster2MakerCellClickEvent.rowIndex, "material_maker_nm", data.vender_nm);
+
+            $("#PackMaterialMaster2MakerPopup").dxPopup("instance").hide();
+        }
+
+        // 제조처 그리드 입력
+        function PackMaterialMaster2MakerInsert(info) {
+            var data = info.data;
+
+            data.item_cd = $("#PackMeterialMasterForm input[name=item_cd]").val();
+            data.pGubun = "I2";
+
+            _packMaterialMaster2MakerEditData.push(data);
+        }
+
+        // 제조처 그리드 수정
+        function PackMaterialMaster2MakerUpdate(info) {
+            var data = info.data;
+
+            data.item_cd = $("#PackMeterialMasterForm input[name=item_cd]").val();
+            data.pGubun = "U2";
+
+            _packMaterialMaster2MakerEditData.push(data);
+        }
+
+        // 제조처 그리드 삭제
+        function PackMaterialMaster2MakerDelete(info) {
+            var data = info.data;
+
+            data.item_cd = $("#PackMeterialMasterForm input[name=item_cd]").val();
+            data.pGubun = "D2";
+
+            _packMaterialMaster2MakerEditData.push(data);
+        }
+
+        // 제조처 그리드 직접 입력 방지
+        function PackMaterialMaster2MakerEditableColumn(cellElement, cellInfo) {
+
+            if (cellElement.rowType != "data" || !cellElement.isEditing)
+                return;
+            if (cellElement.column.dataField === 'material_maker_cd' && !cellElement.row.inserted)
+                cellElement.element.find('input').prop('disabled', true);
+            if (cellElement.column.dataField === 'material_maker_nm' && !cellElement.row.inserted)
+                cellElement.element.find('input').prop('disabled', true);
+        }
+
+        // 제제 이미지 업로드
+        function PackMaterialMaster2UploadImage(e) {
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "item_cd", $("#PackMeterialMasterForm input[name=item_cd]").val());
+            url = updateQueryStringParameter(url, "gubun", _packMaterialMaster2ImageSeq);
+            url = updateQueryStringParameter(url, "imageCnt", _packMaterialMaster2ImageCnt);
+
+            e.component.option("uploadUrl", url);
+        }
+
+        // 제제 이미지 삭제
+        function PackMaterialMaster2DeleteImage(num) {
+
+            if (!confirm("선택된 이미지를 삭제하시겠습니까?")) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/MaterialMaster2DeleteImage',
+                dataType: "json",
+                data: {
+                    item_cd: $("#PackMeterialMasterForm input[name=item_cd]").val(),
+                    gubun: num
+                },
+                success: function (result) {
+
+                    PackMaterialMaster2SelectImage();
+                }
+            })
+        }
+
+        function PackMaterialMaster2Excel() {
+            gridExportToExcel("PackMaterialMaster2Grid", "PackMaterialData");
+        }
+
+</script>
+
+
+<div id="PackMaterialMaster2" autoresize="Y">
+
+    <div id="PackMaterialPopup"></div>
+    <div id="PackMaterialBrandPopup"></div>
+    <div id="PackMaterialMaster2MakerPopup"></div>
+    <div id="PackMaterialSuppliersPopup"></div>
+
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="PackMaterialMaster2SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">자재</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="packMaterialSearchPackMaterial()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용구분</span>
+                        </div>
+                        <select class="form-control" name="prod_end">
+                            @foreach (DataRow row in ((DataTable)ViewBag.usedGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-7 pr-1">
+
+            @* === 메인 그리드 === *@
+
+            <fieldset class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackMaterialMaster2Grid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .KeyExpr("item_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface").Width(200);
+                        c.Add().DataField("item_cd").Caption("자재코드").Width(200);
+                        c.Add().DataField("item_nm").Caption("자재명");
+                        c.Add().DataField("prod_end").Caption("사용여부").DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return rowData.prod_end == ""Y""; }").Width(200);
+                    })
+                    .FocusedRowEnabled(true)
+                    .OnFocusedRowChanged("packMaterialMasterSelectPackMaterial")
+                )
+            </fieldset>
+
+        </div>
+
+        @* === 그리드 우측 DIV === *@
+        <div id="MaterialMaster2RightMain" class="col-5 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>자재 정보</p>
+                    <span class="text-danger display-none col-8"></span>
+                </div>
+
+                <form id="PackMeterialMasterForm">
+
+                    @* === 기본정보 === *@
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active">기본정보</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-2">코드 <star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control required" name="item_cd" onchange="rewritePackItemCd()">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" id="PackMaterialMaster2_duplicate_check" type="button" onclick="packCdDuplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>
+                                    <div class="input-group col-6">
+                                        <span id="PackMaterialMaster2_checkResText"></span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-2">코드</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="item_cd" readonly="readonly" @*onchange="rewritePackItemCd()"*@>
+                                    @*<div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="packCdDuplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>*@
+                                </div>
+                                @*<div class="input-group col-5 pl-1">
+                                    <span name="checkResText"></span>
+                                </div>*@
+                            }
+                        </div>
+                        <input type="text" name="selected_item_cd" hidden="hidden" />
+
+                        <div class="input-wrapper">
+                            <label class="col-2">자재명 <star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="item_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">약식코드</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="abbreviation_cd">
+                            </div>
+                            <label class="col-2">약식품명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="item_s_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">영문명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_enm">
+                            </div>
+                            <label class="col-2">일문명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="item_jnm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사용여부</label>
+                            <div class="input-group col-3">
+                                <input type="checkbox" name="prod_end" onclick="packMaterialProdEndCk()" value="Y" />
+                            </div>
+                            <label class="col-2">사용중지사유</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="break_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.retiredReason).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    @* === 분류정보 === *@
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active">분류정보</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">표시자재여부</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="print_item" value="Y" />표시자재 </label>
+                                    <label><input type="radio" name="print_item" value="N" />비표시자재 </label>
+                                </div>
+                            </div>
+                            <label class="col-2">외주구분</label>
+                            <div class="input-group col-4">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="outer_process" value="1" />구매 </label>
+                                    <label><input type="radio" name="outer_process" value="2" />수탁 </label>
+                                    <label><input type="radio" name="outer_process" value="3" />위탁 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">국내외구분</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="in_out_ck" value="Y" />국내 </label>
+                                    <label><input type="radio" name="in_out_ck" value="N" />국외 </label>
+                                </div>
+                            </div>
+                            <label class="col-2">ABC 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="abc_gubun">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.abcGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사업장 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <select class="form-control required col-12" name="plant_cd">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.workplaceGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">생산동/팀</label>
+                            <div class="input-group col-2">
+                                <select class="form-control col-12" name="item_type1">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.productionBuildingGubuns2).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="input-group col-2">
+                                <select class="form-control col-12" name="item_type2">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.teamGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">관리유형</label>
+                            <div class="input-group col-3">
+                                <select class="form-control col-12" name="management_type">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.managementType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">제형</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="item_form_cd">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.fomulation).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    @* === 주요정보, 시험정보, 구매정보, 제조처정보 탭 === *@
+                    <ul class="nav nav-tabs" id="PackMaterialMaster2MenuDiv">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('PackMaterialMaster2MenuDiv', 'PackMaterialMaster2MenuDiv', 1)">주요정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('PackMaterialMaster2MenuDiv', 'PackMaterialMaster2MenuDiv', 2)">시험정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('PackMaterialMaster2MenuDiv', 'PackMaterialMaster2MenuDiv' , 3)">구매정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('PackMaterialMaster2MenuDiv', 'PackMaterialMaster2MenuDiv' , 4)">제조처정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('PackMaterialMaster2MenuDiv', 'PackMaterialMaster2MenuDiv' , 5)">제제모양</a>
+                        </li>
+                    </ul>
+
+                    <div id="PackMaterialMaster2MenuDiv">
+
+                        @* === 주요정보 === *@
+                        <div class="menuDiv" id="PackMaterialMaster2MenuDiv_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">자재관리단위 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <select class="form-control required col-12" name="item_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">유효기간</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="col-4 form-control" name="item_validity_period" />
+                                    <select class="form-control col-8" name="item_validity_period_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관기간</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="col-4 form-control" name="item_keeping_term" />
+                                    <select class="form-control col-8" name="item_keeping_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">보관조건/온도</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control col-6" name="item_keep_condition">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageConditions).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                    <select class="form-control col-6" name="item_keep_temperature">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageTemperatures).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관창고</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="keeping_warehouse">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageWarehouses).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">포장재질</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control col-12" name="container_shape">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.packingMaterial).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">소수점 계산법</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="material_out_type">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.decimalCalculationcMethod).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">환산계수</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-12 form-control" name="scale_factor" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제품 바코드</label>
+                                <div class="input-group col-9">
+                                    <input type="text" class="col-12 form-control" name="item_pack_barcode" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제형구분 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control required" name="item_type3">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.fomulationType).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @* === 시험정보 === *@
+                        <div class="menuDiv display-none" id="PackMaterialMaster2MenuDiv_2">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">실험필요여부</label>
+                                <div class="input-group col-3">
+                                    <input type="checkbox" name="item_exam_yn" value="Y" />
+                                </div>
+                                <label class="col-2">통별 샘플링 대상</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" name="item_sampling" value="Y" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">환산개수</label>
+                                <div class="input-group col-3">
+                                    <input class="form-control col-12" type="number" name="item_pack_size" />
+                                </div>
+                                <label class="col-2">샘플링방법</label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control" name="sampling_calc">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.samplingGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @* === 구매정보 === *@
+                    <div class="menuDiv display-none" id="PackMaterialMaster2MenuDiv_3">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">발주단위</label>
+                            <div class="input-group col-4">
+                                <input class="form-control col-12" type="number" name="basic_purchase_qty" />
+                                <select class="col-12 form-control required" name="basic_purchase_unit">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">입고기간</label>
+                            <div class="input-group col-3">
+                                <input class="form-control col-12" type="number" name="delivery_period" />
+                            </div>
+                            <div class="input-group col-1">
+                                <span>일</span>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">시험기간</label>
+                            <div class="input-group col-3">
+                                <input class="form-control col-12" type="number" name="test_period" />
+                            </div>
+                            <div class="input-group col-1">
+                                <span>일</span>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">안전재고일</label>
+                            <div class="input-group col-3">
+                                <input class="form-control col-12" type="number" name="item_safety_day" />
+                            </div>
+                            <div class="input-group col-1">
+                                <span>일</span>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">공급사</label>
+                            <div class="input-group col-4">
+                                <input type="hidden" class="form-control" name="trade_cd">
+                                <input type="text" class="form-control" name="trade_nm">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="searchSupplier_PackMaterial()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <label class="col-2">단가</label>
+                            <div class="input-group col-3">
+                                <input type="number" class="col-12 form-control" name="unit_price" />
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-2">규격</label>
+                            <div class="input-group col-3">
+                                <input type="number" class="col-4 form-control" name="item_spec_qty" />
+                                <select class="form-control col-8" name="item_spec_type">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.specType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-2">면세대상</label>
+                            <div class="input-group col-4">
+                                <input type="checkbox" value="Y" name="taxfree_yn" />
+                            </div>
+                        </div>
+
+                    </div>
+
+                        @* === 제조처정보 === *@
+                        <div class="menuDiv display-none" id="PackMaterialMaster2MenuDiv_4">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제조처 체크</label>
+                                <div class="col-2" style="display:inline-block">
+                                    <input type="checkbox" name="materialmaker_ck" value="Y" />
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("PackMaterialMaster2MakerGrid")
+                                .ShowBorders(true)
+                                .Height(250)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .KeyExpr("material_maker_cd")
+                                .HoverStateEnabled(true)
+                                .FocusedRowEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .OnCellClick("PackMaterialMaster2MakerGridPopup")
+                                .OnRowInserted("PackMaterialMaster2MakerInsert")
+                                .OnRowUpdated("PackMaterialMaster2MakerUpdate")
+                                .OnRowRemoved("PackMaterialMaster2MakerDelete")
+                                .OnToolbarPreparing("HideToolbarButton")
+                                .OnCellPrepared("PackMaterialMaster2MakerEditableColumn")
+                                .ShowColumnLines(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("material_maker_cd").Caption("제조처코드")
+                                        .CellTemplate(new JS("cellWithButton"))
+                                        .ValidationRules(vr =>
+                                        {
+                                            vr.AddRequired()
+                                                .Message("제조처코드가 비어있습니다.");
+                                        });
+
+                                    c.Add().DataField("material_maker_nm").Caption("제조처명")
+                                        .ValidationRules(vr =>
+                                        {
+                                            vr.AddRequired()
+                                                .Message("제조처명이 비어있습니다.");
+                                        });
+                                })
+                            )
+
+                        </div>
+
+                        @* === 제제 이미지 === *@
+                        <div id="PackMaterialMaster2MenuDiv_5" class="menuDiv display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(상)</label>
+                                <div class="input-group col-6">
+                                    <img id="PackMaterialMaster2UpperImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="PackMaterialMaster2UploadBtn1" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="PackMaterialMaster2DeleteBtn1" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("PackMaterialMaster2UpperImageUploader")
+                                .Name("upper_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("PackMaterialMaster2UploadImage")
+                            .OnUploaded("PackMaterialMaster2SelectImage")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(중)</label>
+                                <div class="input-group col-6">
+                                    <img id="PackMaterialMaster2MiddleImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="PackMaterialMaster2UploadBtn2" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="PackMaterialMaster2DeleteBtn2" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("PackMaterialMaster2MiddleImageUploader")
+                                .Name("middle_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("PackMaterialMaster2UploadImage")
+                            .OnUploaded("PackMaterialMaster2SelectImage")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(하)</label>
+                                <div class="input-group col-6">
+                                    <img id="PackMaterialMaster2LowerImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="PackMaterialMaster2UploadBtn3" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="PackMaterialMaster2DeleteBtn3" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("PackMaterialMaster2LowerImageUploader")
+                                .Name("lower_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("PackMaterialMaster2UploadImage")
+                            .OnUploaded("PackMaterialMaster2SelectImage")
+                            )
+
+                        </div>
+
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

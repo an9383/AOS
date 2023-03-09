@@ -1,0 +1,338 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewData["Title"] = "OrderMaterialSum";
+}
+
+@{
+    var OrderMaterialSumData = @Html.Raw(Json.Encode(ViewBag.OrderMaterialSumData.Data));
+    var OrderMaterialSumAuth = @Html.Raw(Json.Encode(ViewBag.OrderMaterialSumAuth.Data));
+}
+
+
+<script type="text/javascript" id="OrderMaterialSumJs">
+
+    // SP 구문, gubun 변수
+    var OrderMaterialSum_Gubun = "";
+
+    // 메뉴 권한
+    var _OrderMaterialSumAuth;
+
+    $(function () {
+
+        if (@OrderMaterialSumData !== "") {
+            // 좌측 그리드 객체 생성
+            $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@OrderMaterialSumData));
+            $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 사용자 권한
+        _OrderMaterialSumAuth = JSON.parse(@OrderMaterialSumAuth)[0];
+
+        if (_OrderMaterialSumAuth.form_query != "Y") {
+            $("#OrderMaterialSumSearch").remove();
+        }
+
+        setDatePicker("#OrderMaterialSum .datepicker");
+
+        // '+불출합계' 버튼 하위 클릭이벤트
+        $("#fn_OrderMaterial_SumBtn").click(function () {
+            fn_OrderMaterial_Sum();
+        });
+    });
+
+    // 조회버튼 기능
+    function OrderMaterialSumSearch() {
+
+        var formData = new FormData($("#OrderMaterialSum_form")[0]);
+
+        // 초기화
+        $("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").selectRows([]) // 체크해제
+
+        // 선택 된 텝 조회
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/OrderMaterialSum_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#OrderMaterialSum_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    // 엑셀
+    function OrderMaterialSumExcel(gridName, ExcelName) {
+        gridExportToExcel("OrderMaterialSum_DownGrid", "원료 불출합계");
+    }
+
+    // 불출 합계
+    function fn_OrderMaterial_Sum() {        
+        var formData = new FormData($("#OrderMaterialSum_form")[0]);
+
+        var dataGrid = $("#OrderMaterialSum_UpGrid").dxDataGrid("instance");
+        var selectedKeys = dataGrid.getSelectedRowKeys();
+
+        formData.set("selectedKeys", selectedKeys);
+
+        if (selectedKeys.length >= 40) {
+
+            alert("40개 항목을 초과해서 선택하실 수 없습니다.");
+            return;
+        }
+        if (selectedKeys.length == 0) {
+
+            alert("1개 이상의 항목을 선택해야합니다.");
+            return;
+        }
+
+        // 아래 그리드 초기화
+        //$("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        //$("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/OrderMaterialOutSum',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    
+                    return;
+                }
+                
+                var json = JSON.parse(result);
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#OrderMaterialSum_DownGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            }
+        });
+
+    }
+
+    // 프린트
+    function OrderMaterialSumPrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        // param
+        var formData = new FormData($("#OrderMaterialSum_form")[0]);
+
+        var dataGrid = $("#OrderMaterialSum_UpGrid").dxDataGrid("instance");
+        var selectedKeys = dataGrid.getSelectedRowKeys();
+
+        formData.set("selectedKeys", selectedKeys);
+
+        if (selectedKeys.length > 40) {
+
+            alert("40개 이상 선택하실 수 없습니다.");
+            return;
+        }
+        if (selectedKeys.length <= 0) {
+            alert("선택된 지시가 없습니다.");
+            return;
+        }
+
+        var grid = $("#OrderMaterialSum_DownGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("불출합계를 확인해 주시기 바랍니다.");
+            return;
+        }
+
+        var reportParam = "";
+        
+        for (var i = 0; i < selectedKeys.length; i++) {
+            reportParam += "order_no_" + (i + 1) + ":" + selectedKeys[i];
+
+            if (i !== (selectedKeys.length - 1))
+                reportParam += ";";
+        }
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "RowMatLoc", RptFileName: "OrderMaterialSumR2" },
+            objSp: { SpName: "SP_OrderMaterialSum", gubun: "OutSum", reportParam: reportParam },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "OrderMaterialSumR" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+
+    }
+
+
+</script>
+
+
+<div id="OrderMaterialSum" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="OrderMaterialSum_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+
+                        <input type="text" class="form-control datepicker text-center" name="s_sdate" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="s_edate" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="s_out_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_out_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <button type="button" class="btn btn-outline-secondary" id="fn_OrderMaterial_SumBtn" style="width: auto">
+                            <i class="fa fa-plus fa-lg" aria-hidden="true" @*onclick="fn_OrderMaterial_Sum()"*@> 불출합계</i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Print;Preview");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12 pb-1">
+
+            <!-- 위 그리드 -->
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("OrderMaterialSum_UpGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("order_no")
+                    .Height(500)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_no").Caption("제조지시번호");
+                        c.Add().DataField("item_cd").Caption("성형물코드");
+                        c.Add().DataField("item_nm").Caption("성형물명");
+                        c.Add().DataField("item_packunit").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("order_qty").Caption("지시수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("input_order_date").Caption("지시일자");
+                        c.Add().DataField("input_order_status_nm").Caption("제조상태").Alignment(HorizontalAlignment.Center);
+                    })
+
+                )
+
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-12 pb-1">
+
+            <!-- 아래 그리드 -->
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>원료 불출 목록</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("OrderMaterialSum_DownGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("원료코드");
+                        c.Add().DataField("item_nm").Caption("원료명");
+                        c.Add().DataField("data_type").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("order_qty").Caption("지시량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("location").Caption("위치");
+                    })
+                )
+            </div>
+
+        </div>
+    </div>
+
+</div>

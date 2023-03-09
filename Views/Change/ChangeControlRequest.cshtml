@@ -1,0 +1,1071 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    var Employee = Html.Raw(Json.Encode(ViewBag.Employee.Data));
+    var ChangeRequest = Html.Raw(Json.Encode(ViewBag.ChangeRequest.Data));
+
+
+}
+
+@*변경 의뢰*@
+
+    <script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite       = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        var _changeControlRequestCRUDStatus;
+        var _changeControlRequestTargetForm;
+        var _changeControlRequestSignGubun;
+        var _changeControlRequestSignCnt = 0;
+        var _changeControlRequestSignData;
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            if (@ChangeRequest) {
+                $("#ChangeControlRequestGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ChangeRequest));
+                $("#ChangeControlRequestGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ChangeControlRequestGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var popupColumns = {
+                "employee": [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+            };
+
+            createPopup("ChangeControlRequestEmp", "사원 조회", @Employee, popupColumns.employee, "emp_cd");
+            createPopup("ChangeControlRequestEmp2", "사원 조회", @Employee, popupColumns.employee, "emp_cd");
+
+            ChangeControlRequestEditCheck(false, 'N');
+
+            $('input[name=request_emp_cd]+div>button, input[name=request_app_emp_cd]+div>button', $('#ChangeControlRequestSearchForm')).click(function (event) {
+                ChangeControlRequestHelpPopUpSearch(event);
+            });
+
+            $('input[name=request_emp_cd]+div>button', $('#ChangeControlRequestWriteForm')).click(function (event) {
+                ChangeControlRequestHelpPopUpSearch2(event);
+            });
+
+            $($("#changeControlAttatchDocBtn")).click(function (event) {
+                ChangeControlRequestAttatchDoc(event);
+            });
+
+            $($("#changeControlAttatchDocDownloadBtn")).click(function (event) {
+                ChangeControlRequestDownloadDoc(event);
+            });
+
+            $($("#changeControlAttatchDocDeleteBtn")).click(function (event) {
+                ChangeControlRequestDeleteDoc(event);
+            });
+
+            $($("#changeControlReceiptBtn")).click(function (event) {
+                ChangeControlRequestReceiptSign(event);
+            });
+
+            setDatePicker("#ChangeControlRequest .datepicker");
+
+        });
+
+        var ChangeControlRequestHelpPopUpCurInputName = "";
+
+        // help popup 공통 검색창 오픈 ----------------------
+        function ChangeControlRequestHelpPopUpSearch(e) {
+
+            ChangeControlRequestHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+
+            var popupId = "";
+
+            switch (ChangeControlRequestHelpPopUpCurInputName) {
+                case "request_emp_cd":
+                    popupId = "ChangeControlRequestEmp";
+                    break;
+                case "request_app_emp_cd":
+                    popupId = "ChangeControlRequestEmp";
+                    break;
+                default:
+                    popupId = "";
+                    break;
+            }
+            //console.log("poupId :" + popupId);
+            if (popupId == "") {
+                alert("(오류) popup ID 미설정 오류!");
+            }
+            $('#' + popupId + 'Popup').dxPopup("instance").show();
+        }
+
+        function ChangeControlRequestHelpPopUpSearch2(e) {
+            ChangeControlRequestHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+            var popupId = "";
+
+            switch (ChangeControlRequestHelpPopUpCurInputName) {
+                case "request_emp_cd":
+                    popupId = "ChangeControlRequestEmp2";
+                    break;
+                default:
+                    popupId = "";
+                    break;
+            }
+            //console.log("poupId :" + popupId);
+            if (popupId == "") {
+                alert("(오류) popup ID 미설정 오류!");
+            }
+            $('#' + popupId + 'Popup').dxPopup("instance").show();
+        }
+        // ------------------------------------------------
+
+        // help popup 이벤트 정의 -------------------------------------
+        function ChangeControlRequestEmpRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            $("input[name=" + ChangeControlRequestHelpPopUpCurInputName + "]", $('#ChangeControlRequestSearchForm')).val(data.emp_cd);
+
+            $("#ChangeControlRequestEmpPopup").dxPopup("instance").hide();
+        }
+
+        function ChangeControlRequestEmp2RowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            $("input[name=request_emp_cd]", $('#ChangeControlRequestWriteForm')).val(data.emp_cd);
+            $("input[name=request_emp_nm]", $('#ChangeControlRequestWriteForm')).val(data.emp_nm);
+
+            $("#ChangeControlRequestEmp2Popup").dxPopup("instance").hide();
+        }
+        // ------------------------------------------------------------
+
+        // 조회
+        function ChangeControlRequestSearch() {
+
+            ChangeControlRequestWriteFormClear();
+            ChangeControlRequestEditCheck(false);
+
+            UtilView.dataGridSelect('ChangeControlRequestGrid', 'ChangeControlRequestSearchForm');
+        }
+
+        // 입력
+        function ChangeControlRequestInput() {
+
+            _changeControlRequestCRUDStatus = "I";
+
+            ChangeControlRequestWriteFormClear();
+            ChangeControlRequestEditCheck(true);
+        }
+
+        // 수정
+        function ChangeControlRequestEdit() {
+
+            var grid = $("#ChangeControlRequestGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ChangeControlRequestGrid", grid.option("focusedRowKey"));
+
+            if (gridData.changecontrol_status != 0) {
+                alert("이미 접수되었습니다.");
+                return;
+            }
+
+            if (_changeControlRequestSignCnt > 0) {
+                alert("이미 서명이 시작된 의뢰는 수정할 수 없습니다.");
+                return;
+            }
+
+            _changeControlRequestCRUDStatus = "U";
+
+            ChangeControlRequestEditCheck(true);
+        }
+
+        // 삭제
+        function ChangeControlRequestDelete() {
+
+            var grid = $("#ChangeControlRequestGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ChangeControlRequestGrid", grid.option("focusedRowKey"));
+
+            if (gridData.changecontrol_status !== '0') {
+                alert("이미 접수되었습니다.");
+                return;
+            }
+
+            if (_changeControlRequestSignCnt > 0) {
+                alert("이미 서명이 시작된 의뢰는 삭제할 수 없습니다.");
+                return;
+            }
+            var form = $('#ChangeControlRequestWriteForm')[0];
+            var formData = new FormData(form);
+
+            formData.set("gubun", "D");
+            formData.set("changecontrol_no", $("#ChangeControlRequestGrid").dxDataGrid("option","focusedRowKey"));
+
+            UtilView.dataGridTRX(formData, () => ChangeControlRequestSearch());
+        }
+
+        // 저장
+        function ChangeControlRequestSave() {
+
+            if (UtilView.checkValidForm('ChangeControlRequestWriteForm')) {
+                ChangeControlRequestTrx();
+            }
+
+            _changeControlRequestCRUDStatus = "";
+
+            ChangeControlRequestEditCheck(false);
+            ChangeControlRequestSearch();
+        }
+
+        // 취소
+        function ChangeControlRequestUndo() {
+
+            _changeControlRequestCRUDStatus = "";
+
+            ChangeControlRequestEditCheck(false);
+            ChangeControlRequestFocusChanged();
+        }
+
+        // 트랜잭션 요청
+        function ChangeControlRequestTrx() {
+            var form = $('#ChangeControlRequestWriteForm')[0];
+            var formData = new FormData(form);
+            formData.set("gubun", _changeControlRequestCRUDStatus);
+
+            UtilView.dataGridTRX(formData, () => ChangeControlRequestSearch());
+        }
+
+        // 파일 업로드 버튼
+        function ChangeControlRequestAttatchDoc(event) {
+
+            if (_changeControlRequestCRUDStatus !== "U") {
+                alert("수정중일때만 파일 첨부가 가능합니다.");
+                return;
+            }
+
+            var fileUploader = $('#changeControlAttatch').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        }
+
+        // 파일 업로드
+        function changeControlUploadAttachedFile(e) {
+
+            var name = e.component.option("name");
+
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "changecontrol_no", $("input[name=changecontrol_no]", $('#ChangeControlRequestWriteForm')).val());
+            url = updateQueryStringParameter(url, "name", name);
+
+            e.component.option("uploadUrl", url);
+        }
+
+        // 파일 다운로드
+        function ChangeControlRequestDownloadDoc(e) {
+
+            var grid = $("#ChangeControlRequestDocGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ChangeControlRequestDocGrid", grid.option("focusedRowKey"));
+
+            var fileId = gridData.doc_file_id;
+
+            if (fileId != "") {
+
+                document.location.assign('/Change/ChangeControlRequestDownload?file_id=' + fileId);
+            }
+        }
+
+        // 문서 삭제
+        function ChangeControlRequestDeleteDoc() {
+
+            if (!confirm("선택한 문서를 삭제하시겠습니까?")) {
+                return;
+            }
+
+            if (_changeControlRequestSignCnt > 0) {
+                alert("서명이 완료된 자료의 문서는 삭제 할 수 없습니다.");
+                return;
+            }
+
+            var grid = $("#ChangeControlRequestDocGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ChangeControlRequestDocGrid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Change/ChangeControlDeleteDoc',
+                data: {
+                    changecontrol_no: gridData.changecontrol_no,
+                    changecontrol_attatch_doc_id: gridData.changecontrol_attatch_doc_id
+                },
+                success: function (result) {
+
+                    alert(result);
+
+                    ChangeControlRequestSelectDocList();
+                }
+            });
+
+        }
+
+        // 문서목록만 조회
+        function ChangeControlRequestSelectDocList() {
+
+            var changecontrol_no = $("input[name=changecontrol_no]", $('#ChangeControlRequestWriteForm')).val();
+
+            $.ajax({
+                type: 'GET',
+                url: '/Change/ChangeControlRequestSelectDocList',
+                data: {
+                    changecontrol_no: changecontrol_no
+                },
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        $("#ChangeControlRequestDocGrid").dxDataGrid("option", "dataSource", []);
+                        return;
+                    }
+
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#ChangeControlRequestDocGrid").dxDataGrid("option", "dataSource", json);
+
+                }
+            });
+
+        }
+
+        // 전자서명
+        function ChangeControlRequestSign(e) {
+
+            if (_changeControlRequestCRUDStatus) {
+                return;
+            }
+
+            _changeControlRequestSignData = e.data;
+
+            if (e.columnIndex == 3) {
+                _changeControlRequestSignGubun = "U";
+
+                if (e.data.prev_sign_yn == "0") {
+                    alert("먼저 앞 단계 승인이 필요합니다.");
+                    return;
+                }
+
+                if (e.data.sign_yn == "1") {
+
+                    if (e.data.next_sign_yn == "1") {
+                        alert("이미 다음 단계가 승인 되어 있습니다.\n먼저 다음 단계 승인을 삭제(취소)해주세요. ");
+                        return;
+                    }
+
+                    if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                        _changeControlRequestSignGubun = "D";
+                    } else {
+                        return;
+                    }
+
+                }
+
+                var popup = $("#ChangeControlRequestSignPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#ChangeControlRequestSignPopupTemplate"));
+                popup.show();
+
+            }
+        }
+
+        // 전자서명 입력
+        function ChangeControlRequestSignSubmit() {
+
+            var data = new FormData($('#ChangeControlRequestSignForm')[0]);
+
+            data.set("gubun", "S");
+
+            $.ajax({
+                type: 'POST',
+                url: '/Comm/IDValidation',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    if (result.length <= 0) {
+
+                        alert("잘못된 ID,PW 입니다.");
+                        return;
+                    }
+
+                    var grid = $("#ChangeControlRequestGrid").dxDataGrid("instance");
+                    var gridData = getGridRowByKey("ChangeControlRequestGrid", grid.option("focusedRowKey"));
+
+                    var paramData = {
+                        gubun: _changeControlRequestSignGubun,
+                        request_app_emp_cd: JSON.parse(result)[0].emp_cd,
+                        request_app_emp_type: "2",
+                        changecontrol_no: gridData.changecontrol_no,
+                        sign_type: ""
+                    };
+
+                    if ((_changeControlRequestSignCnt >= 0  && _changeControlRequestSignCnt < 4)
+                        || (_changeControlRequestSignCnt === 4 && _changeControlRequestSignGubun === "D")) {
+
+                        var signGrid = $("#ChangeControlRequestSignGrid").dxDataGrid("instance");
+                        var signGridData = getGridRowByKey("ChangeControlRequestSignGrid", signGrid.option("focusedRowKey"));
+
+                        paramData.sign_type = signGridData.sign_set_dt_seq;
+
+                    } else if (_changeControlRequestSignCnt === 4 && _changeControlRequestSignGubun === "U") {
+
+                        //console.log(_changeControlRequestSignCnt);
+                        //console.log(_changeControlRequestSignGubun);
+
+                        paramData.sign_type = "5";
+
+                        //console.log(paramData);
+                    }
+
+                    var isOK = false;
+
+                    if (paramData.sign_type === "5") {
+
+                        isOK = true;
+
+                    } else{
+
+                        if (_changeControlRequestSignData.responsible_emp_cd !== JSON.parse(result)[0].emp_cd) {
+
+                            $.ajax({
+                                type: 'GET',
+                                url: '/Comm/DelegateCheck',
+                                data: {
+                                    emp_cd: JSON.parse(result)[0].emp_cd,
+                                    sign_set_cd: "5101",
+                                    sign_set_seq: paramData.sign_type
+                                },
+                                async: false,
+                                success: function (result) {
+
+                                    if (result.length > 0) {
+                                        isOK = true;
+                                    } else {
+                                        isOK = false;
+                                    }
+                                }
+                            });
+                        } else {
+                            isOK = true;
+                        }
+
+                    }
+
+                    if (!isOK) {
+                        alert("권한이 없는 사용자입니다.");
+                        return;
+                    }
+
+                    $("#ChangeControlRequestSignConfirmForm input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                    $("#ChangeControlRequestSignConfirmForm input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+
+                    setTimeout(function () {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/Change/ChangeControlRequestSignTRX',
+                            data: paramData,
+                            success: function (result) {
+
+                                if (_changeControlRequestSignCnt === 4) {
+
+                                    $.ajax({
+                                        type: 'POST',
+                                        url: '/Change/ChangeControlRequestSignReciept',
+                                        data: {
+                                            changecontrol_no: gridData.changecontrol_no
+                                        },
+                                        success: function (result) {
+
+                                            ChangeControlRequestSearch();
+                                        }
+                                    });
+                                }
+
+                                alert(result);
+
+                                ChangeControlRequestFocusChanged();
+                            }
+                        });
+
+                        _changeControlRequestSignGubun = "";
+
+                        var popup = $("#ChangeControlRequestSignPopup").dxPopup("instance");
+                        popup.hide();
+                    }, 1000);
+                }
+            });
+        }
+
+        // 서명 폼 비우기
+        function ClearChangeControlRequestSignInput() {
+            $('#ChangeControlRequestSignForm')[0].reset();
+            $('#ChangeControlRequestSignConfirmForm')[0].reset();
+        }
+
+        // 접수
+        function ChangeControlRequestReceiptSign() {
+
+            var grid = $("#ChangeControlRequestGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ChangeControlRequestGrid", grid.option("focusedRowKey"));
+
+            if (_changeControlRequestSignCnt === 4) {
+
+                _changeControlRequestSignGubun = "U";
+
+                var popup = $("#ChangeControlRequestSignPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#ChangeControlRequestSignPopupTemplate"));
+                popup.show();
+
+            } else {
+                alert("해당 변경 발생/요청 신청의 승인자 서명이필요합니다.");
+                return;
+            }
+        }
+
+        // 수정중인지 체크
+        function ChangeControlRequestEditCheck(nowEdit) {
+
+            if (nowEdit) {
+                // 툴바 활성/비활성
+                $('#ChangeControlRequestSave,   #ChangeControlRequestUndo').dxButton().parent().parent().removeClass("display-none");
+                $('#ChangeControlRequestSearch, #ChangeControlRequestInput,#ChangeControlRequestEdit,#ChangeControlRequestDelete').dxButton().parent().parent().addClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlRequestGrid').dxDataGrid("instance").option("disabled", true);
+                $('input', $('#ChangeControlRequestWriteForm')).attr("disabled", false);
+                $('textarea', $('#ChangeControlRequestWriteForm')).attr("disabled", false);
+            }
+            else {
+                // 툴바 활성/비활성
+                $('#ChangeControlRequestSave,#ChangeControlRequestUndo').dxButton().parent().parent().addClass("display-none");
+                $('#ChangeControlRequestSearch,#ChangeControlRequestInput,#ChangeControlRequestEdit,#ChangeControlRequestDelete').dxButton().parent().parent().removeClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlRequestGrid').dxDataGrid("instance").option("disabled", false);
+                $("input", $('#ChangeControlRequestWriteForm')).attr("disabled", true);
+                $("textarea", $('#ChangeControlRequestWriteForm')).attr("disabled", true);
+            }
+        }
+
+        // 죄측 그리드 포커스 변경
+        function ChangeControlRequestFocusChanged() {
+            ChangeControlRequestWriteFormClear();
+
+            var gridId = "ChangeControlRequestGrid";
+            UtilView.setDataGridFormBind(gridId, 'ChangeControlRequestWriteForm');
+
+            var grid = $('#' + gridId).dxDataGrid("instance");
+            var gridData = getGridRowByKey(gridId, grid.option("focusedRowKey"));
+
+            _changeControlRequestSignCnt = 0;
+
+            $.ajax({
+                type: 'GET',
+                url: '/Change/ChangeControlRequestSelectDetail',
+                data: {
+                    changecontrol_no: gridData.changecontrol_no
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+
+                    var JsonData = JSON.parse(result);
+
+                    //console.log(JsonData);
+
+                    if (JsonData.tempDocDt.length > 0) {
+                        $("#ChangeControlRequestDocGrid").dxDataGrid("option", "dataSource", JsonData.tempDocDt);
+                    } else {
+                        $("#ChangeControlRequestDocGrid").dxDataGrid("option", "dataSource", []);
+                    }
+
+                    if (JsonData.tempSignDt.length > 0) {
+                        $("#ChangeControlRequestSignGrid").dxDataGrid("option", "dataSource", JsonData.tempSignDt);
+
+                        for (var i = 0; i < JsonData.tempSignDt.length; i++) {
+                            _changeControlRequestSignCnt += parseInt(JsonData.tempSignDt[i].sign_yn);
+                        }
+
+                    } else {
+                        $("#ChangeControlRequestSignGrid").dxDataGrid("option", "dataSource", []);
+                    }
+                }
+            })
+        }
+
+        //우측 폼 그리드 초기화
+        function ChangeControlRequestWriteFormClear() {
+            $('#ChangeControlRequestWriteForm')[0].reset();
+            $("textarea", $('#ChangeControlRequestWriteForm')).text("");
+
+            var gridIds = PagePrefix + "DocGrid";
+            UtilView.setDataGridFromJson(gridIds, "");
+            gridIds = PagePrefix + "SignGrid";
+            UtilView.setDataGridFromJson(gridIds, "");
+        }
+
+        function ChangeControlRequestPrint() {
+
+            var btnType;
+            btnType = $(event.target).closest('.dx-button').attr('id');
+
+            var grid = $("#ChangeControlRequestGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("ChangeControlRequestGrid", grid.option("focusedRowKey"));
+
+            var changecontrol_no = data.changecontrol_no;
+
+            var para_check1 = "";
+            var para_check2 = "";
+            var para_check3 = "";
+            var para_check4 = "";
+            var para_check5 = "";
+            var para_check6 = "";
+            var para_check7 = "";
+
+            //
+            if (data.request_gubun === "1") {
+                para_check1 = "■ 변경발생,□ 변경요청/제안,□ 기타 :";
+            }
+            else if (data.request_gubun === "2") {
+                para_check1 = "□ 변경발생,■ 변경요청/제안,□ 기타 :";
+            }
+            else if (data.request_gubun === "3") {
+                para_check1 = "□ 변경발생,□ 변경요청/제안,■ 기타 :";
+            }
+            else {
+                para_check1 = "□ 변경발생,□ 변경요청/제안,□ 기타 :";
+            }
+
+            //적용범위
+            if (data.changecontrol_cd === "1") {
+                para_check2 = "■ 원료,□ 자제,□ 제조공정, □ 시험법, □ 기계설비, □ 허가, □ 기타변경";
+            }
+            else if (data.changecontrol_cd === "2") {
+                para_check2 = "□ 원료,■ 자제,□ 제조공정, □ 시험법, □ 기계설비, □ 허가, □ 기타변경";
+            }
+            else if (data.changecontrol_cd === "3") {
+                para_check2 = "□ 원료,□ 자제,■ 제조공정, □ 시험법, □ 기계설비, □ 허가, □ 기타변경";
+            }
+            else if (data.changecontrol_cd === "4") {
+                para_check2 = "□ 원료,□ 자제,□ 제조공정, ■ 시험법, □ 기계설비, □ 허가, □ 기타변경";
+            }
+            else if (data.changecontrol_cd === "5") {
+                para_check2 = "□ 원료,□ 자제,□ 제조공정, □ 시험법, ■ 기계설비, □ 허가, □ 기타변경";
+            }
+            else if (data.changecontrol_cd === "6") {
+                para_check2 = "□ 원료,□ 자제,□ 제조공정, □ 시험법, □ 기계설비, ■ 허가, □ 기타변경";
+            }
+            //else if (data.changecontrol_cd === "7") {
+            //    para_check2 = "□ 원료,□ 자제,□ 제조공정, □ 시험법, □ 기계설비, □ 허가, ■ 기타변경";
+            //}
+            //else {
+            //    para_check2 = "□ 원료,□ 자제,□ 제조공정, □ 시험법, □ 기계설비, □ 허가, □ 기타변경";
+            //}
+            else {
+                para_check2 = "□ 원료,□ 자제,□ 제조공정, □ 시험법, □ 기계설비, □ 허가, ■ 기타변경";
+            }
+
+            //첨부문서
+            if ($("#ChangeControlRequestDocGrid").dxDataGrid("instance").totalCount() <= 0) {
+                para_check3 = "■ 없음, □ 있음";
+            }
+            else {
+                para_check3 = "□ 없음, ■ 있음";
+            }
+
+            var subParamStr = 'para_check1=' + para_check1
+                + ';para_check2=' + para_check2
+                + ';para_check3=' + para_check3
+                + ';para_check4=' + para_check4
+                + ';para_check5=' + para_check5
+                + ';para_check6=' + para_check6
+                + ';para_check7=' + para_check7;
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "Change", RptFileName: "ChangeRequestR" },
+                objSp: { SpName: "SP_ChangeRequest", gubun: "SR", reportParam: "changecontrol_no:" + changecontrol_no },
+                objEtcInfo: { subParam: subParamStr },
+                objTblNm: { tblName: "" }
+            });
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+
+        }
+
+    </script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)EmpPopup"></div>
+    <div id="@(pagePrefix)Emp2Popup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("ChangeControlRequestSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("ClearChangeControlRequestSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("ChangeControlRequestSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="ChangeControlRequestSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button onclick="ChangeControlRequestSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <form id="ChangeControlRequestSignConfirmForm">
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+
+        </form>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">신청일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate" value="@DateTime.Today.AddYears(-1).ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">변경대상</span>
+                        </div>
+                        <select class="form-control" name="changecontrol_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CH001")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">신청자</span>
+                        </div>
+                        <input type="text" class="form-control" name="request_emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    @*<label class="col-1">신청자</label>
+                    <div class="input-group col-3">
+                        <input type="text" class="form-control" name="request_emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">찾기</button>
+                        </div>
+                    </div>*@
+                </div>
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">~</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="edate" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="changecontrol_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CH015")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">승인자</span>
+                        </div>
+                        <input type="text" class="form-control" name="request_app_emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Preview;Print") ; }
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .KeyExpr("changecontrol_no")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Height(842)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("changecontrol_no").Caption("신청번호");
+                        c.Add().DataField("request_Date").Caption("신청일자");
+                        c.Add().DataField("change_title").Caption("제목");
+                        c.Add().DataField("request_emp_nm").Caption("신청자");
+                        c.Add().DataField("request_confirm3_emp_nm").Caption("승인자");
+                        c.Add().DataField("changecontrol_status_nm").Caption("변경상태");
+                    })
+                .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box mb-0">
+                <form id="@(pagePrefix)WriteForm">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName margin-bottom">
+                        <p>변경 신청 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경 신청번호</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12" name="changecontrol_no" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">발생/요청일</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12 required datepicker" name="request_date">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">신청자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="request_emp_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="request_emp_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제목</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12 required" name="change_title">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경사유 및 내용</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control col-12 required" rows="2" name="request_contents"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경근거/ 특기사항</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control col-6" rows="2" name="change_evidence"></textarea>
+                            <textarea class="form-control col-6" rows="2" name="request_special"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">적용 예정일</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-4 required datepicker" name="change_date">
+                            ~
+                            <input type="text" class="form-control col-4" name="temp_change_limit">
+                            <input type="checkbox" class="checkbox" name="temp_change_yn" /> 한시적
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">적용범위</label>
+                        <div class="input-group col-8">
+                            <select class="form-control col-12 required" name="changecontrol_cd">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "CH001")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경 상태</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-5" name="changecontrol_status_nm" readonly="readonly">
+
+                            <input type="button" id="changeControlAttatchDocBtn" class="btn btn-sm btn-secondary" value="문서 첨부" />
+                            <input type="button" id="changeControlAttatchDocDownloadBtn" class="btn btn-sm btn-secondary" value="다운로드" />
+                            <input type="button" id="changeControlAttatchDocDeleteBtn" class="btn btn-sm btn-secondary" value="삭제" />
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("changeControlAttatch")
+                                .LabelText("")
+                                .Name("changeControlAttatchedFile2")
+                                .Multiple(false)
+                                .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                                .UploadUrl(Url.Action("UploadChangeAttachedFile", "Change"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(int.MaxValue)
+                                .OnValueChanged("changeControlUploadAttachedFile")
+                                .OnUploaded("ChangeControlRequestSelectDocList")
+                            )
+                        </div>
+                    </div>
+
+                    <div class="mb-1">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID(pagePrefix + "DocGrid")
+                            .KeyExpr("doc_file_id")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .HoverStateEnabled(true)
+                            .FocusedRowEnabled(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(150)
+                            .OnRowDblClick("ChangeControlRequestDownloadDoc")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("doc_name").Caption("문서명");
+                                c.Add().DataField("attatch_emp_nm").Caption("등록사원");
+                                c.Add().DataField("attatch_date").Caption("등록일자");
+                            })
+                        )
+                    </div>
+
+                    <div class="divName margin-bottom">
+                        <p>변경 신청 승인</p>
+                    </div>
+
+                    <div class="mb-1">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID(pagePrefix + "SignGrid")
+                            .KeyExpr("sign_set_dt_id")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .HoverStateEnabled(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .FocusedRowEnabled(true)
+                            .Height(180)
+                            .OnCellClick("ChangeControlRequestSign")
+                            .Columns(columns =>
+                            {
+                            columns.Add().DataField("displayfield").Caption("구분");
+                            columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                            columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                            columns.Add().DataField("sign_image").Caption("서명")
+                                .AllowFiltering(false)
+                                .AllowSorting(false)
+                                .CellTemplate(@<text>
+                                        <div>
+                                            <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                        </div>
+                                    </text>);
+                            })
+                        )
+                    </div>
+
+                    <div class="input-group col-12 pl-1 pr-1">
+                        <button type="button" id="changeControlReceiptBtn" class="btn btn-secondary col-4">접수</button>
+                        <input type="text" class="form-control col-4" name="changecontrol_recieved_emp_cd" readonly="readonly">
+                        <input type="text" class="form-control col-4" name="changecontrol_recieved_emp_nm" readonly="readonly">
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

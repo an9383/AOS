@@ -1,0 +1,558 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Position";
+
+    var positionData = @Html.Raw(Json.Encode(ViewBag.positionData.Data));
+    var managementTarget = @Html.Raw(Json.Encode(ViewBag.managementTarget.Data));
+    var monitoringWorkroom = @Html.Raw(Json.Encode(ViewBag.monitoringWorkroom.Data));
+}
+
+@*컴퓨터 고유번호 관리*@
+
+<script id="PositionJs">
+
+        var _positionCRUDGubun;
+
+        // 문서 로드 완료 후
+        $(function () {
+
+            if (@positionData) {
+                $("#positionDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@positionData));
+            }
+            else {
+                $("#positionDataGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            var columns1 = [
+                { dataField: "standard_cd", caption: "스케줄대표코드" },
+                { dataField: "standard_nm", caption: "스케줄대표코드명" }
+            ];
+            var columns2 = [
+                { dataField: "workroom_cd", caption: "작업실코드" },
+                { dataField: "workroom_nm", caption: "작업실명" },
+                { dataField: "common_part_nm", caption: "팀구분" }
+            ];
+
+            createPopup("PositionManagementTarget", "구분 조회", @managementTarget, columns1, "standard_cd");
+            createPopup("PositionMonitoringWorkroom1", "작업실 조회", @monitoringWorkroom, columns2, "workroom_cd");
+            createPopup("PositionMonitoringWorkroom2", "작업실 조회", @monitoringWorkroom, columns2, "workroom_cd");
+            createPopup("PositionMonitoringWorkroom3", "작업실 조회", @monitoringWorkroom, columns2, "workroom_cd");
+
+            PositionEditCheck(false);
+        });
+
+        // 수정중인지 체크
+        function PositionEditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#PositionSave").dxButton().parent().parent().removeClass("display-none");
+                $("#PositionUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#PositionEdit").dxButton().parent().parent().addClass("display-none");
+                $("#PositionDelete").dxButton().parent().parent().addClass("display-none");
+                $("#PositionInput").dxButton().parent().parent().addClass("display-none");
+
+                $("#positionForm :disabled").attr('disabled', false);
+                $("#positionDataGrid").dxDataGrid("option", "disabled", true);
+
+                if (_positionCRUDGubun === "U") {
+                    $("#Position input[name=position_no]").attr("readonly", true);
+                } else {
+                    $("#Position input[name=position_no]").attr("readonly", false);
+                }
+
+            }
+            if (!nowEdit) {
+
+                $("#PositionSave").dxButton().parent().parent().addClass("display-none");
+                $("#PositionUndo").dxButton().parent().parent().addClass("display-none");
+                $("#PositionEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#PositionDelete").dxButton().parent().parent().removeClass("display-none");
+                $("#PositionInput").dxButton().parent().parent().removeClass("display-none");
+
+                $("#positionForm :enabled").attr('disabled', true);
+                $("#positionDataGrid").dxDataGrid("option", "disabled", false);
+            }
+
+        }
+
+        // 컴퓨터 선택 변경
+        function positionFocusChanged() {
+            var grid = $("#positionDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+            
+                try {
+                    var data = getGridRowByKey('positionDataGrid', grid.option("focusedRowKey"));
+
+                    $("#Position input[name=position_no]").val(data.position_no);
+                    $("#Position select[name=obj_type]").val(data.obj_type);
+                    $("#Position input[name=obj_cd]").val(data.obj_cd);
+                    $("#Position input[name=obj_nm]").val(data.obj_nm);
+                    $("#Position select[name=program_id]").val(data.program_id);
+                    $("#Position select[name=program_ex1_id]").val(data.program_ex1_id);
+                    $("#Position input[name=other_position_no1]").val(data.other_position_no1);
+                    $("#Position input[name=other_position_no1_nm]").val(data.other_position_no1_nm);
+                    $("#Position input[name=other_position_no2]").val(data.other_position_no2);
+                    $("#Position input[name=other_position_no2_nm]").val(data.other_position_no2_nm);
+                    $("#Position input[name=other_position_no3]").val(data.other_position_no3);
+                    $("#Position input[name=other_position_no3_nm]").val(data.other_position_no3_nm);
+                }
+                catch (e) {
+                    $("#positionForm")[0].reset();
+                }
+            }
+
+        }
+
+        // 관리대상 조회 버튼
+        function managementTargetBtn() {
+            $("#PositionManagementTargetPopup").dxPopup("instance").show();
+        }
+
+        // 관리대상 팝업 로우 더블 클릭
+        function PositionManagementTargetRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Position input[name=obj_cd]").val(data.standard_cd);
+            $("#Position input[name=obj_nm]").val(data.standard_nm);
+
+            var popup = $("#PositionManagementTargetPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        // 모니터링작업실1 조회 버튼
+        function otherPosition1Btn() {
+            $("#PositionMonitoringWorkroom1Popup").dxPopup("instance").show();
+
+        }
+
+        // 모니터링작업실1 팝업 로우 더블 클릭
+        function PositionMonitoringWorkroom1RowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Position input[name=other_position_no1]").val(data.workroom_cd);
+            $("#Position input[name=other_position_no1_nm]").val(data.workroom_nm);
+
+            var popup = $("#PositionMonitoringWorkroom1Popup").dxPopup("instance");
+            popup.hide();
+        }
+
+        // 모니터링작업실2 조회 버튼
+        function otherPosition2Btn() {
+            $("#PositionMonitoringWorkroom2Popup").dxPopup("instance").show();
+
+        }
+
+        // 모니터링작업실2 팝업 로우 더블 클릭
+        function PositionMonitoringWorkroom2RowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Position input[name=other_position_no2]").val(data.workroom_cd);
+            $("#Position input[name=other_position_no2_nm]").val(data.workroom_nm);
+
+            var popup = $("#PositionMonitoringWorkroom2Popup").dxPopup("instance");
+            popup.hide();
+        }
+
+        // 모니터링작업실3 조회 버튼
+        function otherPosition3Btn() {
+            $("#PositionMonitoringWorkroom3Popup").dxPopup("instance").show();
+
+        }
+
+        // 모니터링작업실3 팝업 로우 더블 클릭
+        function PositionMonitoringWorkroom3RowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Position input[name=other_position_no3]").val(data.workroom_cd);
+            $("#Position input[name=other_position_no3_nm]").val(data.workroom_nm);
+
+            var popup = $("#PositionMonitoringWorkroom3Popup").dxPopup("instance");
+            popup.hide();
+        }
+        // 조회 버튼 클릭
+        function PositionSearch() {
+            selectPosition();
+        }
+
+        // 입력 버튼 클릭
+        function PositionInput() {
+            _positionCRUDGubun = "I";
+            PositionEditCheck(true);
+            $("#positionForm")[0].reset();
+        }
+
+        // 수정 버튼 클릭
+        function PositionEdit() {
+            var grid = $("#positionDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                _positionCRUDGubun = "U";
+                PositionEditCheck(true);
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+        }
+
+        // 컴퓨터 위치정보 삭제
+        function PositionDelete() {
+
+
+
+            var grid = $("#positionDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                if (!confirm("선택된 위치정보를 삭제하시겠습니까?")) {
+                    return;
+                }
+                var data = getGridRowByKey('positionDataGrid', grid.option("focusedRowKey"));
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysOp/PositionCRUD',
+                    data: {
+                        position_no: data.position_no,
+                        gubun: "D"
+                    },
+                    success: function (result) {
+                        selectPosition();
+                    }
+                });
+
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+
+        }
+
+        // 저장 버튼 클릭
+        function PositionSave() {
+
+            if (!UtilView.checkValidForm("positionForm")) {
+                return;
+            }
+
+            var managementTarget = JSON.parse(@managementTarget);
+            var monitoringWorkroom = JSON.parse(@monitoringWorkroom);
+
+            var objCdChk = false;
+            var otherPositionChk1 = false;
+            var otherPositionChk2 = false;
+            var otherPositionChk3 = false;
+
+            $.each(managementTarget, function (idx, row) {
+
+                if (managementTarget[idx].standard_cd === $("#Position input[name=obj_cd]").val()) {
+                    objCdChk = true;
+                }
+            })
+
+            if ($("#Position input[name=other_position_no1]").val().length <= 0) {
+                otherPositionChk1 = true;
+            } else {
+                $.each(monitoringWorkroom, function (idx, row) {
+                    if (monitoringWorkroom[idx].workroom_cd === $("#Position input[name=other_position_no1]").val()) {
+                        otherPositionChk1 = true;
+                    }
+                })
+            }
+
+            if ($("#Position input[name=other_position_no2]").val().length <= 0) {
+                otherPositionChk2 = true;
+            } else {
+                $.each(monitoringWorkroom, function (idx, row) {
+                    if (monitoringWorkroom[idx].workroom_cd === $("#Position input[name=other_position_no2]").val()) {
+                        otherPositionChk2 = true;
+                    }
+                })
+            }
+
+            if ($("#Position input[name=other_position_no3]").val().length <= 0) {
+                otherPositionChk3 = true;
+            } else {
+                $.each(monitoringWorkroom, function (idx, row) {
+                    if (monitoringWorkroom[idx].workroom_cd === $("#Position input[name=other_position_no3]").val()) {
+                        otherPositionChk3 = true;
+                    }
+                })
+            }
+
+            if (!objCdChk) {
+                alert("관리대상이 정확하지 않습니다.");
+            }
+
+            if (!otherPositionChk1) {
+                alert("모니터링작업실1이 정확하지 않습니다.");
+            }
+
+            if (!otherPositionChk2) {
+                alert("모니터링작업실2가 정확하지 않습니다.");
+            }
+
+            if (!otherPositionChk3) {
+                alert("모니터링작업실3이 정확하지 않습니다.");
+            }
+
+            if (!objCdChk || !otherPositionChk1 || !otherPositionChk2 || !otherPositionChk3) {
+                return;
+            }
+
+            var form = $('#positionForm')[0];
+            var data = new FormData(form);
+            data.set("gubun", _positionCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/PositionCRUD',
+                data: data,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (result.Ok) {
+                        $("#positionValdationChk").addClass("display-none");
+                        PositionEditCheck(false);
+                        _positionCRUDGubun = "";
+                        selectPosition();
+                    }
+                    else {
+                        $("#positionValdationChk").removeClass("display-none");
+                        $("#positionValdationChk").text("* : 필수 입력사항입니다.");
+
+                        return;
+                    }
+                }
+            })
+        }
+
+        // 취소 버튼 클릭
+        function PositionUndo() {
+
+            positionFocusChanged();
+            PositionEditCheck(false);
+        }
+
+        // 컴퓨터 위치정보 목록 조회
+        function selectPosition() {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysOp/SelectPosition',
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#positionDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#positionDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "positionDataGrid");
+        }
+
+        // 위치정보 관리대상, 모니터링작업실1,2,3 이름 칸 비움
+        function clearNameInput(inputName) {
+            $("#Position input[name=" + inputName+"]").val("");
+        }
+
+        function PositionExcel() {
+            gridExportToExcel("positionDataGrid", "PositionData");
+        }
+
+</script>
+
+<div id="Position" autoresize="Y">
+
+    <div id="PositionManagementTargetPopup"></div>
+    <div id="PositionMonitoringWorkroom1Popup"></div>
+    <div id="PositionMonitoringWorkroom2Popup"></div>
+    <div id="PositionMonitoringWorkroom3Popup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("positionDataGrid")
+                    .KeyExpr("position_no")
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .OnFocusedRowChanged("positionFocusChanged")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("position_no")
+                            .Caption("위치번호");
+                        columns.Add()
+                            .DataField("obj_type_nm")
+                            .Caption("구분명");
+                        columns.Add()
+                            .DataField("obj_cd")
+                            .Caption("코드");
+                        columns.Add()
+                            .DataField("obj_nm")
+                            .Caption("스케줄대표코드명");
+                        columns.Add()
+                                .DataField("program_nm")
+                                .Width(450)
+                                .Caption("시작프로그램");
+                    })
+                )
+
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box">
+                <div class="divName">
+                    <p>위치정보</p>
+                    <span id="positionValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="positionForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">위치번호 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="position_no">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관리구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="obj_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.managementGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관리대상 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="obj_cd" onchange="clearNameInput('obj_cd')" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="managementTargetBtn()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="obj_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">시작프로그램 <star>*</star></label>
+                            <div class="input-group col-8">
+                                <select class="form-control col-12 required" name="program_id">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.startupProgram).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">시작모니터링</label>
+                            <div class="input-group col-8">
+                                <select class="form-control col-12" name="program_ex1_id">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.startupMonitoring).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모니터링작업실1</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no1" onchange="clearNameInput('other_position_no1_nm')" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="otherPosition1Btn()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no1_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모니터링작업실2</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no2" onchange="clearNameInput('other_position_no2_nm')" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="otherPosition2Btn()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no2_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모니터링작업실3</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no3" onchange="clearNameInput('other_position_no3_nm')" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="otherPosition3Btn()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="other_position_no3_nm" readonly>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

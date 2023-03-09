@@ -1,0 +1,225 @@
+﻿@model HACCP.Models.PrdWh.ItemUseList2_Item
+@using HACCP.Libs.Views;
+@{
+    Layout = null;
+    ViewData["Title"] = "ItemUseList2_Item";
+}
+@{
+    var ItemUseList2_ItemData = @Html.Raw(Json.Encode(ViewBag.ItemUseList2_ItemData.Data));
+    var ItemUseList2_ItemAuth = @Html.Raw(Json.Encode(ViewBag.ItemUseList2_ItemAuth.Data));
+    var ItemUseList2_ItemPopup = @Html.Raw(Json.Encode(ViewBag.ItemUseList2_ItemPopup.Data));
+}
+
+<script id="ItemUseList2_ItemJs" type="text/javascript">
+        var _ItemUseList2_ItemAuth;
+        var ItemUseList2_ItemData = @ItemUseList2_ItemData;
+        var ItemUseList2_ItemPopup = @ItemUseList2_ItemPopup;
+
+         $(function () {
+             setDatePicker("#ItemUseList2_Item .datepicker");
+
+                if (ItemUseList2_ItemData.length <= 0) {
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                } else {
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ItemUseList2_ItemData));
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+
+            //사용자 권한
+            _ItemUseList2_ItemAuth = JSON.parse(@ItemUseList2_ItemAuth)[0];
+
+            if (_ItemUseList2_ItemAuth.form_query != "Y") {
+                $("#ItemUseList2_ItemSearch").remove();
+            }
+
+            var columns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup("ItemUseList2_Item", "제품 조회", @ItemUseList2_ItemPopup, columns, "item_cd");
+
+        })
+
+        //제품조회 팝업
+        function ItemUseList2_ItemPopupBtn() {
+            var popup = $("#ItemUseList2_ItemPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        //제품조회 팝업 row 더블클릭
+        function ItemUseList2_ItemRowDblClick(selectedItems) {
+            $("#ItemUseList2_Item_form input[name=Item_item_cd]").val(selectedItems.data.item_cd);
+            $("#ItemUseList2_Item_form input[name=Item_item_nm]").val(selectedItems.data.item_nm);
+
+            var popup = $("#ItemUseList2_ItemPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //조회버튼
+        function ItemUseList2_ItemSearch() {
+
+            if ($("#ItemUseList2_Item_form input[name=Item_item_cd]").val() == "") {
+                $("#ItemUseList2_Item_form input[name=Item_item_nm]").val("");
+                alert("한가지 품목으로만 검색이 가능합니다.\n정확한 원자재코드를 입력해주세요.");
+                return;
+            }
+
+            var formData = new FormData($("#ItemUseList2_Item_form")[0]);
+            formData.set("start_date", $("#ItemUseList2_Item_form input[name=Item_start_date]").val());
+            formData.set("end_date", $("#ItemUseList2_Item_form input[name=Item_end_date]").val());
+            formData.set("item_cd", $("#ItemUseList2_Item_form input[name=Item_item_cd]").val());
+
+            $.ajax({
+                type: 'POST',
+                url: '/prdWh/ItemUseList2_Item_S',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    // 검색 결과가 없을 경우
+                    if (result.length <= 0) {
+                        $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("dataSource", []);
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#ItemUseList2_ItemGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+        }
+
+
+</script>
+
+<div id="ItemUseList2_Item" autoresize="Y">
+
+    <div id="ItemUseList2_ItemPopup"></div>
+
+    @*<h4 class="divTitle">완제품 사용 내역(수불장)</h4>*@
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="ItemUseList2_Item_form">
+                <div class="input-wrapper">
+                    <div class="col-4 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Item_start_date" value="@ViewBag.start_date" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Item_end_date" value="@ViewBag.end_date" />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="Item_item_cd" value="@ViewBag.item_cd" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="ItemUseList2_ItemPopupBtn()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="Item_item_nm" value="@ViewBag.item_nm" readonly />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search");}
+            @*@(Html.DevExtreme().Toolbar()
+                .ID("ItemUseList2_ItemToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ItemUseList2_ItemSearch")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("ItemUseList2_ItemSearch")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )*@
+
+        </div>
+
+    </div>
+
+    <!--메인 그리드-->
+    <div class="row">
+        <div class="col-12">
+            <div id="ItemUseList2_ItemMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemUseList2_ItemGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(false))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("seq")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품명");
+                        c.Add().DataField("unit").Caption("단위");
+                        c.Add().DataField("list_date").Caption("일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("approval_date").Caption("승인일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("list_type").Caption("유형");
+                        c.Add().DataField("list_gubun").Caption("구분");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("in_qty").Caption("입고수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("out_qty").Caption("출고수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("good_remain_qty").Caption("정상재고").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("cust_cd").Caption("거래처코드");
+                        c.Add().DataField("cust_nm").Caption("거래처명");
+                        c.Add().DataField("pass_cust_cd").Caption("간납처코드");
+                        c.Add().DataField("pass_cust_nm").Caption("간납처명");
+                        c.Add().DataField("remark").Caption("비고");
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 입고수량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("in_qty")
+                                .ShowInColumn("in_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                        /* 출고수량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("out_qty")
+                                .ShowInColumn("out_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+        </div>
+    </div>
+
+</div>

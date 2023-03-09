@@ -1,0 +1,176 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var EquipResults = Html.Raw(Json.Encode(ViewBag.EquipResults.Data));
+    var Equipment = Html.Raw(Json.Encode(ViewBag.Equipment.Data));
+}
+
+@{
+    string[] EquipResultsGridKey = { "order_proc_sdate", "equip_cd" };
+}
+
+@*설비 가동 실적*@
+
+<script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            if ((@EquipResults).length > 0) {
+
+                $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@EquipResults));
+            }
+
+            var popupColumns = [
+                { dataField: "equip_cd", caption: "기계기구코드" },
+                { dataField: "equip_nm", caption: "기계기구명" }
+            ];
+
+            createPopup(PagePrefix + "Equip", "기계기구 조회", @Equipment, popupColumns);
+
+            setDatePicker("#EquipResults .datepicker");
+
+            $("#" + FormNmSearch + " input[name=sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+            $("#" + FormNmSearch + " input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        });
+
+        // 검색용 제조제품 팝업
+        function EquipResultsSelectEquip() {
+            $("#EquipResultsEquipPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업 선택
+        function EquipResultsEquipRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#EquipResultsSearchForm input[name=equip_cd]").val(data.equip_cd);
+
+            $("#EquipResultsEquipPopup").dxPopup("instance").hide();
+        }
+
+        // 조회
+        function EquipResultsSearch() {
+
+            UtilView.dataGridSelect('EquipResultsGrid', 'EquipResultsSearchForm');
+
+        }
+
+        function EquipResultsExcel() {
+            gridExportToExcel("EquipResultsGrid", "설비_가동_실적_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)EquipPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">가동일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate">
+                        <input type="text" class="form-control datepicker" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="equip_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectEquip()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Excel;");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .Height(900)
+                    .KeyExpr(EquipResultsGridKey)
+                    .ShowBorders(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("process_nm").Caption("공정명");
+                        c.Add().DataField("equip_cd").Caption("설비코드");
+                        c.Add().DataField("equip_nm").Caption("설비명");
+                        c.Add().DataField("order_proc_sdate").Caption("공정시작일시").DataType(GridColumnDataType.DateTime)
+                            .Format("yyyy-MM-dd HH:mm");
+                        c.Add().DataField("order_proc_edate").Caption("공정종료일시").DataType(GridColumnDataType.DateTime)
+                            .Format("yyyy-MM-dd HH:mm");
+                        c.Add().DataField("order_work_total_time").Caption("가동시간").DataType(GridColumnDataType.Number);
+
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        items.Add()
+                            .Column("order_work_total_time")
+                            .ShowInColumn("order_work_total_time")
+                            .ValueFormat(Format.Decimal)
+                            .SummaryType(SummaryType.Sum);
+                    })
+                    )
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,1484 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewData["Title"] = "PurchaseManage2_M";
+}
+
+@{
+    var PurchaseManage2_MData = @Html.Raw(Json.Encode(ViewBag.PurchaseManage2_MData.Data));
+    var PurchaseManage2_MAuth = @Html.Raw(Json.Encode(ViewBag.PurchaseManage2_MAuth.Data));
+
+    var manufactureJson = @Html.Raw(Json.Encode(ViewBag.manufacture.Data));
+    var supplyJson = @Html.Raw(Json.Encode(ViewBag.supply.Data));
+    var empJson = @Html.Raw(Json.Encode(ViewBag.emp.Data));
+    var itemCDJson = @Html.Raw(Json.Encode(ViewBag.itemCD.Data));
+}
+@{
+    string[] gridKey = { "purchase_no", "purchase_seq" };
+}
+
+<script type="text/javascript" id="PurchaseManage2_MJs">
+
+    // SP 구문, gubun 변수
+    var PMM_Gubun = "";
+
+    // 메뉴 권한
+    var _PurchaseManage2_MAuth;
+
+    //하단 품목 데이터 array
+    var pmm_itemList = new Array();
+
+    // 선택 row
+    var pmm_rowNum = 0;
+    // 업데이트 중
+    var pmm_update_ing = false;
+    // validation 1
+    var validation_submit = false;
+    // validation 2
+    var PMM_validation_grid = false;
+
+    $(function () {
+
+        if (@PurchaseManage2_MData !== "") {
+            // 좌측 그리드 객체 생성
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@PurchaseManage2_MData));
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 수정중인지 체크
+        PurchaseManage2_M_EditCheck(false);
+
+        // 사용자 권한
+        _PurchaseManage2_MAuth = JSON.parse(@PurchaseManage2_MAuth)[0];
+
+        if (_PurchaseManage2_MAuth.form_query != "Y") {
+            $("#PurchaseManage2_MSearch").remove();
+        }
+
+        setDatePicker("#PurchaseManage2_M .datepicker");
+
+        // 팝업 셋팅
+        /* 제조처 팝업 */
+        var manufacturePopup_Data = @manufactureJson;
+
+        var columns = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("PMM_Manufacture", "제조처 조회", manufacturePopup_Data, columns, "vender_cd");
+
+        /* 공급처 팝업 */
+        var supplyPopup_Data = @supplyJson;
+
+        var columns2 = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("PMM_Supply", "원료 거래처 조회", supplyPopup_Data, columns2, "vender_cd");
+
+        /* 업무 담당자 팝업 */
+        var empPopup_Data = @empJson;
+
+        var columns3 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("PMM_Emp", "사원 조회", empPopup_Data, columns3, "emp_cd");
+
+        /* (검색) 품목 팝업 */
+        var itemCDPopup_Data = @itemCDJson;
+
+        var columns4 = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+
+        createPopup("PMM_ItemCD", "원료 조회", itemCDPopup_Data, columns4, "item_cd");
+
+        /* (입력) 품목 팝업 */
+        var itemCDPopup2_Data = @itemCDJson;
+
+        var columns5 = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+
+        createPopup("PMM_ItemCD2", "원료 조회", itemCDPopup_Data, columns5, "item_cd");
+
+    });
+
+    // 수정중인지 체크
+    function PurchaseManage2_M_EditCheck(nowEdit) {
+
+
+        $("#PurchaseManage2_DownL_form input[name=purchase_date]").attr("readonly", false);
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#PurchaseManage2_MSave").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MSearch").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MInput").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MEdit").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MDelete").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("option", "disabled", true);
+            $("#PurchaseManage2_DownL_form :disabled").attr('disabled', false);
+        }
+        if (!nowEdit) {
+            $("#PurchaseManage2_MSave").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MUndo").dxButton().parent().parent().addClass("display-none");
+            $("#PurchaseManage2_MSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MInput").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#PurchaseManage2_MExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("option", "disabled", false);
+            $("#PurchaseManage2_DownL_form :enabled").attr('disabled', true);
+
+        }
+    }
+
+    // 아래 그리드
+    function PurchaseManage2_M_UpGrid_changed() {
+
+        // 아래 초기화
+        //$("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        //$("#PurchaseManage2_DownL_form")[0].reset();
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+        if ($("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+
+            return;
+        }
+
+        var grid = $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PurchaseManage2_M_UpGrid', grid.option("focusedRowKey"));
+        /* (그리드 키 복수일때) 검색시, Grid Changed 2번 호출하는 버그 이슈 방어로직
+            2번 째 호출 시, 데이터는 존재하나 grid.option("focusedRowKey") 가 undefined
+            Grid Key를 직접 구현 및 getGridRowByKey호출 */
+        /*if ((typeof grid.option("focusedRowKey") === "undefined" || grid === "") && grid.option("dataSource").length != 0) {
+
+            var tempRowKey = {
+                purchase_no: grid.option("dataSource")[0].purchase_no,
+                purchase_seq: grid.option("dataSource")[0].purchase_seq
+            }
+
+            gridData = getGridRowByKey('PurchaseManage2_M_UpGrid', tempRowKey);
+            $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+        } else {
+
+            gridData = getGridRowByKey('PurchaseManage2_M_UpGrid', grid.option("focusedRowKey"));
+        }*/
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_M_Select',
+            data: {
+                purchase_no: gridData.purchase_no
+            },
+            success: function (result) {
+
+                $("#PurchaseManage2_DownL_form")[0].reset();
+                $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                /* 아래 왼쪽 그리드 데이터 */
+                data = JSON.parse(result)[0];
+
+                $("#PurchaseManage2_M input[name=purchase_no]").val(data.purchase_no);
+                $("#PurchaseManage2_M input[name=purchase_date]").val(data.purchase_date);
+                $("#PurchaseManage2_M input[name=manufacture_cd]").val(data.manufacture_cd);
+                $("#PurchaseManage2_M input[name=manufacture_nm]").val(data.manufacture_nm);
+                $("#PurchaseManage2_M input[name=manufacture_address]").val(data.manufacture_address);
+                $("#PurchaseManage2_M input[name=supply_cd]").val(data.supply_cd);
+                $("#PurchaseManage2_M input[name=supply_nm]").val(data.supply_nm);
+                $("#PurchaseManage2_M input[name=supply_address]").val(data.supply_address);
+                $("#PurchaseManage2_M input[name=commercial_personnel]").val(data.commercial_personnel);
+                $("#PurchaseManage2_M input[name=phone]").val(data.phone);
+                $("#PurchaseManage2_M input[name=supply_fax]").val(data.supply_fax);
+                $("#PurchaseManage2_M input[name=personnel_email1]").val(data.personnel_email1);
+                $('#PurchaseManage2_DownL_form select[name="purchase_kind"]').val(data.purchase_kind).prop("selected", true);
+                $("#PurchaseManage2_M input[name=emp_cd]").val(data.emp_cd);
+                $("#PurchaseManage2_M input[name=emp_nm]").val(data.emp_nm);
+                $("#PurchaseManage2_M input[name=remark]").val(data.remark);
+
+                /* 아래 오른쪽 그리드 데이터 */
+                $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+            }
+        });
+    }
+    /*
+     * 팝업
+     */
+
+    // 제조처 팝업
+    function SearchManufacture() {
+
+        var popup = $("#PMM_ManufacturePopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 제조처 더블클릭
+    function PMM_ManufactureRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#PurchaseManage2_M input[name=manufacture_cd]").val(data.vender_cd);
+        $("#PurchaseManage2_M input[name=manufacture_nm]").val(data.vender_nm);
+        $("#PurchaseManage2_M input[name=manufacture_address]").val(data.address);
+
+        var popup = $("#PMM_ManufacturePopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    // 공급처 팝업
+    function SearchSupply() {
+
+        var popup = $("#PMM_SupplyPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 공급처 더블클릭
+    function PMM_SupplyRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        //master 거래처 코드로 담당자 정보 조회
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_S_empInfo',
+            data: {
+                supply_cd: data.vender_cd
+            },
+            success: function (result) {
+                if (result.length <= 0) {
+
+                    return;
+                }
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PurchaseManage2_M input[name=supply_cd]").val(json[0].vender_cd);                              //공급처코드
+                $("#PurchaseManage2_M input[name=supply_nm]").val(json[0].vender_nm);                              //공급처명
+                $("#PurchaseManage2_M input[name=supply_address]").val(json[0].address);                           //공급처주소
+                $("#PurchaseManage2_M input[name=commercial_personnel]").val(json[0].commercial_personnel);        //공급처 영업담당자명
+                $("#PurchaseManage2_M input[name=phone]").val(json[0].personnel_tel1);                             //공급처 영업담당자 전화번호
+                $("#PurchaseManage2_M input[name=supply_fax]").val(json[0].fax);                                   //공급처 팩스번호
+                $("#PurchaseManage2_M input[name=personnel_email1]").val(json[0].personnel_email1);                    //공급처 이메일
+
+            }
+        })
+
+
+        var popup = $("#PMM_SupplyPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 입고 담당자 팝업
+    function SearchEmp() {
+
+        var popup = $("#PMM_EmpPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 입고 담당자 더블클릭
+    function PMM_EmpRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#PurchaseManage2_M input[name=emp_cd]").val(data.emp_cd);
+        $("#PurchaseManage2_M input[name=emp_nm]").val(data.emp_nm);
+
+
+        var popup = $("#PMM_EmpPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // (검색) 품목 팝업
+    function SearchItemCD() {
+
+        var popup = $("#PMM_ItemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 품목 더블클릭
+    function PMM_ItemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#PurchaseManage2_M input[name=item_cd_S]").val(data.item_cd);
+        $("#PurchaseManage2_M input[name=item_nm_S]").val(data.item_nm);
+
+
+        var popup = $("#PMM_ItemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 저장&수정 팝업 내 더블 클릭
+    function PMM_ItemCD2RowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        //발주정보상세 그리드
+        var grid = $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance");
+
+        //#region 초기 입력 data
+        var date = new Date();
+
+        var year = date.getFullYear();
+        var month = date.getMonth() + 1;
+        var day = date.getDate();
+
+        grid.cellValue(pmm_rowNum, "purchase_item_cd", data.item_cd);       //품목코드
+        grid.cellValue(pmm_rowNum, "item_nm", data.item_nm);                //품목명
+
+        grid.cellValue(pmm_rowNum, "purchase_require_date", year + "-" + month + "-" + day);          //입고예정일
+        grid.cellValue(pmm_rowNum, "purchase_status", 1);                                             //발주상태 : 발주지시(1)로 기본설정
+        grid.cellValue(pmm_rowNum, "obtain_status", 1);                                               //조달구분 : 자사구매(1)로 기본설정
+        grid.cellValue(pmm_rowNum, "item_gb", data.item_gb);                //품목 구분
+
+        //#endregion
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_PRICE',
+            data: {
+                purchase_item_cd: data.item_cd
+            },
+            success: function (result) {
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                grid.cellValue(pmm_rowNum, "purchase_qty", json[0].basic_purchase_qty);         //수량
+                grid.cellValue(pmm_rowNum, "purchase_price", json[0].purchase_price);           //단가
+                grid.cellValue(pmm_rowNum, "purchase_unit", json[0].basic_purchase_unit);       //단위
+                grid.cellValue(pmm_rowNum, "purchase_base_price", json[0].purchase_price);      //최근단가
+
+                grid.cellValue(pmm_rowNum, "purchase_amt", json[0].basic_purchase_qty * json[0].purchase_price);      //금액
+
+            }
+        });
+
+        var popup = $("#PMM_ItemCD2Popup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    /**
+     * CRUD 시작
+     */
+
+    // 조회
+    function PurchaseManage2_MSearch() {
+
+        // 초기화
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        PurchaseManage2_M_EditCheck(false);
+        PMM_Gubun = "";
+        pmm_rowNum = 0;
+        pmm_update_ing = false;
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: false,
+            allowAdding: false,
+            allowDeleting: false
+        }
+
+        //$("#PurchaseManage2_DownL_form")[0].reset();
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("option", "editing", editing);
+
+        /* 초기화 끝 */
+
+        var formData = new FormData($("#PurchaseManage2_M_form")[0]);
+
+        // 선택 된 텝 조회
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_M_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PurchaseManage2_DownL_form")[0].reset();
+
+                    /*var tmpKey = {
+                        purchase_no: "",
+                        purchase_seq: ""
+                    };
+
+                    $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowKey", tmpKey);*/
+                    $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                // 그리드 항목이 하나 일때, 그리드 changed() 를 호출 할 수 있도록 설정
+                $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+
+    }
+
+    // 입력
+    function PurchaseManage2_MInput() {
+
+        // 입력&수정 모드 셋팅
+        PurchaseManage2_M_EditCheck(true);
+        // 선택 row 초기화
+        pmm_rowNum = 0;
+
+        $("#PurchaseManage2_DownL_form")[0].reset();
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource",[]);
+
+        PMM_Gubun = "I";
+
+        var formData = new FormData($("#PurchaseManage2_M_form")[0]);
+
+        /*$.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_M_NO',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                var json = JSON.parse(result);
+                var purchase_no = json[0].new_purchase_no;
+
+                $("input[name=purchase_no]").val(purchase_no);
+
+            }
+        });*/
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: true,
+            allowAdding: true,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 저장 ( 저장 순서: purchase_order -> purchase_order_detail -> vender(Update) )
+    async function PurchaseManage2_MSave() {
+
+        await $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").saveEditData();
+
+        //Validation Check
+        PMM_validationCheck();
+
+        if (validation_submit) {
+
+            var formData = new FormData($("#PurchaseManage2_DownL_form")[0]);
+
+            formData.set("gubun", PMM_Gubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/PurchaseManage2_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    validation_submit = false;
+
+                    if (result.length <= 0) {
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (PMM_Gubun == "I") {             //입력인 경우에만
+                        var purchaseNo = json.message;
+
+                        $("#PurchaseManage2_M input[name=purchase_no]").val(purchaseNo);
+
+                    }
+
+                    PMM_ItemExcute();
+
+                }
+            });
+        }
+
+    }
+
+    //발주상세정보 저장
+    function PMM_ItemExcute() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_batch',
+            data: {
+                purchaseManage2: JSON.stringify(pmm_itemList),
+                gubun: PMM_Gubun,
+                purchase_no : $("#PurchaseManage2_M input[name=purchase_no]").val()
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+                fn_saveVender();
+            }
+        });
+    }
+
+    // vender 테이블 저장
+    function fn_saveVender() {
+
+        var formData = new FormData($("#PurchaseManage2_DownL_form")[0]);
+
+        PMM_Gubun = "I_V";
+
+        formData.set("gubun", PMM_Gubun);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/PurchaseManage2_CRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("저장되었습니다.");
+
+                pmm_itemList = new Array();
+                pmm_update_ing = false;
+                PurchaseManage2_M_EditCheck(false);
+                PurchaseManage2_MSearch();
+
+            }
+        });
+    }
+
+    //취소
+    function PurchaseManage2_MUndo() {
+
+        //초기화 셋팅
+        PurchaseManage2_M_EditCheck(false);
+        PMM_Gubun = "";
+        pmm_rowNum = 0;
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: false,
+            allowAdding: false,
+            allowDeleting: false
+        }
+
+        pmm_itemList = new Array();
+        $("#PurchaseManage2_DownL_form")[0].reset();
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("option", "editing", editing);
+        PurchaseManage2_MSearch();
+    }
+
+    // validation check
+    function PMM_validationCheck() {
+
+        if ($("#PurchaseManage2_M input[name=search_data]").val() === "" || $("#PurchaseManage2_M input[name=search_data]").val() === null) {
+            alert('발주일자를 선택 해주세요.');
+            return;
+        }
+
+        if ($("#PurchaseManage2_M input[name=supply_cd]").val() === "" || $("#PurchaseManage2_M input[name=supply_cd]").val()  === null ) {
+            alert('공급처를 선택 해주세요.');
+            return;
+        }
+
+        //if ($("#PurchaseManage2_M input[name=commercial_personnel]").val() === "" || $("#PurchaseManage2_M input[name=commercial_personnel]").val() === null) {
+        //    alert('담당자를 입력 해주세요.');
+        //    return;
+        //}
+
+        //if ($("#PurchaseManage2_M input[name=phone]").val() === "" || $("#PurchaseManage2_M input[name=phone]").val() === null) {
+        //    alert('전화번호를 입력 해주세요.');
+        //    return;
+        //}
+
+        //if ($("#PurchaseManage2_M input[name=supply_fax]").val() === "" || $("#PurchaseManage2_M input[name=supply_fax]").val() === null) {
+        //    alert('팩스번호를 입력 해주세요.');
+        //    return;
+        //}
+
+        //if ($("#PurchaseManage2_M input[name=emp_cd]").val() === "" || $("#PurchaseManage2_M input[name=emp_cd]").val() === null) {
+        //    alert('입고담당자를 선택 해주세요.');
+        //    return;
+        //}
+
+        // 오른쪽 아래 그리드 validation
+        if ($("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource").length === 0) {
+            alert("발주정보등록을 입력해 주세요.");
+            return;
+        }
+
+        if (!PMM_validation_grid && $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance").option("dataSource").length === 0) {
+            alert("발주정보상세를 입력해 주세요.");
+            return;
+        }
+
+        var grid = $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 1) {
+            for (var i = 0; i < grid.totalCount() - 1; i++) {
+                if (grid.cellValue(i, "item_gb") != grid.cellValue(i+1, "item_gb")) {
+                    alert("원료와 상품은 같이 발주를 잡을 수 없습니다.");
+                    return;
+                }
+            }
+        }
+        
+        //정해진 품목(상품, 원료)으로 자동채번 생성하기 위한 값
+        $("#PurchaseManage2_M input[name=item_gb]").val(grid.cellValue(0, "item_gb"));
+
+        validation_submit = true;
+    }
+
+    // 삭제
+    function PurchaseManage2_MDelete() {
+
+        // 삭제 여부 팝업
+        if (confirm("선택된 발주번호의 모든 데이터가 삭제됩니다. 삭제하시겠습니까?") === true) {
+
+            var grid = $("#PurchaseManage2_M_UpGrid").dxDataGrid("instance");
+            var data = getGridRowByKey('PurchaseManage2_M_UpGrid', grid.option("focusedRowKey"));
+
+            if (data.purchase_status !== '발주지시') {          //2021.06.07 전상배 프로시저에서 purchase_status값을 common_part_nm값으로 조회하기 때문에 '발주지시'값으로 표기
+                alert("발주지시 상태만 삭제하실 수 있습니다.");
+                return;
+            }
+
+            //2021.10.06 박가희 그리드에서 선택한 발주번호 시퀀스에 대해서만 삭제하도록 수정
+            //기존에는 디테일 선택 후 삭제시, 기존에 입고되었던 발주항목도 다 사라져버림..
+            PMM_Gubun = "D"; 
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/PurchaseManage2_CRUD',
+                data: {
+                    purchase_no: data.purchase_no,
+                    purchase_seq: data.purchase_seq, //추가
+                    gubun: PMM_Gubun
+                },
+                success: function (result) {
+
+                    if (!UtilView.isEmpty(result.Ok) && !result.Ok) {
+                        alert("삭제에 실패하였습니다.");
+                    } else {
+                        alert("삭제되었습니다.");
+                    }
+
+                    PurchaseManage2_M_EditCheck(false);
+                    PurchaseManage2_MSearch();
+
+                }
+            });
+
+        } else {   //취소
+
+            return;
+        }
+    }
+
+    // 수정
+    function PurchaseManage2_MEdit() {
+
+        if ($("#PurchaseManage2_M_UpGrid").dxDataGrid("instance").option("dataSource").length === 0) {
+            alert("선택 항목이 없습니다.");
+            return;
+        }
+
+        PurchaseManage2_M_EditCheck(true);
+        // 구분 값
+        PMM_Gubun = "U";
+        pmm_update_ing = true;
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: true,
+            allowAdding: true,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+
+        $("#PurchaseManage2_M_DownGrid").dxDataGrid("option", "editing", editing);
+
+        var datagrid = $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance");
+        var gridData = datagrid.option("dataSource");
+
+        pmm_rowNum = gridData.length;
+    }
+
+    function PurchaseManage2_MExcel(gridName, ExcelName) {
+        gridExportToExcel("PurchaseManage2_M_UpGrid", "원료발주관리");
+    }
+
+    /* -- CRUD 끝 -- */
+
+    //품목 셀 클릭
+    function PMM_CellClick(e) {
+
+        pmm_rowNum = e.rowIndex;
+
+        // 품목코드 이외 항목을 눌렀을때
+        if (!(e.columnIndex === 0 && e.rowType === "data")) {
+            return;
+        }
+
+        // 입력이 아닌 경우
+        if (!e.row.isNewRow) {
+            return;
+        }
+
+        // 팝업 노출
+        var popup = $("#PMM_ItemCD2Popup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // 품목코드 서치 버튼
+    function PMM_cellWithButton(container, cellInfo) {
+
+        // 입력이 아닌 경우
+        if (!cellInfo.row.isNewRow) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        if (typeof cellInfo.value === "undefined" || cellInfo.value === null)
+            cellInfo.value = "";
+
+        $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' id='pmm_icon-plus" + (cellInfo.rowIndex + 1) + "'></div>")
+            .appendTo(container);
+
+        $("#pmm_icon-plus" + (cellInfo.rowIndex + 1)).dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+    // 클릭 이벤트 제한
+    function PMM_EditableColumn(cellElement) {
+
+        if (cellElement.column.dataField === 'purchase_item_cd')            //원료코드
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'item_nm')                     //원료명
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'purchase_require_date')       //입고예정일
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'purchase_status')             //발주상태
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'obtain_status')               //조달구분
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'purchase_base_price')         //최근단가
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'purchase_amt')                //금액
+            cellElement.element.find('input').prop('readonly', true);
+
+        var grid = $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance");
+        //발주상태가 입고완료인 경우
+        //if (grid.cellValue(cellElement.rowIndex, "purchase_status") !== 1) {
+        //    if (cellElement.column.dataField === 'purchase_qty' || 'purchase_unit' || 'purchase_require_date' || 'order_request_no' )
+        //        cellElement.element.find('input').prop('readonly', true);
+        //    if (cellElement.column.dataField !== 'purchase_price') {
+        //        cellElement.element.find('input').prop('readonly', true);
+        //    }
+        //}
+    }
+
+    function PMM_order_request_no(container, cellInfo) {
+
+        if (cellInfo.value === "undefined" || cellInfo.value === null) {
+            cellInfo.value = "";
+
+        }
+
+        $("<div>").html(cellInfo.value)
+            .appendTo(container);
+    }
+
+    //function PMM_send_mail(container, cellInfo) {
+
+    //    if (cellInfo.value === "undefined" || cellInfo.value === null) {
+    //        cellInfo.value = "";
+
+    //    }
+
+    //    $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' id='Mail_icon-plus" + (cellInfo.rowIndex + 1) + "'></div>")
+    //        .appendTo(container);
+
+    //    $("#Mail_icon-plus" + (cellInfo.rowIndex + 1)).dxButton({
+    //        icon: "check",
+    //        onClick: function (e) {
+
+    //        }
+    //    });
+    //}
+
+    // 그리드 컬럼 벨리데이션 체크
+    function PurchaseManage2_M_Required(e) {
+        PMM_validation_grid = e.isValid;
+    }
+
+    // 발주정보등록 수량, 단가, 금액 자동계산
+    function calcPMM(e) {
+        var dataGrid = $("#PurchaseManage2_M_DownGrid").dxDataGrid("instance");
+
+        if (e.parentType == 'dataRow' && e.dataField == 'purchase_qty') {                             //수량 변경 시,
+            e.editorElement.dxNumberBox('instance').option('onValueChanged', args => {
+                e.setValue(args.value);
+
+                var purchaseQty = args.value; // 수량
+                var purchasePrice = dataGrid.cellValue(e.row.rowIndex, "purchase_price"); // 단가
+
+                // 최초 문자열로 기입 되는 데, 천 단위 (ex : 2,000) 일 때 ',' 제거
+                if (typeof dataGrid.cellValue(e.row.rowIndex, "purchase_price") === "string") {
+                    purchasePrice = dataGrid.cellValue(e.row.rowIndex, "purchase_price").replace(",", "");
+                    purchasePrice = parseFloat(purchasePrice);
+                }
+
+                if (typeof purchasePrice !== "undefined" && purchasePrice !== "") {
+                    dataGrid.cellValue(e.row.rowIndex, "purchase_amt", purchaseQty * parseFloat(purchasePrice)); // 금액
+                }
+
+            });
+        } else if (e.parentType == 'dataRow' && e.dataField == 'purchase_price') {
+            e.editorElement.dxNumberBox('instance').option('onValueChanged', args => {
+                e.setValue(args.value);
+
+                var purchasePrice = args.value; // 단가
+                var purchaseQty = dataGrid.cellValue(e.row.rowIndex, "purchase_qty"); // 수량
+
+                // 최초 문자열로 기입 되는 데, 천 단위 (ex : 2,000) 일 때 ',' 제거
+                if (typeof dataGrid.cellValue(e.row.rowIndex, "purchase_price") === "string") {
+                    purchasePrice = dataGrid.cellValue(e.row.rowIndex, "purchase_price").replace(",", "");
+                    purchasePrice = parseFloat(purchasePrice);
+                }
+
+                if (typeof purchaseQty !== "undefined" && purchaseQty !== "") {
+                    dataGrid.cellValue(e.row.rowIndex, "purchase_amt", purchaseQty * purchasePrice); // 금액
+                }
+
+            });
+        }
+    }
+
+    //추가 입력발주가 아니면 '단가'만 수정 가능
+    function PMM_CellEdit(e) {
+
+        if (e.parentType === "dataRow" && e.dataField !== "purchase_price" && !e.row.isNewRow) {
+
+            e.editorOptions.disabled = true;
+        }
+
+        //포맷지정(복사 붙여넣기시 값 인식 제대로 되지않는 이슈로 인해)
+        //수량
+        if (e.parentType == 'dataRow' && e.dataField == 'purchase_qty') {
+            if (e.row.data.purchase_unit == 'kg' || e.row.data.purchase_unit == 'KG') {
+                e.editorOptions.format = "#,##0.000";
+            }
+            else {
+                e.editorOptions.format = "#,##0";
+            }
+        }
+        //단가
+        if (e.parentType == 'dataRow' && e.dataField == 'purchase_price') {
+            e.editorOptions.format = "#,##0.#";
+        }
+        //금액
+        if (e.parentType == 'dataRow' && e.dataField == 'purchase_amt') {
+            e.editorOptions.format = "#,##0.#";
+        }
+    }
+
+    //#region 하단 발주정보상세Grid 입력&수정사항
+    function PurchaseManage2_M_ItemInsert(info) {
+        var data = info.data;
+
+        data.gubun = "I_D";
+
+        var date = new Date(data.purchase_require_date);
+
+        var day = date.getDate();
+        var month = date.getMonth() + 1;
+        var year = date.getFullYear();
+
+        day = (day < 10) ? ("0" + day) : day;
+        month = (month < 10) ? ("0" + month) : month;
+
+        data.purchase_require_date = year + "-" + month + "-" + day;
+
+        pmm_itemList.push(data);
+    }
+
+    function PurchaseManage2_M_ItemUpdate(info) {
+        var data = info.data;
+
+        data.gubun = "U_D";
+
+        var date = new Date(data.purchase_require_date);
+
+        var day = date.getDate();
+        var month = date.getMonth() + 1;
+        var year = date.getFullYear();
+
+        day = (day < 10) ? ("0" + day) : day;
+        month = (month < 10) ? ("0" + month) : month;
+
+        data.purchase_require_date = year + "-" + month + "-" + day;
+
+        pmm_itemList.push(data);
+    }
+
+    function PurchaseManage2_M_ItemRemove(info) {
+        var data = info.data;
+
+        data.gubun = "D_D"
+
+        pmm_itemList.push(data);
+    }
+
+    //#endregion
+
+    //#region Cell background color 설정
+    function PM2_M_BackgroundColor(cellInfo) {
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === 'purchase_status') {
+            if (cellInfo.data.purchase_status === '발주지시') {        //발주지시(1)
+                cellInfo.cellElement.addClass('Silver');
+            }
+            if (cellInfo.data.purchase_status === '분할입고') {        //분할입고(2)
+                cellInfo.cellElement.addClass('PaleTurquoise');
+            }
+            if (cellInfo.data.purchase_status === '입고완료') {        //입고완료(3)
+                cellInfo.cellElement.addClass('LimeGreen');
+            }
+        }
+
+    }
+    //#endregion
+    function PM2_M_MailSend(e) {
+
+        var report = new ReportHelper();
+        var plant_nm = sessionStorage.getItem("plantNM");
+
+        //var receive = e.row.data.supply_email + ";" + $("#PurchaseManage2_P input[name=personnel_email1]").val();
+        var receive = $("#PurchaseManage2_M input[name=personnel_email1]").val();
+        var cc = e.row.data.supply_email;
+
+        report.addParam({
+            objFile: { path: "PurchaseManage", RptFileName: "PurchaseManage" },
+            objSp: { SpName: "SP_PurchaseManage2", gubun: "RPT", reportParam: "purchase_no:" + e.row.data.purchase_no },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1, id: e.row.data.purchase_no, type: "purchase", receive: receive, company_name: plant_nm, cc: cc },
+            objTblNm: { tblName: "RCV,SND,TOT_TOP,BODY,TOT_BOTTOM" },
+            objSub: { subRptName: "" }
+        });
+
+        report.preview();
+    }
+
+    function PMM_emailCellPrepared(cellEllement, cellInfo) {
+        var data = cellInfo.row.data;
+        //console.log(data);
+        var button = null;
+
+        if (data.send_mail_count > 0) {
+            button = $("<button>").dxButton({
+                icon: "fa fa-envelope-open",
+                stylingMode: "outline",
+                hint: "" + data.send_mail_count
+            });
+        } else {
+            button = $("<button>").dxButton({
+                icon: "fa fa-envelope",
+                stylingMode: "outline",
+                hint: "" + data.send_mail_count
+            });
+        }
+        button.addClass("boxtype");
+
+        button.on("click", function () {
+            //console.log("My command was clicked");
+            PM2_M_MailSend(cellInfo);
+        });
+
+        //return icon;
+        return button;
+    }
+
+</script>
+
+<!--셀 배경색상 설정-->
+<style>
+    #PurchaseManage2_M .Silver {
+        background-color: Silver;
+        color: black;
+    }
+
+    #PurchaseManage2_M .PaleTurquoise {
+        background-color: PaleTurquoise;
+        color: black;
+    }
+
+    #PurchaseManage2_M .LimeGreen {
+        background-color: LimeGreen;
+        color: black;
+    }
+
+    #PurchaseManage2_M .boxtype {
+        border-radius:0px;
+    }
+
+</style>
+
+
+<!-- $Contents Wrapper-->
+<div id="PurchaseManage2_M" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="PMM_ManufacturePopup"></div>
+    <div id="PMM_SupplyPopup"></div>
+    <div id="PMM_EmpPopup"></div>
+    <div id="PMM_ItemCDPopup"></div>
+    <div id="PMM_ItemCD2Popup"></div>
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="PurchaseManage2_M_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <select class="form-control" name="search_data">
+                            <option value="0" selected>발주일자</option>
+                            <option value="1">입고 예정일</option>
+                        </select>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">원료</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm_S" >
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="SearchItemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="item_cd_S">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="purchase_state">
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_purchase_state).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- 위 그리드 -->
+        <div class="col-12 pb-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PurchaseManage2_M_UpGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr(gridKey)
+                    .Height(550)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("PM2_M_BackgroundColor")
+                    .Columns(c =>
+                    {
+                        c.Add().Name("send_mail").Caption("메일발송").Width("5%").Type(GridCommandColumnType.Buttons)
+                               .Buttons(b => b.Add().Template(new JS("PMM_emailCellPrepared")));
+                        c.Add().DataField("send_mail_count").Caption("발송횟수").DataType(GridColumnDataType.Number).Visible(false);
+                        c.Add().DataField("purchase_no").Caption("발주번호").Width("7%");
+                        c.Add().DataField("purchase_date").Caption("발주일자").Width("6%").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("purchase_item_cd").Caption("원료코드").Width("6%");
+                        c.Add().DataField("item_nm").Caption("원료명").Width("20%");
+                        c.Add().DataField("purchase_require_date").Caption("입고예정일").Width("6%").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("purchase_qty").Caption("발주수량").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_waiting_qty").Caption("입고대기량").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_ye_qty").Caption("입고예정량").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_qty").Caption("입고량").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("not_receipt_qty").Caption("미납량").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("purchase_unit").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("purchase_amt").Caption("금액").Format("#,##0.###").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("order_request_no").Caption("생산의뢰번호").CellTemplate(new JS("PMM_order_request_no"));
+                        c.Add().DataField("purchase_status").Caption("상태").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("last_receipt_time").Caption("최종입고일자").Width("6%").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("obtain_status").Caption("조달구분").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("PurchaseManage2_M_UpGrid_changed")
+                )
+
+            </div>
+
+        </div>
+
+
+
+    </div>
+
+
+    <div class="row">
+
+        <!-- 아래 왼쪽 그리드 -->
+        <div class="col-4 pr-0">
+
+            <div class="box mb-0">
+
+                <form id="PurchaseManage2_DownL_form">
+
+                    <div class="divName margin-bottom">
+                        <p>발주정보등록</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">발주번호<star>*</star></label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12 required" name="purchase_no" readonly="readonly" />
+                        </div>
+
+                        <label class="col-2">발주일자<star>*</star></label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12 required datepicker" name="purchase_date" readonly="readonly" value="@DateTime.Today.ToShortDateString()" />
+                        </div>
+
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-2">제조처</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="manufacture_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="m_ManufactureBtn" onclick="SearchManufacture()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="manufacture_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="manufacture_address" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">공급처<star>*</star></label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="supply_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="m_SupplyBtn" onclick="SearchSupply()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="supply_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="supply_address" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">담당자명</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12" name="commercial_personnel" />
+                        </div>
+
+                        <label class="col-2">전화번호</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12" name="phone" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">팩스번호</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12" name="supply_fax" />
+                        </div>
+
+                        <label class="col-2">원료종류</label>
+                        <select class="col-3 form-control" name="purchase_kind" style="margin-left: -0.15em;">
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_purchase_kind).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+
+                    </div>
+                    <div class="input-wrapper">
+
+                        <label class="col-2">담당자메일</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12" name="personnel_email1" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">입고담당</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="emp_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="m_EmpBtn" onclick="SearchEmp()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="emp_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">비고</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="remark" />
+                        </div>
+                    </div>
+
+                    <!--품목 구분-->
+                    <input type="hidden" name="item_gb" />
+                </form>
+
+            </div>
+
+        </div>
+
+        <div class="col-8">
+
+            <div class="box mb-0">
+                <div class="divName margin-bottom">
+                    <p>발주정보상세</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PurchaseManage2_M_DownGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr("purchase_item_cd")
+                    .OnRowValidating("PurchaseManage2_M_Required")
+                    .OnRowUpdated("PurchaseManage2_M_ItemUpdate")
+                    .OnRowInserted("PurchaseManage2_M_ItemInsert")
+                    .OnRowRemoved("PurchaseManage2_M_ItemRemove")
+                    .Height(900)
+                    .OnEditorPrepared("calcPMM")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnEditorPreparing("PMM_CellEdit")
+                    .OnCellClick("PMM_CellClick")
+                    .OnCellPrepared("PMM_EditableColumn")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_gb").Caption("구분").Visible(false);
+                        c.Add().DataField("purchase_item_cd").Caption("원료코드").CellTemplate(new JS("PMM_cellWithButton"));
+                        c.Add().DataField("item_nm").Caption("원료명").Width(300)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("원료를 선택 해주세요.");
+                            });
+                        c.Add().DataField("purchase_qty").Caption("수량").Format("#,##0.000").DataType(GridColumnDataType.Number)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("수량을 입력 해주세요.");
+                            });
+                        c.Add().DataField("purchase_price").Caption("단가").Format("#,##0.#").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("purchase_amt").Caption("금액").Format("#,##0.#").DataType(GridColumnDataType.Number)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("금액을 입력 해주세요.");
+                            });
+                        c.Add().DataField("purchase_unit").Caption("단위").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("단위를 입력 해주세요.");
+                            });
+                        c.Add().DataField("purchase_require_date").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date).Caption("입고예정일")
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("입고예정일을 입력 해주세요.");
+                            });
+                        c.Add().DataField("order_request_no").Caption("의뢰번호").CellTemplate(new JS("PMM_order_request_no"));
+                        c.Add().DataField("purchase_base_price").Caption("최근단가").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add()
+                            .Lookup(lookup => lookup
+                                .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "공통코드",
+                                        pDiv = "N",
+                                        pStrWhere = "WR100",
+                                        pTableName = "1"
+                                    }).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    )
+                            .DataField("purchase_status").Caption("발주상태").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("발주상태를 선택 해주세요.");
+                            });
+                        c.Add()
+                            .Lookup(lookup => lookup
+                                .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "공통코드",
+                                        pDiv = "N",
+                                        pStrWhere = "WR200",
+                                        pTableName = "1"
+                                    }).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    )
+                            .DataField("obtain_status").Caption("조달구분").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("조달구분을 선택 해주세요.");
+                            });
+                    })
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+</div>

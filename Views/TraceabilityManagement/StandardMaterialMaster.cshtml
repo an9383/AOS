@@ -1,0 +1,452 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@* 표준코드 관리 *@
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var StandardMaterialMaster_dbState = "";
+    var StandardMaterialMaster_FocusedRowData = null;
+
+    $(function () {
+
+        // 수정중인지 체크
+        StandardMaterialMaster_EditCheck(false);
+        // 그리드 데이터 조회
+        StandardMaterialMasterSearch();
+    })
+
+    // 수정중인지 체크
+    function StandardMaterialMaster_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#StandardMaterialMasterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#StandardMaterialMasterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#StandardMaterialMasterSearch").dxButton().parent().parent().addClass("display-none");
+            //$("#StandardMaterialMasterInput").dxButton().parent().parent().addClass("display-none");
+            $("#StandardMaterialMasterEdit").dxButton().parent().parent().addClass("display-none");
+            //$("#StandardMaterialMasterDelete").dxButton().parent().parent().addClass("display-none");
+            $("#StandardMaterialMasterExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#StandardMaterialMasterForm :disabled").attr('disabled', false);
+            $("#StandardMaterialMasterGrid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+            $("#StandardMaterialMasterSave").dxButton().parent().parent().addClass("display-none");
+            $("#StandardMaterialMasterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#StandardMaterialMasterSearch").dxButton().parent().parent().removeClass("display-none");
+            //$("#StandardMaterialMasterInput").dxButton().parent().parent().removeClass("display-none");
+            $("#StandardMaterialMasterEdit").dxButton().parent().parent().removeClass("display-none");
+            //$("#StandardMaterialMasterDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#StandardMaterialMasterExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#StandardMaterialMasterForm :enabled").attr('disabled', true);
+            $("#StandardMaterialMasterGrid").dxDataGrid("option", "disabled", false);
+
+            StandardMaterialMaster_dbState = "";
+
+        }
+    }
+
+   //표준코드를 사용하는 원료 코드 조회
+    function StandardMaterialMaster_SearchMaterial() {
+
+        CreatePopupWithFilter('@CodeHelpType.material_standard_cd', '표준코드 조회', 'item_cd', $("#StandardMaterialMasterSearchForm input[name=standard_cd]").val(),
+            function (selectedItems) {
+                //입력폼 데이터로 설정
+                $("#StandardMaterialMasterSearchForm input[name=standard_cd]").val(selectedItems.item_cd);
+                $("#StandardMaterialMasterSearchForm input[name=standard_nm]").val(selectedItems.item_nm);
+            }
+        );
+    }
+
+    function StandardMaterialMasterSearch() {
+        var standard_cd = $("#StandardMaterialMasterSearchForm input[name='standard_cd']").val();
+        var use_ck = $("#StandardMaterialMasterSearchForm input:radio[name='use_ck']:checked").val();
+
+        $.ajax({
+            type: 'GET',
+            async: false,
+            url: '/TraceabilityManagement/StandardMaterialMasterSearch',
+            data: {
+                standard_cd: standard_cd,
+                use_ck : use_ck
+            },
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var json = JSON.parse(result);
+
+                    $("#StandardMaterialMasterGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#StandardMaterialMasterGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    StandardMaterialMaster_FocusedRowData = null;
+
+                    StandardMaterialMaster_SetDetail();
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "StandardMaterialMasterGrid");
+
+    }
+
+    function StandardMaterialMaster_SetDetail() {
+        if (StandardMaterialMaster_FocusedRowData != null) {
+            var data = StandardMaterialMaster_FocusedRowData;
+            $("#StandardMaterialMasterForm input[name=standard_cd]").val(data.standard_cd);//표준원료코드
+            $("#StandardMaterialMasterForm input[name=standard_nm]").val(data.standard_nm);//표준명
+            $("#StandardMaterialMasterForm input[name=standard_enm]").val(data.standard_enm);//표준영문명
+
+            if (data.use_ck == "Y") {
+                $("#StandardMaterialMasterForm input:radio[name='use_ck']:radio[value='Y']").prop('checked', true);
+            } else {
+                $("#StandardMaterialMasterForm input:radio[name='use_ck']:radio[value='N']").prop('checked', true);
+            }
+
+        } else {
+            $("#StandardMaterialMasterForm")[0].reset();
+            $("#StandardMaterialMasterForm input:radio[name='use_ck']:radio[value='N']").prop('checked', true);
+        }
+
+        StandardMaterialMaster_SearchItem();
+    }
+
+    function StandardMaterialMaster_SearchItem() {
+
+        var standard_cd = $("#StandardMaterialMasterForm input[name='standard_cd']").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/TraceabilityManagement/StandardMaterialMasterSearchItem',
+            data: {
+                standard_cd: standard_cd
+            },
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var json = JSON.parse(result);
+
+                    $("#StandardMaterialMasterDetailGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#StandardMaterialMasterDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                }
+            }
+        })
+    }
+
+    function StandardMaterialMasterEdit() {
+
+        StandardMaterialMaster_dbState = "U";
+        StandardMaterialMaster_EditCheck(true);
+
+    }
+
+    function StandardMaterialMasterUndo() {
+        StandardMaterialMaster_EditCheck(false);
+    }
+
+    function StandardMaterialMasterSave() {
+
+        if (confirm("표준원료 사용여부를 수정하시겠습니까?")) {
+
+            var standard_cd = $("#StandardMaterialMasterForm input[name='standard_cd']").val();
+            var use_ck = $("#StandardMaterialMasterForm input:radio[name='use_ck']:checked").val();
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/TraceabilityManagement/StandardMaterialMasterSave',
+                data: {
+                    standard_cd: standard_cd,
+                    use_ck: use_ck
+                },
+                success: function (result) {
+                    StandardMaterialMaster_EditCheck(false);
+                    StandardMaterialMasterSearch();
+                }
+            })
+        }
+
+    }
+
+    function StandardMaterialMasterExcel() {
+        gridExportToExcel("StandardMaterialMasterGrid", "StandardMaterialMasterData");
+    }
+
+    //엑셀 업로드
+    function StandardMaterialMaster_Upload() {
+        $("#StandardMaterialMaster_excel_upload").click();
+    }
+
+    document.querySelector("#StandardMaterialMaster_excel_upload").addEventListener("change", function (event) {
+
+        var input = event.target;
+        var fileName = input.files[0].name;
+        var fileType = fileName.substring(fileName.lastIndexOf(".")).toUpperCase();
+
+        // 엑셀 확장자가 아니면 return;
+        if (!(fileType == ".XLSX" || fileType == ".XLS")) {
+            alert("확장자가 .xls, .xlsx인 파일만 입력할 수 있습니다.");
+
+            event.target.value = "";
+            return;
+        }
+
+        // FileReader를 선언한 후, 해당 FileReader에 input type[file]로 입력 받은 파일은 입력(readAsBinaryString)
+        var reader = new FileReader();
+        reader.readAsBinaryString(input.files[0]);
+
+        // FileReader에 파일이 제대로 입력되면 실행할 function
+        reader.onload = function () {
+            var fileData = reader.result;
+            var wb = XLSX.read(fileData, { type: 'binary' });
+
+            wb.SheetNames.forEach(function (sheetName) {
+                var rowObj = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+
+                StandardMaterialMaster_excelDataInsertToGrid(rowObj);
+            })
+        };
+
+    })
+
+       // input type[file]을 통해 입력받은 파일을 DataGrid에 입력
+    function StandardMaterialMaster_excelDataInsertToGrid(data) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/TraceabilityManagement/InsertExcelData_MaterialTemp',
+                async: false,
+                //dataType: 'json',
+                data: {
+                    standardData: JSON.stringify(data)
+                },
+                success: function (result) {
+                    alert(result);
+                }
+            });
+
+            $("#StandardMaterialMaster_excel_upload").val("");
+        }
+
+    function StandardMaterialMasterGrid_FocusedRowChanged(e) {
+
+        if (!e.row || !e.row.data) {
+            StandardMaterialMaster_FocusedRowData = null;
+        } else {
+            StandardMaterialMaster_FocusedRowData = e.row.data;
+            StandardMaterialMaster_SetDetail();
+        }
+    }
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div class="display-none">
+        <input type="file" id="StandardMaterialMaster_excel_upload" accept=".xls, .xlsx" />  @*Microsoft의 스프레드시트 확장자 .xls, xlsx 만 입력할 수 있도록 설정*@
+    </div>
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm" >
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">원자재 표준 검색</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="standard_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="StandardMaterialMaster_SearchMaterial()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="standard_nm">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="use_ck_%" name="use_ck" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_%">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" id="use_ck_Y" name="use_ck" />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_Y">사용</label></span>
+
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" id="use_ck_N" name="use_ck" />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_N">미사용</label></span>
+                    </div>
+
+                    @*<div class="input-group input-group-sm col-2">
+                        @(Html.DevExtreme().Toolbar()
+                        .Items(items =>
+                            {
+                                items.Add()
+                                    .Widget(w =>
+                                        w.Button()
+                                        .Type(ButtonType.Default)
+                                        .StylingMode(ButtonStylingMode.Contained)
+                                        .ID("StandardMaterialMaster_Upload")
+                                        .Icon("upload")
+                                        .Text("표준코드 엑셀 업로드")
+                                        .Width(180)
+                                        .OnClick("StandardMaterialMaster_Upload")
+                                    )
+                                    .Location(ToolbarItemLocation.Before);
+                            }
+                        )
+                    )
+                    </div>*@
+
+                </div>
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel;");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-0">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("StandardMaterialMasterGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("standard_cd")
+                    .Height(850)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("standard_cd").Caption("표준원료코드");
+                        c.Add().DataField("standard_nm").Caption("표준명");
+                        c.Add().DataField("standard_enm").Caption("표준영문명");
+                        c.Add().DataField("use_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.use_ck == ""Y"" || rowData.use_ck == true); }")
+                        .Caption("사용여부");
+                    })
+                    .OnFocusedRowChanged("StandardMaterialMasterGrid_FocusedRowChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+                <form id="StandardMaterialMasterForm">
+                    <div class="divName margin-bottom">
+                        <p>표준 원료 상세</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">표준원료코드</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="standard_cd" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">표준원료명</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="standard_nm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">표준원료영문명</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="standard_enm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">사용여부</label>
+                        <div class="input-group col-4">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="s_use_ck_Y" name="use_ck" />
+                            </div>
+                            <span class="form-control-sm"><label for="s_use_ck_Y">사용</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="s_use_ck_N" name="use_ck" />
+                            </div>
+                            <span class="form-control-sm"><label for="s_use_ck_N">미사용</label></span>
+                        </div>
+
+                    </div>
+                </form>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("StandardMaterialMasterDetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Height(500)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("원료코드");
+                        c.Add().DataField("item_nm").Caption("원료명");
+
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+</div>

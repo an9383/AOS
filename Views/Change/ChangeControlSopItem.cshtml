@@ -1,0 +1,336 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    var ChangeControlSopItem = @Html.Raw(Json.Encode(ViewBag.ChangeControlSopItem.Data));
+}
+
+@*영향평가 항목 설정*@
+
+    <script id="ChangeControlSopItemJs">
+
+        var _changecontrolSopItemCd = "";
+        var _changeControlSopItemIsEditing = false;
+        var _changeControlSopItemSCRUDStatus = "";
+        var _changeControlSopItemChanges = new Array();
+        var _changeControlSopItemIsValid = false;
+
+        $(function () {
+             if (@ChangeControlSopItem) {
+                 $("#ChangeControlSopItemGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ChangeControlSopItem));
+                 $("#ChangeControlSopItemGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                 $("#ChangeControlSopItemGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+             }
+
+             ChangeControlSopItemEditCheck(false, "");
+        });
+
+        // 메인 그리드 포커스 변경
+        function ChangeControlSopItemFocusChanged() {
+
+            var gridId = "ChangeControlSopItemGrid";
+
+            var grid = $("#" + gridId).dxDataGrid("instance");
+            var data = getGridRowByKey(gridId, grid.option("focusedRowKey"));
+
+            _changecontrolSopItemCd = data.changecontrol_sop_item_cd;
+
+            $.ajax({
+                type: 'GET',
+                url: '/Change/ChangeControlSopItemSelectDetail',
+                data: {
+                    changecontrol_sop_item_cd: _changecontrolSopItemCd
+                },
+                success: function (result) {
+
+                    if (result.length > 0) {
+                        $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                        $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                        $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                    } else {
+                        $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+                }
+            });
+        }
+
+        // 수정중인지 체크
+        function ChangeControlSopItemEditCheck(nowEdit, status) {
+
+            _changeControlSopItemIsEditing = nowEdit;
+            _changeControlSopItemSCRUDStatus = status;
+
+            if (nowEdit) {
+                // 툴바 활성/비활성
+                $('#ChangeControlSopItemSave, #ChangeControlSopItemUndo').dxButton().parent().parent().removeClass("display-none");
+                $('#ChangeControlSopItemSearch, #ChangeControlSopItemEdit, #ChangeControlSopItemDelete').dxButton().parent().parent().addClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlSopItemGrid').dxDataGrid("instance").option("disabled", true);
+            }
+            else {
+                // 툴바 활성/비활성
+                $('#ChangeControlSopItemSave, #ChangeControlSopItemUndo').dxButton().parent().parent().addClass("display-none");
+                $('#ChangeControlSopItemSearch, #ChangeControlSopItemEdit, #ChangeControlSopItemDelete').dxButton().parent().parent().removeClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlSopItemGrid').dxDataGrid("instance").option("disabled", false);
+
+                var editing = {
+                    allowAdding: false,
+                    allowUpdating: false,
+                    allowDeleting: false
+                }
+
+                $("#ChangeControlSopItemSubGrid").dxDataGrid("option", "editing", editing);
+
+                _changeControlSopItemChanges = new Array();
+            }
+        }
+
+        // 조회
+        function ChangeControlSopItemSearch() {
+
+            _changecontrolSopItemCd = "";
+
+            UtilView.dataGridSelect('ChangeControlSopItemGrid', "ChangeControlSopItemSearchForm");
+        }
+
+        // 수정
+        function ChangeControlSopItemEdit() {
+
+            var editing = {
+                allowAdding: true,
+                allowUpdating: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            $("#ChangeControlSopItemSubGrid").dxDataGrid("option", "editing", editing);
+
+            ChangeControlSopItemEditCheck(true, "U");
+        }
+
+        // 삭제
+        function ChangeControlSopItemDelete() {
+
+            if (!(confirm("선택된 순번의 평가항목을 삭제하시겠습니까?"))) {
+                return;
+            }
+
+            var gridId = "ChangeControlSopItemSubGrid";
+
+            var grid = $("#" + gridId).dxDataGrid("instance");
+            var data = getGridRowByKey(gridId, grid.option("focusedRowKey"));
+
+            var jsonData = {
+                gubun: "D",
+                changecontrol_sop_item_cd: data.changecontrol_sop_item_cd,
+                changecontrol_sop_item_id: data.changecontrol_sop_item_id
+            }
+
+            _changeControlSopItemChanges.push(jsonData);
+
+            $.ajax({
+                type: 'POST',
+                url: '/Change/ChangeControlSopItemTRX',
+                async: false,
+                data: {
+                    paramData: JSON.stringify(_changeControlSopItemChanges)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    _changeControlSopItemChanges = new Array();
+                }
+            });
+
+            ChangeControlSopItemSearch();
+            ChangeControlSopItemEditCheck(false, "");
+        }
+
+        // 저장
+        async function ChangeControlSopItemSave() {
+
+            await $("#ChangeControlSopItemSubGrid").dxDataGrid("instance").saveEditData();
+
+            if (!_changeControlSopItemIsValid) {
+                return;
+            }
+
+            if (_changeControlSopItemChanges.length > 0) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Change/ChangeControlSopItemTRX',
+                    async: false,
+                    data: {
+                        paramData: JSON.stringify(_changeControlSopItemChanges)
+                    },
+                    dataType: 'json',
+                    success: function (result) {
+
+                        _changeControlSopItemChanges = new Array();
+                    }
+                });
+            }
+
+            ChangeControlSopItemEditCheck(false, "");
+
+        }
+
+        // 취소
+        function ChangeControlSopItemUndo() {
+
+            ChangeControlSopItemSearch();
+            ChangeControlSopItemEditCheck(false, "");
+        }
+
+        // ChangeControlSopItemDoc CRUD ----------------
+        function ChangeControlSopItemDetailInsert(info) {
+
+            var data = info.data;
+            data.changecontrol_sop_item_cd = _changecontrolSopItemCd;
+            data.gubun = "I";
+
+            _changeControlSopItemChanges.push(data);
+        }
+
+        function ChangeControlSopItemDetailUpdate(info) {
+
+            var data = info.data;
+            data.gubun = "U";
+
+            //console.log(data);
+
+            _changeControlSopItemChanges.push(data);
+        }
+
+        function ChangeControlSopItemDetailDelete(info) {
+
+            var data = info.data;
+            data.gubun = "D";
+
+            _changeControlSopItemChanges.push(data);
+        }
+        // --------------------------------------------
+
+        // 그리드 컬럼 벨리데이션 체크
+        function ChangeControlSopItemRequired(e) {
+            _changeControlSopItemIsValid = e.isValid;
+        }
+
+    //function testFunc() {
+
+    //    var grid = $("#ChangeControlSopItemSubGrid").dxDataGrid("instance");
+
+    //    var rowIndex = grid.getRowIndexByKey(grid.option("focusedRowKey"));
+
+    //    var row = grid.getRowElement(rowIndex);
+
+    //    var cellValue = grid.cellValue(rowIndex, 'changecontrol_sop_item_seq');
+
+    //    grid.cellValue(rowIndex, 'changecontrol_sop_item_seq', "");
+    //    grid.cellValue(rowIndex, 'changecontrol_sop_item_seq', cellValue);
+    //}
+
+    </script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="ChangeControlSopItemSearchForm">
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">평가항목</span>
+                        </div>
+                        <select class="form-control" name="changecontrol_sop_item_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CH002")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Edit;Delete;Save;Undo"); }
+        </div>
+    </div>
+
+    @*<button onclick="testFunc()">TEST</button>*@
+
+    <div class="row">
+
+
+        <div class="col-3 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlSopItemGrid")
+                    .KeyExpr("changecontrol_sop_item_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("changecontrol_sop_item_nm").Caption("평가항목").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("ChangeControlSopItemFocusChanged")
+                    )
+            </div>
+        </div>
+
+        <div class="col-9 pl-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlSopItemSubGrid")
+                    .KeyExpr("changecontrol_sop_item_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnRowInserted("ChangeControlSopItemDetailInsert")
+                    .OnRowUpdated("ChangeControlSopItemDetailUpdate")
+                    .OnRowRemoved("ChangeControlSopItemDetailDelete")
+                    .OnRowValidating("ChangeControlSopItemRequired")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("changecontrol_sop_item_seq").Caption("순번").Alignment(HorizontalAlignment.Center)
+                            .Width(50)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("순번은 필수 입력사항입니다.");
+                            })
+                            .Visible(false);
+
+                        c.Add().DataField("changecontrol_sop_item_contents").Caption("평가항목").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("평가항목은 필수 입력사항입니다.");
+                            });
+
+                    })
+                    )
+            </div>
+        </div>
+    </div>
+</div>

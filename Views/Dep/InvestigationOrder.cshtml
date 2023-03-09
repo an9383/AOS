@@ -1,0 +1,1816 @@
+﻿@*조사 지시*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var InvestigationOrderData = @Html.Raw(Json.Encode(ViewBag.InvestigationOrderData.Data));
+    var InvestigationOrderAuth = @Html.Raw(Json.Encode(ViewBag.InvestigationOrderAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+
+<script type="text/javascript" id="InvestigationOrderJs">
+    // SP 구문, gubun 변수
+    var toDay = new Date();
+    var _CRUDGubun = "";
+    var _signGubun = "";
+    var successCheck = false;
+    var deviation_level_temp = "";
+
+    $(document).ready(function () {
+        InvestigationOrder_contentResize();
+        InvestigationOrderCommonEditCheck(false);
+        $("#InvestigationOrderDownLeft #InvestigationOrderDetailForm :enabled").attr('disabled', true);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+        var eDate = new Date();
+        eDate.setMonth(eDate.getMonth() + 1);
+
+        $("#InvestigationOrderSearchForm #s_start_date").val(getFormatDate(sDate));
+        $("#InvestigationOrderSearchForm #s_end_date").val(getFormatDate(eDate));
+        $("#InvestigationOrderSearchForm #s_dep_status").val("1");
+
+        if (@Html.Raw(Json.Encode(ViewBag.InvestigationOrderData.Data)) != "") {
+            $("#InvestigationOrderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@InvestigationOrderData));
+            $("#InvestigationOrderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#InvestigationOrderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            InvestigationOrderSelect(JSON.parse(@InvestigationOrderData)[0]);
+        }
+
+        var popupColumns = {
+            "employee": [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ]
+        };
+
+        createPopup("InvestigationRequestEmpSearch", "의뢰자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("InvestigationChargeEmpSearch", "담당자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("InvestigationServeyOrderEmpSearch", "지시자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("InvestigationServeyChargeEmpSearch", "담당자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+
+
+        // CRUD체크
+        var InvestigationOrderAuth = JSON.parse(@InvestigationOrderAuth)[0];
+        if (InvestigationOrderAuth.form_query != "Y") {
+            $("#InvestigationOrderSearch").remove();
+        }
+        if (InvestigationOrderAuth.form_insert != "Y") {
+            $("#InvestigationOrderInput").remove();
+        }
+        if (InvestigationOrderAuth.form_edit != "Y") {
+            $("#InvestigationOrderEdit").remove();
+        }
+        if (InvestigationOrderAuth.form_delete != "Y") {
+            $("#InvestigationOrderDelete").remove();
+        }
+
+        $("#InvestigationOrderExcel").dxButton().parent().parent().addClass("display-none");
+
+        setDatePicker("#InvestigationOrder .datepicker");
+
+    })
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function InvestigationOrderCommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#InvestigationOrderSave").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderSearch").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderDelete").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderEdit").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderInput").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderPrint").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderPreview").dxButton().parent().parent().addClass("display-none");
+
+            $("#InvestigationOrderCapaForm #request_emp_cd").css("background", "#f6c4db");
+            $("#InvestigationOrderCapaForm #despatch_charge_emp").css("background", "#f6c4db");
+            $("#InvestigationOrderServeyForm #survey_order_emp").css("background", "#f6c4db");
+            $("#InvestigationOrderServeyForm #survey_charge_emp").css("background", "#f6c4db");
+
+            $("#InvestigationOrderGrid").dxDataGrid("option", "disabled", true);
+            $("#InvestigationOrderCapaGrid").dxDataGrid("option", "disabled", true);
+            $("#InvestigationOrderServeyGrid").dxDataGrid("option", "disabled", true);
+
+            $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm :disabled").attr('disabled', false);
+            $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm :disabled").attr('disabled', false);
+
+        }
+        if (!nowEdit) {
+            $("#InvestigationOrderSave").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderUndo").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderPreview").dxButton().parent().parent().addClass("display-none");
+            $("#InvestigationOrderSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderInput").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderPrint").dxButton().parent().parent().removeClass("display-none");
+            $("#InvestigationOrderPreview").dxButton().parent().parent().removeClass("display-none");
+
+            $("#InvestigationOrderCapaForm #request_emp_cd").css("background", "");
+            $("#InvestigationOrderCapaForm #despatch_charge_emp").css("background", "");
+            $("#InvestigationOrderServeyForm #survey_order_emp").css("background", "");
+            $("#InvestigationOrderServeyForm #survey_charge_emp").css("background", "");
+
+            $("#InvestigationOrderGrid").dxDataGrid("option", "disabled", false);
+            $("#InvestigationOrderCapaGrid").dxDataGrid("option", "disabled", false);
+            $("#InvestigationOrderServeyGrid").dxDataGrid("option", "disabled", false);
+
+            $("#InvestigationOrderDownLeftDiv_1 #InvestigationOrderDetailForm :enabled").attr('disabled', true);
+            $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm :enabled").attr('disabled', true);
+            $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm :enabled").attr('disabled', true);
+
+
+            _CRUDGubun = "";
+        }
+    }
+
+
+    // 조회버튼 기능
+    function InvestigationOrderSearch() {
+        gridReset("InvestigationOrderGrid");
+        gridReset("InvestigationOrderCapaGrid");
+        gridReset("InvestigationOrderServeyGrid");
+        gridReset("InvestigationOrderSignGrid");
+
+        $("#InvestigationOrderDownLeftDiv_1 #InvestigationOrderDetailForm")[0].reset();
+
+        $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_1 #request_date").val("");
+        $("#InvestigationOrderDownRightDiv_1 #despatch_limit").val("");
+
+        $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_2 #survey_order_date").val("");
+        $("#InvestigationOrderDownRightDiv_2 #survey_limit").val("");
+
+        InvestigationOrderChangeForm(false);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderSearch',
+            data: {
+                sDate: $("#InvestigationOrderSearchForm #s_start_date").val(),
+                eDate: $("#InvestigationOrderSearchForm #s_end_date").val(),
+                type: $("#InvestigationOrderSearchForm #s_deviation_type").val(),
+                level: $("#InvestigationOrderSearchForm #s_deviation_level").val(),
+                status: $("#InvestigationOrderSearchForm #s_deviation_status").val()
+            },
+            success: function (result) {
+                if (result <= 0) {
+                    InvestigationOrderCommonEditCheck(false);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#InvestigationOrderGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#InvestigationOrderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#InvestigationOrderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                InvestigationOrderSelect(json[0]);
+            }
+        });
+    }
+
+
+    // 입력버튼 기능
+    function InvestigationOrderInput() {
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("입력할 항목이 없습니다");
+
+            return;
+        }
+
+        var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+        InvestigationOrderCommonEditCheck(true);
+        _CRUDGubun = "I";
+
+        if (tap_no == "1") {
+            InvestigationOrderCapaInput();
+        }
+        else if (tap_no == "2") {
+            InvestigationOrderServeyInput();
+        }
+
+    }
+
+
+    // 수정버튼 기능
+    function InvestigationOrderEdit() {
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 항목이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+            var status = data.deviation_status;
+            deviation_level_temp = data.deviation_level;
+            _CRUDGubun = "U";
+
+
+            var signGrid = $("#InvestigationOrderSignGrid").dxDataGrid("instance");
+            if (status != "2") {
+                alert("진행상태가 일탈확인일때만 수정 가능합니다");
+
+                InvestigationOrderCommonEditCheck(false);
+                return;
+            } else if (signGrid.totalCount() > 0) {
+                if (signGrid.getDataSource().items()[0].sign_yn == "1" && status == "4") {
+
+                    _signGubun = "Check";
+
+                    var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#InvestigationOrderSignPopupTemplate"));
+                    popup.show();
+
+                } else {
+                    InvestigationOrderCommonEditCheck(true);
+
+                    var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+                    if (tap_no == "1") {
+                        InvestigationOrderCapaEdit();
+                    }
+                    else if (tap_no == "2") {
+                        InvestigationOrderServeyEdit();
+                    }
+                }
+            }
+
+        }
+    }
+
+
+    // 취소버튼 기능
+    function InvestigationOrderUndo() {
+        InvestigationOrderCommonEditCheck(false);
+        InvestigationOrderChangeForm(false);
+
+        var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == "1") {
+            InvestigationOrderCapaSelect({ rowIndex: "0" });
+        }
+        else if (tap_no == "2") {
+            InvestigationOrderServeySelect({ rowIndex: "0" });
+        }
+    }
+
+
+    // 저장버튼 기능
+    function InvestigationOrderSave() {
+        var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == "1") {
+            //InvestigationOrderCapaSave();
+            updateLevel();
+        }
+        else if (tap_no == "2") {
+            //InvestigationOrderServeySave();
+            updateLevel();
+        }
+    }
+
+
+    // 삭제버튼 기능
+    function InvestigationOrderDelete() {
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("삭제할 대상이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+            var status = data.deviation_status;
+
+            _CRUDGubun = "D";
+
+
+            var signGrid = $("#InvestigationOrderSignGrid").dxDataGrid("instance");
+            if (signGrid.totalCount() > 0) {
+                if (signGrid.getDataSource().items()[0].sign_yn == "1" && status == "4") {
+
+                    _signGubun = "Check";
+
+                    var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#InvestigationOrderSignPopupTemplate"));
+                    popup.show();
+
+                } else if (status != "2") {
+                    alert("진행상태가 일탈확인일때만 삭제 가능합니다");
+
+                    InvestigationOrderCommonEditCheck(false);
+                    return;
+                } else {
+
+                    if (confirm("삭제하시겠습니까?")) {
+
+                        var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+                        if (tap_no == "1") {
+                            InvestigationOrderCapaDelete();
+                        }
+                        else if (tap_no == "2") {
+                            InvestigationOrderServeyDelete();
+                        }
+
+                    }
+                }
+            }
+
+        }
+
+    }
+
+
+    // 프린트버튼 기능
+    function InvestigationOrderPrint() {
+
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+
+            var report = new ReportHelper($(event.target));
+            //var report = new ReportHelper();
+
+            report.addParam({
+                objFile: { path: "deviation", RptFileName: "DeviationInverstigation" },
+                objSp: {
+                    SpName: "SP_InvestigationOrder", gubun: "RPT",
+                    reportParam: "deviation_no:" + data.deviation_no
+                        + ";table_id:deviation_master"
+                },
+                // objEtcInfo 속성정의
+                //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+                //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+                objEtcInfo: { subParam: "", viewerName: "" },
+                objTblNm: { tblName: "DeviationInverstigationDB,DeviationInverstigationDeptDB" },
+                objSub: { subRptName: "DeviationInverstigationDept" }
+            });
+
+            report.run();
+        }
+    }
+
+
+    // 엑셀버튼 기능
+    function InvestigationOrderExcel() {
+
+    }
+
+
+    // 미리보기버튼 기능
+    function InvestigationOrderPreview() {
+
+    }
+
+
+    function InvestigationOrderChangeForm(check) {
+
+        if (check) {
+
+
+            if (_CRUDGubun == "U") {
+                $("#InvestigationOrderDownLeftDiv_1 #InvestigationOrderDetailForm :disabled").attr('disabled', false);
+                $("#InvestigationOrderDetailForm #deviation_level").attr("disabled", false);
+                $("#InvestigationOrderDetailForm #deviation_level").attr("readonly", false);
+            }
+
+        } else {
+
+
+            $("#InvestigationOrderDownLeftDiv_1 #InvestigationOrderDetailForm :enabled").attr('disabled', true);
+            $("#InvestigationOrderDetailForm #deviation_level").attr("disabled", true);
+            $("#InvestigationOrderDetailForm #deviation_level").attr("readonly", true);
+
+        }
+    }
+
+    // #endregion
+
+
+    // #region 그리드 선택 시
+    // 메인 그리드 선택 시
+    async function InvestigationOrderSelect() {
+        $("#InvestigationOrderDownLeft #InvestigationOrderDetailForm")[0].reset();
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#InvestigationOrderDetailForm #deviation_contents2").val(data.deviation_contents2);
+        $("#InvestigationOrderDetailForm #deviation_cause").val(data.deviation_cause);
+        $("#InvestigationOrderDetailForm #deviation_ref_no").val(data.deviation_ref_no);
+        $("#InvestigationOrderDetailForm #deviation_ref_item_cd").val(data.deviation_ref_item_cd);
+        $("#InvestigationOrderDetailForm #deviation_ref_test_item").val(data.deviation_ref_test_item);
+        $("#InvestigationOrderDetailForm #deviation_ref_equip_cd").val(data.deviation_ref_equip_cd);
+        $("#InvestigationOrderDetailForm #deviation_ref_doc").val(data.deviation_ref_doc);
+        $("#InvestigationOrderDetailForm #deviation_level").val(data.deviation_level);
+        $("#InvestigationOrderDetailForm #deviation_no").val(data.deviation_no);
+
+        await InvestigationOrderDisplayESInfo(data.deviation_no);
+
+        await InvestigationOrderCapaSearch(data.deviation_no);
+
+        await InvestigationOrderServeySearch(data.deviation_no);
+
+    }
+
+
+    // 보고서 그리드 선택 시
+    function InvestigationOrderCapaSelect() {
+        $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_1 #request_date").val("");
+        $("#InvestigationOrderDownRightDiv_1 #despatch_limit").val("");
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#InvestigationOrderCapaGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("InvestigationOrderCapaGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#InvestigationOrderCapaForm #request_emp_cd").val(data.request_emp_cd);
+        $("#InvestigationOrderCapaForm #request_emp_nm").val(data.request_emp_nm);
+        $("#InvestigationOrderCapaForm #request_date").val(data.request_date);
+        $("#InvestigationOrderCapaForm #request_level").val(data.request_level);
+        $("#InvestigationOrderCapaForm #despatch_charge_emp").val(data.despatch_charge_emp);
+        $("#InvestigationOrderCapaForm #despatch_charge_emp_nm").val(data.despatch_charge_emp_nm);
+        $("#InvestigationOrderCapaForm #despatch_limit").val(data.despatch_limit);
+        $("#InvestigationOrderCapaForm #request_contents").val(data.request_contents);
+        $("#InvestigationOrderCapaForm #deviation_capa_id").val(data.deviation_capa_id);
+
+    }
+
+
+    // 조치계획서 그리드 선택 시
+    function InvestigationOrderServeySelect() {
+        $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_2 #survey_order_date").val("");
+        $("#InvestigationOrderDownRightDiv_2 #survey_limit").val("");
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+
+            var grid = $("#InvestigationOrderServeyGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("InvestigationOrderServeyGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#InvestigationOrderServeyForm #survey_order_emp").val(data.survey_order_emp);
+        $("#InvestigationOrderServeyForm #survey_order_emp_nm").val(data.survey_order_emp_nm);
+        $("#InvestigationOrderServeyForm #survey_order_date").val(data.survey_order_date);
+        $("#InvestigationOrderServeyForm #survey_charge_emp").val(data.survey_charge_emp);
+        $("#InvestigationOrderServeyForm #survey_charge_emp_nm").val(data.survey_charge_emp_nm);
+        $("#InvestigationOrderServeyForm #survey_limit").val(data.survey_limit);
+        $("#InvestigationOrderServeyForm #survey_contents").val(data.survey_contents);
+        $("#InvestigationOrderServeyForm #deviation_survey_id").val(data.deviation_survey_id);
+
+    }
+
+    // #endregion 그리드 선택 시 END
+
+
+    // #region 발생보고서 관련
+    // 보고서 조회
+    function InvestigationOrderCapaSearch() {
+        gridReset("InvestigationOrderCapaGrid");
+
+        $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_1 #request_date").val("");
+        $("#InvestigationOrderDownRightDiv_1 #despatch_limit").val("");
+
+        var data;
+        if (arguments.length > 0) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey")).deviation_no;
+
+            }
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderCapaSearch',
+            data: {
+                deviation_no: data
+            },
+            success: function (result) {
+
+                if (result <= 0) {
+                    InvestigationOrderCommonEditCheck(false);
+
+                    return;
+                } else {
+                    var json = JSON.parse(result);
+
+                    $("#InvestigationOrderCapaGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#InvestigationOrderCapaGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#InvestigationOrderCapaGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    InvestigationOrderCapaSelect(json[0]);
+
+                    _CRUDGubun = "";
+                    InvestigationOrderCommonEditCheck(false);
+                }
+            }
+        })
+    }
+
+
+    // 발생보고서 입력
+    function InvestigationOrderCapaInput()  {
+
+        $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm")[0].reset();
+
+        $("#InvestigationOrderCapaForm #request_emp_cd").val(sessionStorage.getItem("loginCD"));
+        $("#InvestigationOrderCapaForm #request_emp_nm").val(sessionStorage.getItem("loginNM"));
+
+        $("#InvestigationOrderDownRightDiv_1 #request_date").val("@DateTime.Today.ToShortDateString()");
+        $("#InvestigationOrderDownRightDiv_1 #despatch_limit").val("");
+
+        InvestigationOrderChangeForm(true);
+    }
+
+
+    // 발생보고서 수정
+    function InvestigationOrderCapaEdit() {
+
+        var grid = $("#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 대상이 없습니다");
+            InvestigationOrderCommonEditCheck(false);
+
+            return;
+        }
+
+        InvestigationOrderCommonEditCheck(true);
+        InvestigationOrderChangeForm(true);
+    }
+
+
+    // 발생보고서 저장
+    function InvestigationOrderCapaSave() {
+
+        var input_arr = $("#InvestigationOrderCapaForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+
+        var data = new FormData($('#InvestigationOrderDownRightDiv_1 #InvestigationOrderCapaForm')[0]);
+        data.set("CRUDGubun", _CRUDGubun);
+        data.set("deviation_no", gridData.deviation_no);
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderCapaSave',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                } else {
+                    alert("실패하였습니다.");
+
+                }
+                InvestigationOrderCapaSearch();
+            }
+        })
+
+    }
+
+
+    // 발생보고서 삭제
+    function InvestigationOrderCapaDelete() {
+        var grid = $("#InvestigationOrderCapaGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("삭제할 대상이 없습니다");
+
+            return;
+        }else {
+            $.ajax({
+                type: 'POST',
+                url: '/Dep/InvestigationOrderCapaDelete',
+                data:
+                {
+                    deviation_no: $("#InvestigationOrderDetailForm #deviation_no").val(),
+                    deviation_capa_id: $("#InvestigationOrderCapaForm #deviation_capa_id").val()
+                },
+                success: function (result) {
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        InvestigationOrderCapaSearch();
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            })
+        }
+    }
+
+    // #endregion 계획 관련 END
+
+
+    // #region 조치 계획서 관련
+    function InvestigationOrderServeySearch() {
+        gridReset("InvestigationOrderServeyGrid");
+
+        $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm")[0].reset();
+        $("#InvestigationOrderDownRightDiv_2 #survey_order_date").val("");
+        $("#InvestigationOrderDownRightDiv_2 #survey_limit").val("");
+
+        var data;
+        if (arguments.length > 0) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey")).deviation_no
+
+            } else {
+                return;
+            }
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderServeySearch',
+            data: {
+                deviation_no: data
+            },
+            success: function (result) {
+
+                if (result <= 0) {
+                    InvestigationOrderCommonEditCheck(false);
+
+                    return;
+                } else {
+                    var json = JSON.parse(result);
+
+                    $("#InvestigationOrderServeyGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#InvestigationOrderServeyGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#InvestigationOrderServeyGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    InvestigationOrderServeySelect(json[0]);
+
+                    _CRUDGubun = "";
+                    InvestigationOrderCommonEditCheck(false);
+                }
+            }
+        })
+
+    }
+
+    // 조치 계획서 입력
+    function InvestigationOrderServeyInput() {
+
+        $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm")[0].reset();
+
+        $("#InvestigationOrderServeyForm #survey_order_emp").val(sessionStorage.getItem("loginCD"));
+        $("#InvestigationOrderServeyForm #survey_order_emp_nm").val(sessionStorage.getItem("loginNM"));
+
+        $("#InvestigationOrderDownRightDiv_2 #survey_order_date").val("@DateTime.Today.ToShortDateString()");
+        $("#InvestigationOrderDownRightDiv_2 #survey_limit").val("");
+
+        InvestigationOrderChangeForm(true);
+    }
+
+
+    // 조치 계획서 수정
+    function InvestigationOrderServeyEdit() {
+        var grid = $("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 대상이 없습니다");
+            InvestigationOrderCommonEditCheck(false);
+
+            return;
+        }
+
+        InvestigationOrderCommonEditCheck(true);
+        InvestigationOrderChangeForm(true);
+    }
+
+
+
+    // 조치 계획서 저장
+    function InvestigationOrderServeySave() {
+        var input_arr = $("#InvestigationOrderServeyForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+
+        var data = new FormData($("#InvestigationOrderDownRightDiv_2 #InvestigationOrderServeyForm")[0]);
+        data.set("deviation_no", gridData.deviation_no);
+        data.set("CRUDGubun", _CRUDGubun);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderServeySave',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                } else {
+                    alert("실패하였습니다.");
+
+                }
+
+                InvestigationOrderChangeForm(false);
+                InvestigationOrderSearch();
+            }
+        })
+
+        }
+
+
+    // 조치 계획서 삭제
+    function InvestigationOrderServeyDelete() {
+        var grid = $("#InvestigationOrderServeyGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("삭제할 대상이 없습니다");
+
+            return;
+        } else {
+            $.ajax({
+                type: 'POST',
+                url: '/Dep/InvestigationOrderServeyDelete',
+                data:
+                {
+                    deviation_no: $("#InvestigationOrderDetailForm #deviation_no").val(),
+                    deviation_survey_id: $("#InvestigationOrderServeyForm #deviation_survey_id").val()
+                },
+                success: function (result) {
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        InvestigationOrderServeySearch();
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            })
+        }
+
+    }
+
+    // #endregion 계획서 관련 END
+
+
+    // #region 서명 관련
+    // 서명 정보 조회
+    function InvestigationOrderDisplayESInfo() {
+        gridReset("InvestigationOrderSignGrid");
+
+        var data;
+        if (arguments.length > 0) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() != 0) {
+
+                data = getGridRowByKey('InvestigationOrderGrid', grid.option("focusedRowKey")).deviation_no;
+
+            } else {
+                return;
+            }
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/InvestigationOrderDisplayESInfo',
+            data: {
+                deviation_no: data,
+                sign_set_cd: "5001"
+            },
+            success: function (result) {
+
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                $("#InvestigationOrderSignGrid").dxDataGrid("option", "dataSource", json);
+            }
+        });
+    }
+
+
+    // 서명 체크
+    function InvestigationOrderSignCheck(e) {
+
+        _signGubun = "ES";
+        var grid = $("#InvestigationOrderGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("서명할 대상이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("InvestigationOrderGrid", grid.option("focusedRowKey"));
+
+            if (e.data.sign_yn == "1" && data.deviation_status == "4") {
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                    _signGubun = "DEL_ES";
+                } else {
+                    return;
+                }
+            } else if (data.deviation_status != "2") {
+                alert("진행상태가 일탈확인일때만 작업이 가능합니다");
+
+                return;
+
+            }
+
+            if (_CRUDGubun == "I" || _CRUDGubun == "U") {
+                alert("입력 / 수정 상태에선 서명할 수 없습니다.")
+
+                return;
+            }
+
+
+            var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#InvestigationOrderSignPopupTemplate"));
+            popup.show();
+        }
+
+    }
+
+
+    // 서명 권한 체크(id, pw)
+    async function InvestigationOrderSignSubmit() {
+        var data = new FormData($('#InvestigationOrderSignForm')[0]);
+
+        data.set("gubun", "S");
+
+        if (!await InvestigationOrderValidationCheck(data)) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            InvestigationOrderCommonEditCheck(false);
+
+            var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        if (!await InvestigationOrderAuthorityCheck($("input[name='emp_cd']").val())) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        await InvestigationOrderExecuteSign();
+
+    }
+
+
+    function InvestigationOrderValidationCheck(data) {
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    $("input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                    $("input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+                    $("input[name='emp_cd']").val(JSON.parse(result)[0].emp_cd);
+
+                    check = true;
+                }
+
+            }
+        });
+
+        return check;
+    }
+
+
+    function InvestigationOrderAuthorityCheck(emp_cd) {
+        var check = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Comm/AuthorityCheck',
+            data: {
+                emp_cd: emp_cd,
+                sign_set_cd: "5001",
+                sign_set_seq: "1"
+            },
+            async: false,
+            success: function (result) {
+
+                if (result) {
+
+                    check = true;
+                }
+            }
+        });
+
+        return check;
+    }
+
+
+    function InvestigationOrderExecuteSign() {
+        if (_signGubun != "Check") {
+
+            setTimeout(function () {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Dep/InvestigationOrderSign_CRUD',
+                    data: {
+                        gubun: _signGubun,
+                        deviation_no: $("#InvestigationOrderDownLeftDiv_1 #deviation_no").val(),
+                        emp_cd: $("input[name='emp_cd']").val()
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.messege != "") {
+                            alert(json.messege);
+
+                            InvestigationOrderSearch();
+
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+
+                    }
+                });
+
+                _signGubun = "";
+
+                var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+        } else {
+            setTimeout(function () {
+
+                _signGubun = "";
+                var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+                if (_CRUDGubun == "U") {
+                    if (tap_no == "1") {
+                        InvestigationOrderCapaEdit();
+                    }
+                    else if (tap_no == "2") {
+                        InvestigationOrderServeyEdit();
+                    }
+                }
+                else if (_CRUDGubun == "D") {
+                    if (tap_no == "1") {
+                        InvestigationOrderCapaDelete();
+                    }
+                    else if (tap_no == "2") {
+                        InvestigationOrderServeyDelete();
+                    }
+                }
+
+                var popup = $("#InvestigationOrderSignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+        }
+
+    }
+
+
+    function InvestigationOrderClearSignInput() {
+        $('#InvestigationOrderSignForm')[0].reset();
+        $("input[name='dept_nm']").val("");
+        $("input[name='emp_nm']").val("");
+    }
+
+    // #endregion 서명 관련 END
+
+
+    // 일탈등록 정보 심각도 업데이트
+    function updateLevel() {
+        var tap_no = $("#InvestigationOrderDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        if (_CRUDGubun == "U" && $("#InvestigationOrderDownLeftDiv_1 #deviation_level").val() != deviation_level_temp) {
+            var deviation_level = $("#InvestigationOrderDownLeftDiv_1 #deviation_level").val();
+
+            if (deviation_level == null) {
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+
+            $.when(
+                $.ajax({
+                    type: 'POST',
+                    url: '/Dep/updateLevel',
+                    data:
+                    {
+                        deviation_no: $("#InvestigationOrderDownLeftDiv_1 #deviation_no").val(),
+                        deviation_level: deviation_level
+                    },
+                    success: function (result) {
+                        var json = JSON.parse(result)
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.message != "") {
+                            successCheck = true;
+
+                        } else {
+                            successCheck = false;
+                        }
+                    }
+                })
+            ).done(function () {
+
+                if (successCheck) {
+                    successCheck = false;
+                    if (tap_no == "1") {
+                        InvestigationOrderCapaSave();
+                    }
+                    else if (tap_no == "2") {
+                        InvestigationOrderServeySave();
+                    }
+                }
+            })
+        } else {
+            if (tap_no == "1") {
+                InvestigationOrderCapaSave();
+            }
+            else if (tap_no == "2") {
+                InvestigationOrderServeySave();
+            }
+        }
+    }
+
+
+    // #region 팝업 관련
+    //입력용 의뢰자 팝업 띄우기
+    function InvestigationRequestEmpSearch() {
+        $("#InvestigationOrder #InvestigationRequestEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    //입력용 의뢰자 팝업 로우 더블클릭
+    function InvestigationRequestEmpSearchRowDblClick(selectedItems) {
+        $("#InvestigationOrderCapaForm #request_emp_cd").val(selectedItems.data.emp_cd);
+        $("#InvestigationOrderCapaForm #request_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#InvestigationOrder #InvestigationRequestEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 처리담당자 팝업 띄우기
+    function InvestigationChargeEmpSearch() {
+        $("#InvestigationOrder #InvestigationChargeEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 처리담당자 팝업 로우 더블클릭
+    function InvestigationChargeEmpSearchRowDblClick(selectedItems) {
+        $("#InvestigationOrderCapaForm #despatch_charge_emp").val(selectedItems.data.emp_cd);
+        $("#InvestigationOrderCapaForm #despatch_charge_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#InvestigationOrder #InvestigationChargeEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 지시자 팝업 띄우기
+    function InvestigationServeyOrderEmpSearch() {
+        $("#InvestigationOrder #InvestigationServeyOrderEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 지시자 팝업 로우 더블클릭
+    function InvestigationServeyOrderEmpSearchRowDblClick(selectedItems) {
+        $("#InvestigationOrderServeyForm #survey_order_emp").val(selectedItems.data.emp_cd);
+        $("#InvestigationOrderServeyForm #survey_order_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#InvestigationOrder #InvestigationServeyOrderEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 조치담당자 팝업 띄우기
+    function InvestigationServeyChargeEmpSearch() {
+        $("#InvestigationOrder #InvestigationServeyChargeEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 조치담당자 팝업 로우 더블클릭
+    function InvestigationServeyChargeEmpSearchRowDblClick(selectedItems) {
+        $("#InvestigationOrderServeyForm #survey_charge_emp").val(selectedItems.data.emp_cd);
+        $("#InvestigationOrderServeyForm #survey_charge_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#InvestigationOrder #InvestigationServeyChargeEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    // #endregion
+
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.17
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+
+    function InvestigationOrder_contentResize() {
+        var topPoint = document.getElementById("InvestigationOrder_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint + 1) - 386
+
+        document.getElementById("InvestigationOrderGrid").style.height = content_max_height + "px";
+
+    }
+
+</script>
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+    #InvestigationOrder div[id$="radio_div"] {
+        border: 1px solid #ced4da;
+        background-color: #e9ecef;
+        border-radius: 0.15rem;
+        opacity: 1;
+        height: 23px;
+        padding-top: 2px;
+    }
+
+        #InvestigationOrder div[id$="radio_div"] div {
+            padding-top: 2px;
+        }
+</style>
+
+<div id="InvestigationOrder">
+
+    <div id="InvestigationRequestEmpSearchPopup"></div>
+    <div id="InvestigationChargeEmpSearchPopup"></div>
+    <div id="InvestigationServeyOrderEmpSearchPopup"></div>
+    <div id="InvestigationServeyChargeEmpSearchPopup"></div>
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("InvestigationOrderSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("InvestigationOrderClearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("InvestigationOrderSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="InvestigationOrderSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-outline-secondary" onclick="InvestigationOrderSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <label class="col-3">부서</label>
+        <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+        <label class="col-3">성명</label>
+        <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        <input type="hidden" name="emp_cd" />
+    }
+
+
+    <div id="InvestigationOrder_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="InvestigationOrderSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시행일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.AddMonths(1).ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">일탈타입</span>
+                        </div>
+                        <select class="form-control col-10" name="s_deviation_type" id="s_deviation_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.deviation_type_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">심각도</span>
+                        </div>
+                        <select class="form-control col-10" name="s_deviation_level" id="s_deviation_level">
+                            @foreach (DataRow row in ((DataTable)ViewBag.deviation_level_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control col-10" name="s_deviation_status" id="s_deviation_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.deviation_status_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+           
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="InvestigationOrderUp" class="col-12 pb-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("InvestigationOrderGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(485)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .KeyExpr("row_num")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("deviation_no").Caption("일탈번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_confirm_date").Caption("시행일자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("detect_date").Caption("발견일자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_place").Caption("발견장소").Width("10%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("detect_emp_cd").Caption("발견자").Width("10%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_contents").Caption("일탈내용").Width("30%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_doc").Caption("일탈문서").Width("30%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_type_nm").Caption("일탈타입").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_level_nm").Caption("심각도수준").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_status_nm").Caption("진행상태").Alignment(HorizontalAlignment.Center);
+
+
+                        c.Add().DataField("deviation_type").Visible(false);
+                        c.Add().DataField("deviation_level").Visible(false);
+                        c.Add().DataField("deviation_status").Visible(false);
+                        c.Add().DataField("deviation_cause").Visible(false);
+                        c.Add().DataField("deviation_ref_no").Visible(false);
+                        c.Add().DataField("deviation_ref_item_cd").Visible(false);
+                        c.Add().DataField("deviation_ref_test_item").Visible(false);
+                        c.Add().DataField("deviation_ref_equip_cd").Visible(false);
+                        c.Add().DataField("deviation_ref_doc").Visible(false);
+                        c.Add().DataField("deviation_contents2").Visible(false);
+                    })
+                    .OnFocusedRowChanged("InvestigationOrderSelect")
+                )
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!-- 왼쪽 아래 div -->
+        <div id="InvestigationOrderDownLeft" class="col-4 pr-0">
+            <div class="box mb-0">
+                <ul class="nav nav-tabs" id="InvestigationOrderDownLeftDiv">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('InvestigationOrderDownLeftDiv', 'InvestigationOrderDownLeftDiv', 1);">일탈등록 정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('InvestigationOrderDownLeftDiv', 'InvestigationOrderDownLeftDiv', 2);">전자서명</a>
+                    </li>
+                </ul>
+
+                <div id="InvestigationOrderDownLeftDiv">
+                    <div id="InvestigationOrderDownLeftDiv_1" class="m-1">
+                        <form id="InvestigationOrderDetailForm">
+                            <input type="hidden" name="deviation_no" id="deviation_no" />
+
+                            <div class="input-wrapper">
+                                <label class="col-3">일탈 내용</label>
+                                <div class="input-group col-8">
+                                    <textarea class="form-control" name="deviation_contents2" id="deviation_contents2" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">발생 원인</label>
+                                <div class="input-group col-8">
+                                    <textarea class="form-control" name="deviation_cause" id="deviation_cause" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련 번호</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="deviation_ref_no" id="deviation_ref_no" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련 제품</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="deviation_ref_item_cd" id="deviation_ref_item_cd" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련 항목</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="deviation_ref_test_item" id="deviation_ref_test_item" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련 장치</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="deviation_ref_equip_cd" id="deviation_ref_equip_cd" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련 문서</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="deviation_ref_doc" id="deviation_ref_doc" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">심각도</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control" name="deviation_level" id="deviation_level">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.deviation_level_n).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                        </form>
+
+                    </div>
+
+
+                    <div class="display-none" id="InvestigationOrderDownLeftDiv_2">
+
+                        <div id="InvestigationOrderSignDiv">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                .ID("InvestigationOrderSignGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .HoverStateEnabled(true)
+                                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .FocusedRowEnabled(true)
+                                .Height(137)
+                                .OnCellClick("InvestigationOrderSignCheck")
+                                .KeyExpr("sign_set_dt_id")
+                                .Columns(columns =>
+                                {
+                                    columns.Add().DataField("displayfield").Caption("구분");
+                                    columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                                    columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                                    columns.Add().DataField("sign_image").Caption("서명")
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 오른쪽 아래 div -->
+        <div id="InvestigationOrderDownRight" class="col-8">
+
+            <div class="box mb-0">
+                <ul class="nav nav-tabs" id="InvestigationOrderDownRightDiv">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('InvestigationOrderDownRightDiv', 'InvestigationOrderDownRightDiv', 1); InvestigationOrderUndo(false); InvestigationOrderCapaSearch();">발생보고서</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('InvestigationOrderDownRightDiv', 'InvestigationOrderDownRightDiv', 2); InvestigationOrderUndo(false); InvestigationOrderServeySearch();">조사계획</a>
+                    </li>
+                </ul>
+
+                <div id="InvestigationOrderDownRightDiv">
+                    <div id="InvestigationOrderDownRightDiv_1">
+                        <div>
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("InvestigationOrderCapaGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(190)
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .KeyExpr("deviation_capa_id")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("request_date").Caption("의뢰일자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("request_contents").Caption("필요작업").Width("40%").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("request_level_nm").Caption("의뢰종류").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("despatch_limit").Caption("처리기한").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("despatch_charge_emp_nm").Caption("처리담당자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("deviation_capa_status_nm").Caption("처리상태").Alignment(HorizontalAlignment.Center);
+
+                                    c.Add().DataField("deviation_no").Visible(false);
+                                    c.Add().DataField("deviation_capa_id").Visible(false);
+                                    c.Add().DataField("request_level").Visible(false);
+                                    c.Add().DataField("despatch_charge_emp").Visible(false);
+                                    c.Add().DataField("deviation_capa_status").Visible(false);
+                                    c.Add().DataField("request_emp_cd").Visible(false);
+                                    c.Add().DataField("request_emp_nm").Visible(false);
+                                    c.Add().DataField("despatch_charge_emp").Visible(false);
+                                    c.Add().DataField("despatch_charge_emp_nm").Visible(false);
+                                })
+                                .OnFocusedRowChanged("InvestigationOrderCapaSelect")
+                            )
+                        </div>
+
+                        <div class="col-10 m-1">
+                            <form id="InvestigationOrderCapaForm">
+                                <input type="hidden" id="deviation_capa_id" name="deviation_capa_id" />
+
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">의뢰자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="request_emp_cd" id="request_emp_cd" readonly required > 
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="requet_emp_search_btn" onclick="InvestigationRequestEmpSearch()"><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="request_emp_nm" id="request_emp_nm" readonly>
+                                    </div>
+
+                                    <label class="col-2">의뢰 일자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control datepicker required" name="request_date" id="request_date" value="@DateTime.Today.ToShortDateString()" disabled required/>
+                                    </div>
+                                </div>
+
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">처리 담당자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="despatch_charge_emp" id="despatch_charge_emp" readonly required>
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="despatch_charge_emp_search_btn" onclick="InvestigationChargeEmpSearch()"><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="despatch_charge_emp_nm" id="despatch_charge_emp_nm" readonly>
+                                    </div>
+
+                                    <label class="col-2">처리 기한<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control datepicker required" name="despatch_limit" id="despatch_limit" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">의뢰 종류<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <select class="form-control required" name="request_level" id="request_level" required>
+                                            @foreach (DataRow row in ((DataTable)ViewBag.request_level_d).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">필요 작업<star>*</star></label>
+                                    <div class="input-group col-9">
+                                        <textarea class="form-control required" name="request_contents" id="request_contents" cols="100" rows="5" style="height: 50px; resize: vertical;" required />
+                                    </div>
+                                </div>
+
+                            </form>
+                        </div>
+                    </div>
+
+
+                    <div class="display-none" id="InvestigationOrderDownRightDiv_2">
+                        <div>
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("InvestigationOrderServeyGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(190)
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .KeyExpr("deviation_survey_id")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("survey_order_date").Caption("계획일자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("survey_limit").Caption("조치기한").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("survey_charge_emp_nm").Caption("조치담당자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("survey_emp_time").Caption("조치일자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("survey_emp_nm").Caption("조치자").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("survey_result").Caption("조치결과").Width("30%").Alignment(HorizontalAlignment.Center);
+                                    c.Add().DataField("deviation_survey_status_nm").Caption("조치상태").Alignment(HorizontalAlignment.Center);
+
+                                    c.Add().DataField("deviation_no").Visible(false);
+                                    c.Add().DataField("deviation_survey_id").Visible(false);
+                                    c.Add().DataField("survey_charge_emp").Visible(false);
+                                    c.Add().DataField("survey_emp_cd").Visible(false);
+                                    c.Add().DataField("deviation_survey_status").Visible(false);
+                                    c.Add().DataField("survey_order_emp").Visible(false);
+                                    c.Add().DataField("survey_order_emp_nm").Visible(false);
+                                    c.Add().DataField("survey_contents").Visible(false);
+                                })
+                                .OnFocusedRowChanged("InvestigationOrderServeySelect")
+                            )
+                        </div>
+
+                        <div class="col-10 m-1">
+                            <form id="InvestigationOrderServeyForm">
+                                <input type="hidden" id="deviation_survey_id" name="deviation_survey_id" />
+
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">조사 지시자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="survey_order_emp" id="survey_order_emp" readonly required >
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="servey_order_emp_search_btn" onclick="InvestigationServeyOrderEmpSearch()"><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="survey_order_emp_nm" id="survey_order_emp_nm" readonly>
+                                    </div>
+
+                                    <label class="col-2">계획 일자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control datepicker required" name="survey_order_date" id="survey_order_date" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">조사 담당자<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="survey_charge_emp" id="survey_charge_emp" readonly required >
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="servey_charge_emp_search_btn" onclick="InvestigationServeyChargeEmpSearch()"><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control" name="survey_charge_emp_nm" id="survey_charge_emp_nm" readonly>
+                                    </div>
+
+                                    <label class="col-2">조사 기한<star>*</star></label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control datepicker required" name="survey_limit" id="survey_limit" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">조사 계획<star>*</star></label>
+                                    <div class="input-group col-9">
+                                        <textarea class="form-control required" name="survey_contents" id="survey_contents" cols="100" rows="5" style="height: 75px; resize: vertical;" required />
+                                    </div>
+                                </div>
+
+                            </form>
+                        </div>
+
+
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>

@@ -1,0 +1,464 @@
+﻿@*시험설비별 가동현황*@
+@using System.Data
+@using HACCP.Libs
+
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+
+@{
+    var workProgress_Mont_data = Html.Raw(Json.Encode(ViewBag.workProgress_Mont_data.Data));
+    var test1 = new List<object>();
+}
+
+<script type="text/javascript" id="WorkProgress_MontJs">
+
+    var time = 30;
+    var toDay = new Date();
+
+    // 새로고침 객체
+    var WorkProgress_Mont_intervalSet = {
+        WorkProgress_Mont_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(WorkProgress_Mont_intervalSet).length;
+                var _thisViewId = "WorkProgress_Mont";
+
+                var time = 5;
+                if ($("#WorkProgress_MontSearchForm #refresh_time").val() == 0) $("#WorkProgress_MontSearchForm #refresh_time").val(1);
+                time = $("#WorkProgress_MontSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "WorkProgress_Mont";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        WorkProgress_Mont_interval_0: function () {
+            WorkProgress_MontSearch();
+
+            WorkProgress_Mont_intervalSet.WorkProgress_Mont_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+
+    $(function () {
+        WorkProgress_Mont_Content_Resize();
+        WorkProgress_Mont_intervalSet.WorkProgress_Mont_intervalMaster.intervalExcute();
+
+        var today = new Date();
+        $("#WorkProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+
+        if ((@workProgress_Mont_data).length > 0) {
+            var dataArry = JSON.parse(@workProgress_Mont_data);
+            console.log(dataArry);
+            WorkProgress_Mont_Create(dataArry.Table, dataArry.Table1);
+        }
+
+
+    })
+
+
+    $("#WorkProgress_MontSearchForm #refresh_time").blur(function () {
+
+        //WorkProgress_MontResearch();
+        WorkProgress_Mont_intervalSet.WorkProgress_Mont_intervalMaster.intervalDelete(0, 1);
+        WorkProgress_Mont_intervalSet.WorkProgress_Mont_intervalMaster.intervalExcute();
+
+    });
+
+
+    $("#WorkProgress_MontSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#WorkProgress_MontSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    function WorkProgress_MontSearch() {
+        $("div#WorkProgress_Mont_Content tbody").empty();
+
+        $.ajax({
+            type: "POST",
+            url: "/ProductionManage/WorkProgress_MontSearch",
+            success: function (result) {
+
+                if (result <= 0) {
+                    WorkProgress_Mont_Content_Resize();
+                    $("#WorkProgress_Mont_Content div.col-12:eq(1)").removeClass("display-none");
+
+                    return;
+                }
+
+                $("#WorkProgress_Mont_Content div.col-12:eq(1)").addClass("display-none");
+                WorkProgress_Mont_Create(JSON.parse(result[0]), JSON.parse(result[1]));
+
+                var today = new Date();
+                $("#WorkProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+            }
+        })
+
+    }
+
+
+    async function WorkProgress_Mont_Create(subData, mainData) {
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(0) input[type='text']").val(subData[0].total_cnt);
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(1) input[type='text']").val(subData[0].yet_cnt);
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(2) input[type='text']").val(subData[0].end_cnt);
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(3) input[type='text']").val(subData[0].ing_cnt);
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(4) input[type='text']").val(subData[0].rest_cnt);
+        $("#WorkProgress_MontSearchForm div.input-group.input-group-sm:eq(5) input[type='text']").val(subData[0].unable_cnt);
+
+        if (mainData == null || mainData.length <= 0) {
+            $("#WorkProgress_Mont_Content div.col-10:eq(0)").removeClass("display-none");
+        } else {
+            $("#WorkProgress_Mont_Content div.col-10:eq(0)").addClass("display-none");
+        }
+
+        for (var i in mainData) {
+
+            await WorkProgress_Mont_Excute(mainData[i], i);
+        }
+    }
+
+
+    function WorkProgress_Mont_Excute(data, count) {
+
+        var end_cnt_p = data.end_cnt == data.total_cnt ? 100 : WorkProgress_Mont_Number_Change((data.end_cnt / data.total_cnt) * 100, 0);
+        var processing_time_p = data.processing_time == data.processing_total_time ? 100 : WorkProgress_Mont_Number_Change((data.processing_time / data.processing_total_time) * 100, 0);
+
+
+
+        var $mainRow = $("#WorkProgress_Mont_Content div.col-12:eq(0) table tbody");
+
+        var $tr1 = $("<tr id='" + count + "_1'>");
+        var $tr1_td1 = $("<td rowspan='2' class='text_over'>").text(data.process_nm);               // 공정
+        var $tr1_td2 = $("<td rowspan='2' class='text_over'>").text(data.workroom_nm);              // 작업실
+        var $tr1_td3 = $("<td rowspan='1' class='text_over'>");                                     // 계획(건)
+        var $tr1_td3_progressbar1 = $("<div class='progress' style='width: 100%; height: 100%;'>");
+        var $tr1_td3_progressbar2 = $("<div class='progress-bar bg-info2' role='progressbar' style='width: 100%;' aria-valunenow='100' aria-valuemin='0' aria-valuemax='100'>").text(data.total_cnt);
+
+
+        var $tr1_td4 = $("<td rowspan='2' class='text_over'>").text(data.end_cnt_rate);             // 달성율
+        var $tr1_td5 = $("<td rowspan='1' class='text_over'>");                                     // 계획(분)
+        var $tr1_td5_progressbar1 = $("<div class='progress' style='width: 100%; height: 100%;'>");
+        var $tr1_td5_progressbar2 = $("<div class='progress-bar bg-info2' role='progressbar' style='width: 100%;' aria-valunenow='100' aria-valuemin='0' aria-valuemax='100'>").text(data.processing_total_time);
+
+        var $tr1_td6 = $("<td rowspan='2' class='text_over'>").text(data.end_time_rate);            // 진행율
+        var $tr1_td7 = $("<td rowspan='2' class='text_over'>").text(data.delay_time);               // 지연시간
+        var $tr1_td8 = $("<td rowspan='1' class='text_over'>").text(data.total_emp_cnt);            // 전체인원(남/여)
+
+        var $tr1_td9 = $("<td rowspan='2' class='text_over'>");                                     // 진행상태
+        var $tr1_td9_circle_div = $("<div class='circleDiv'>");
+        var $tr1_td9_circle_div_circle = $("<img>");
+                                                  
+        var $tr2 = $("<tr id='" + count + "_2'>");
+        var $tr2_td1 = $("<td rowspan='1' class='text_over'>");                                     // 완료(건)
+        var $tr2_td1_progressbar1 = $("<div class='progress' style='width: 100%; height: 100%;'>");
+        var $tr2_td1_progressbar2 = $("<div class='progress-bar bg-info' role='progressbar' style='width: " + end_cnt_p + "%' aria-valunenow='100' aria-valuemin='0' aria-valuemax='100'>").text(data.end_cnt);
+
+        var $tr2_td2 = $("<td rowspan='1' class='text_over'>");                                     // 진행(분)
+        var $tr2_td2_progressbar1 = $("<div class='progress' style='width: 100%; height: 100%;'>");
+        var $tr2_td2_progressbar2 = $("<div class='progress-bar bg-info' role='progressbar' style='width: " + processing_time_p + "%' aria-valunenow='100' aria-valuemin='0' aria-valuemax='100'>").text(data.processing_time);
+
+        var $tr2_td3 = $("<td rowspan='1' class='text_over'>").text(data.emp_cnt);                  // 현재인원(남/여)
+
+        $tr1_td3_progressbar1.append($tr1_td3_progressbar2);
+        $tr1_td3.append($tr1_td3_progressbar1);
+
+        $tr1_td5_progressbar1.append($tr1_td5_progressbar2);
+        $tr1_td5.append($tr1_td5_progressbar1);
+
+        $tr2_td1_progressbar1.append($tr2_td1_progressbar2);
+        $tr2_td1.append($tr2_td1_progressbar1);
+
+        $tr2_td2_progressbar1.append($tr2_td2_progressbar2);
+        $tr2_td2.append($tr2_td2_progressbar1);
+
+        $tr1_td9_circle_div.append($tr1_td9_circle_div_circle);
+        $tr1_td9.append($tr1_td9_circle_div);
+
+
+        $tr2.append($tr2_td1);
+        $tr2.append($tr2_td2)
+        $tr2.append($tr2_td3)
+
+        $tr1.append($tr1_td1);
+        $tr1.append($tr1_td2)
+        $tr1.append($tr1_td3)
+        $tr1.append($tr1_td4)
+        $tr1.append($tr1_td5)
+        $tr1.append($tr1_td6)
+        $tr1.append($tr1_td7)
+        $tr1.append($tr1_td8)
+        $tr1.append($tr1_td9)
+
+        $mainRow.append($tr1);
+        $mainRow.append($tr2);
+
+        switch (data.ing_gubun) {
+            case "G":
+                $("tr#" + count + "_1 img").attr("src", "/Content/image/monitoring/GreenLight.png");
+                break;
+            case "Y":
+                //$("tr#" + count + "_1 div.circle").addClass("yellow");
+                $("tr#" + count + "_1 img").attr("src", "/Content/image/monitoring/YellowLight.png");
+                break;
+            case "R":
+                //$("tr#" + count + "_1 div.circle").addClass("red");
+                $("tr#" + count + "_1 img").attr("src", "/Content/image/monitoring/Red.png");
+                break;
+        }
+    }
+
+
+
+    function WorkProgress_Mont_getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+
+        var hour = date.getHours();
+        hour = hour >= 10 ? hour : '0' + hour;
+
+        var min = date.getMinutes();
+        min = min >= 10 ? min : '0' + min;
+
+        var sec = date.getSeconds();
+        sec = sec >= 10 ? sec : '0' + sec;
+
+        return year + '-' + month + '-' + day + " " + hour + ":" + min + ":" + sec;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+
+    function WorkProgress_Mont_Content_Resize() {
+        var topPoint1 = document.getElementById("WorkProgress_Mont_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1) - 20
+
+        document.querySelector("#WorkProgress_Mont_Content > div.col-12 div.box").style.height = content_max_height + "px";
+        $("#WorkProgress_Mont_Content div.col-12 div.box table").css("max-height", content_max_height);
+
+        var table_height = $("#WorkProgress_Mont_Content div.col-12 div.box table").css("height");
+        var noDataDivHeight = content_max_height - ((table_height.substr(0, table_height.length - 2)) * 1.5);
+        $("#WorkProgress_Mont_Content div.col-10:eq(0) div.NoDataDiv").css("height", noDataDivHeight);
+
+    }
+
+
+
+
+    function WorkProgress_Mont_Number_Change(number1, number2) {
+
+        if (number2 == 0) {
+            var result = Math.floor(number1);
+
+            return result;
+        } else {
+            var count = Math.pow(10, number2);
+            var num = Math.floor(number1 * count) / count;
+            var result = num.toFixed(number2)// 0을 채워주기 toFixed를 이용
+
+            return result;
+        }
+    }
+
+</script>
+
+<style>
+    #WorkProgress_Mont #WorkProgress_Mont_Content > div.col-12 div.box.mb-0 {
+        overflow: auto;
+    }
+
+    #WorkProgress_Mont table {
+        width: 100%;
+        height: 8%;
+        border: 1px solid #ddd;
+
+        font-size: 18px;
+        font-weight: 700;
+        text-align: center;
+
+        border-collapse: collapse
+    }
+
+    #WorkProgress_Mont table td {
+        border: 1px solid #ddd;
+    }
+
+    #WorkProgress_Mont table thead tr:nth-child(-n + 2) {
+        background-color: #f5f7f9;
+    }
+
+
+    #WorkProgress_Mont #WorkProgress_Mont_Content div.col-10:last-child {
+        position: absolute;
+        top:14em;
+        left: 11.5em;
+    }
+
+
+    #WorkProgress_Mont .NoDataDiv {
+        background-color: white;
+        color: #8a8a8a;
+        font-size: 14px;
+        font-family: Noto sans KR;
+        display: flex;
+        justify-content: center;
+        justify-items: center;
+    }
+
+    #WorkProgress_Mont .text_over {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #WorkProgress_Mont .circleDiv {
+        height: 1.2em;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        justify-items: center;
+    }
+
+    #WorkProgress_Mont .bg-info2 {
+        background: #03BDDB !important;
+    }
+
+</style>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <div id="WorkProgress_Mont_Top" class="mainTop row">
+        <div class="col-12">
+            <form id="WorkProgress_MontSearchForm" onsubmit="return false;">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">계획</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">대기</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">완료</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">휴지</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">중지</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+
+                    <div class="input-group input-group-sm col-1">
+                    </div>
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="30" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="WorkProgress_Mont_Content" class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                <table frame=void>
+                    <thead>
+                        <tr>
+                            <td rowspan="2" style="width: 10%;">공정</td>
+                            <td rowspan="2" style="width: 15%;">작업실</td>
+                            <td rowspan="1">계획(건)</td>
+                            <td rowspan="2" style="width: 8%;">달성율</td>
+                            <td rowspan="1">계획(분)</td>
+                            <td rowspan="2" style="width: 8%;">진행율</td>
+                            <td rowspan="2" style="width: 8%;">지연시간</td>
+                            <td rowspan="1" style="width: 10%;">전체인원(남/여)</td>
+                            <td rowspan="2" style="width: 5%;">진행상태</td>
+                        </tr>
+                        <tr>
+                            <td rowspan="1">완료(건)</td>
+                            <td rowspan="1">완료(분)</td>
+                            <td rowspan="1">현재인원(남/여)</td>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                    </tbody>
+
+                </table>
+            </div>
+            
+        </div>
+
+        <div class="col-10 display-none">
+            <div class="NoDataDiv">
+                <div class="item" style="align-self: center;">
+                    데이터가 없습니다.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

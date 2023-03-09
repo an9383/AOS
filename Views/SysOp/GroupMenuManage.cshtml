@@ -1,0 +1,425 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "GroupMenuManage";
+
+    var conpanyJson = @Html.Raw(Json.Encode(ViewBag.companyGridData.Data));
+    var programJson = @Html.Raw(Json.Encode(ViewBag.programGridData.Data));
+    var groupMenuManageAuth = @Html.Raw(Json.Encode(ViewBag.groupMenuManageAuth.Data));
+}
+
+@*그룹 권한 설정*@
+
+    <script id="GroupMenuManageJs">
+
+    var _groupMenuIsEdited = false;
+    var _groupMenuAuth;
+
+    $(function () {
+
+        var ds1 = @conpanyJson;
+        var ds2 = @programJson;
+
+        var dataGrid = $("#GroupMenuManageCompanyGrid").dxDataGrid("instance");
+        var treeList = $("#GroupMenuManageProgramSubGrid").dxTreeList("instance");
+        if (ds1.length > 0) {
+            dataGrid.option("dataSource", JSON.parse(ds1));
+        }
+        else {
+            dataGrid.option("dataSource", []);
+        }
+        if (ds2.length > 0) {
+            treeList.option("dataSource", JSON.parse(ds2));
+        }
+        else {
+            treeList.option("dataSource", []);
+        }
+
+        GroupMenuManageIsEditing(false);
+    });
+
+    function GroupMenuManageIsEditing(idEditing) {
+
+        if (idEditing) {
+            $("#GroupMenuManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#GroupMenuManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#GroupMenuManageUndo").dxButton().parent().parent().removeClass("display-none");
+        } else {
+            $("#GroupMenuManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#GroupMenuManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#GroupMenuManageUndo").dxButton().parent().parent().addClass("display-none");
+        }
+    }
+
+    // 모듈 구분에 해당하는 프로그램 리스트 조회
+    function selectProgramList() {
+
+        var company = $("#GroupMenuManageCompanyGrid").dxDataGrid("instance");
+        var module = $("select[name=moduleGb]").val();
+        var empCd;
+
+        if (company.getSelectedRowsData().length == 0) {
+            empCd = company.getDataSource()._items[0].emp_cd;
+        } else {
+            empCd = company.getSelectedRowsData()[0].emp_cd;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectProgram',
+            data: {
+                empCd: empCd,
+                moduleGb: module,
+            },
+            success: function (result) {
+
+                var treeList = $("#GroupMenuManageProgramSubGrid").dxTreeList("instance");
+
+                if (module === "1") {
+                    treeList.option("rootValue", "G-00000000");
+                } else if (module === "2") {
+                    treeList.option("rootValue", "C-00000000");
+                } else if (module === "3") {
+                    treeList.option("rootValue", "P00000000");
+                }
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    treeList.option("dataSource", JSON.parse(result));
+                } else {
+                    treeList.option("dataSource", []);
+                }
+            }
+
+        });
+
+    }
+
+    // 프로그램 권한 트리리스트 Column별 수정 가능 여부 적용
+    function programEditableColumn(cellElement) {
+
+        if (cellElement.rowType != "data" || !cellElement.isEditing)
+            return;
+        if (cellElement.column.dataField === "display_nm" && !cellElement.row.inserted) {
+            cellElement.element.find('input').prop('readonly', true);
+        }
+        if (cellElement.row.data.gubun === "0" && !cellElement.row.inserted) {
+        }
+    }
+
+    // 프로그램 권한 트리리스트 Row별 수정가능 여부 적용
+    function programEditableRow(e) {
+
+        if (e.parentType === "dataRow") {
+
+            if (e.row.node.level != 2 && e.dataField != "display_nm") {
+                e.editorOptions.visible = false;
+            }
+        }
+    }
+
+    //조회버튼 클릭
+        function GroupMenuManageSearch() {
+            selectProgramList();
+        }
+
+    // 수정버튼 클릭
+    function GroupMenuManageEdit() {
+
+        GroupMenuManageIsEditing(true);
+
+        _groupMenuIsEdited = true;
+
+        var editing = {
+            allowUpdating: true,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+
+        $("#GroupMenuManageProgramSubGrid").dxTreeList("option", "editing", editing);
+
+    }
+
+    async function GroupMenuManageSave() {
+
+        await $("#GroupMenuManageProgramSubGrid").dxTreeList("instance").saveEditData();
+        GroupMenuManageIsEditing(false);
+
+        var editing = {
+            allowUpdating: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#GroupMenuManageProgramSubGrid").dxTreeList("option", "editing", editing);
+    }
+
+    // 취소 버튼 클릭
+    function GroupMenuManageUndo() {
+
+        $("#GroupMenuManageProgramSubGrid").dxTreeList("instance").cancelEditData();
+
+        GroupMenuManageIsEditing(false);
+
+        _groupMenuIsEdited = false;
+
+        var editing = {
+            allowUpdating: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#GroupMenuManageProgramSubGrid").dxTreeList("option", "editing", editing);
+
+    }
+
+    // 프로그램 권한 트리리스트 수정
+    function programUpdate(info) {
+
+        var data = info.data;
+
+        var company = $("#GroupMenuManageCompanyGrid").dxDataGrid("instance");
+
+        var empCd;
+
+        if (company.getSelectedRowsData().length == 0) {
+            empCd = company.getDataSource()._items[0].emp_cd;
+        } else {
+            empCd = company.getSelectedRowsData()[0].emp_cd;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/UpdateProgram',
+            data: {
+                empCd: empCd,
+                formCd: data.form_cd,
+                formQuery: data.form_query,
+                formEdit: data.form_edit,
+                formInsert: data.form_insert,
+                formDelete: data.form_delete,
+                formPrint: data.form_print,
+                formTransmission: data.form_transmission,
+                formFavorite: data.form_favorite_ok,
+                isexist: data.isexist
+            },
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                } catch (e) {
+                    selectProgramList();
+                }
+
+            }
+
+        });
+    }
+
+    // 전체 선택 버튼 생성 위치 조정
+    var groupMenuIsValueRow = function (e) {
+        return e.row.data.gubun != "0";
+    }
+
+    // 전체 선택 버튼 클릭시 체크 상태에 따라 전체 선택, 전체 해제
+    function groupMenuSelectAll(e) {
+
+        if (!_groupMenuIsEdited) {
+            return;
+        }
+
+        var data = e.row.data;
+        var grid = e.component;
+
+        if (
+            (data.form_query === "Y" || data.form_query === true) &&
+            (data.form_edit === "Y" || data.form_edit === true) &&
+            (data.form_insert === "Y" || data.form_insert === true) &&
+            (data.form_delete === "Y" || data.form_delete === true) &&
+            (data.form_print === "Y" || data.form_print === true) &&
+            (data.form_transmission === "Y" || data.form_transmission === true) &&
+            (data.form_favorite_ok === "Y" || data.form_favorite_ok === true)
+        ) {
+            grid.cellValue(e.row.rowIndex, "form_query", false);
+            grid.cellValue(e.row.rowIndex, "form_edit", false);
+            grid.cellValue(e.row.rowIndex, "form_insert", false);
+            grid.cellValue(e.row.rowIndex, "form_delete", false);
+            grid.cellValue(e.row.rowIndex, "form_print", false);
+            grid.cellValue(e.row.rowIndex, "form_transmission", false);
+            grid.cellValue(e.row.rowIndex, "form_favorite_ok", false);
+
+            return;
+
+        } else {
+            grid.cellValue(e.row.rowIndex, "form_query", true);
+            grid.cellValue(e.row.rowIndex, "form_edit", true);
+            grid.cellValue(e.row.rowIndex, "form_insert", true);
+            grid.cellValue(e.row.rowIndex, "form_delete", true);
+            grid.cellValue(e.row.rowIndex, "form_print", true);
+            grid.cellValue(e.row.rowIndex, "form_transmission", true);
+            grid.cellValue(e.row.rowIndex, "form_favorite_ok", true);
+        }
+
+    }
+
+    </script>
+
+<div id="GroupMenuManage" autoresize="Y">
+
+    <div id="GroupMenuManageTop" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="GroupMenuManageSearchForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">모듈구분</span>
+                        </div>
+                        <select class="form-control" name="moduleGb" onchange="selectProgramList()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.moduleGubun).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div id="GroupMenuManageLeftGrid" class="col-2 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("GroupMenuManageCompanyGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("emp_cd").Caption("그룹코드");
+                        c.Add().DataField("emp_nm").Caption("그룹명");
+                        c.Add().DataField("retire_yn").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.retire_yn == ""Y"" || rowData.retire_yn == true); }");
+                    })
+                .OnSelectionChanged("selectProgramList")
+                )
+            </div>
+
+        </div>
+
+        <div id="GroupMenuManageRightGrid" class="col-10 pl-0">
+
+            <div class="box mb-0">
+
+                @*<div class="divName">
+                        <p>원료 정보</p>
+                    </div>*@
+
+                @(Html.DevExtreme().TreeList()
+                    .ID("GroupMenuManageProgramSubGrid")
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                    .Height(810)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .RootValue("G-00000000")
+                    .KeyExpr("ID")
+                    .ParentIdExpr("ParentID")
+                    .OnRowUpdated("programUpdate")
+                    .OnEditorPreparing("programEditableRow")
+                    .OnCellPrepared("programEditableColumn")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(c =>
+                    {
+                        c.Add()
+                            .DataField("display_nm")
+                            .Width(250)
+                            .Caption("프로그램");
+
+                        c.Add()
+                            .DataField("form_query")
+                            .Caption("조회")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_query == ""Y"" || rowData.form_query == true); }");
+
+                        c.Add()
+                            .DataField("form_edit")
+                            .Caption("수정")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_edit == ""Y"" || rowData.form_edit == true); }");
+
+                        c.Add()
+                            .DataField("form_insert")
+                            .Caption("입력")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_insert == ""Y"" || rowData.form_insert == true); }");
+
+                        c.Add()
+                            .DataField("form_delete")
+                            .Caption("삭제")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_delete == ""Y"" || rowData.form_delete == true); }");
+
+                        c.Add()
+                            .DataField("form_print")
+                            .Caption("출력")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_print == ""Y"" || rowData.form_print == true); }");
+
+                        c.Add()
+                            .DataField("form_transmission")
+                            .Caption("변환")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_transmission == ""Y"" || rowData.form_transmission == true); }");
+
+                        c.Add()
+                            .DataField("form_favorite_ok")
+                            .Caption("즐겨찾기")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_favorite_ok == ""Y"" || rowData.form_favorite_ok == true); }");
+
+                        c.Add()
+                            .Caption("전체선택")
+                            .Type(TreeListCommandColumnType.Buttons)
+                            .Buttons(btn =>
+                            {
+                                btn.Add()
+                                .Hint("selectAll")
+                                .Icon("check")
+                                .Visible(new JS("groupMenuIsValueRow"))
+                                .OnClick(@<text>groupMenuSelectAll</text>);
+                            });
+                    })
+                    )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

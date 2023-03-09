@@ -1,0 +1,671 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Vender";
+
+    var venderData = @Html.Raw(Json.Encode(ViewBag.venderData.Data));
+    var venderPopupData = @Html.Raw(Json.Encode(ViewBag.venderPopupData.Data));
+}
+
+@*거래처 관리*@
+
+<script id="VenderJs">
+
+        var _venderCRUDGubun;
+
+        $(function () {
+            setDatePicker("#Vender .datepicker");
+
+            if ((@venderData).length > 0) {
+                $("#VenderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@venderData));
+                $("#VenderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#VenderGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            var columns = [
+                { dataField: "vender_cd", caption: "거래처코드" },
+                { dataField: "vender_nm", caption: "거래처명" }
+            ];
+
+            createPopup("Vender", "거래처 조회", @venderPopupData, columns, "vender_cd");
+            $("#VenderSearchForm select[name=vender_gb]").val("%");
+
+            venderEditCheck(false);
+
+        });
+
+    function set_date() {
+
+        var sdate = new Date();
+
+        var year = sdate.getFullYear();
+        var month = (1 + sdate.getMonth());
+        month = month >= 10 ? month : '0' + month;
+        var day = sdate.getDate();
+        day = day >= 10 ? day : '0' + day;
+
+        $("#VenderForm input[name=idate]").val(year + '-' + month + '-' + day);
+
+    }
+        function venderSearchVender() {
+            $("#VenderPopup").dxPopup("instance").show();
+        }
+
+        function VenderRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#VenderSearchForm input[name=vender_cd]").val(data.vender_cd);
+            $("#VenderPopup").dxPopup("instance").hide();
+        }
+
+        function venderSelectVender() {
+
+            $("#VenderForm")[0].reset();
+
+            var grid = $("#VenderGrid").dxDataGrid("instance");
+
+            var data = getGridRowByKey('VenderGrid', grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(data)) return;
+
+            $("#VenderForm input[name=vender_cd]").val(data.vender_cd);
+            $("#VenderForm input[name=vender_nm]").val(data.vender_nm);
+            $("#VenderForm input[name=vender_enm]").val(data.vender_enm);
+            $("#VenderForm input[name=uptae]").val(data.uptae);
+            $("#VenderForm input[name=upjong]").val(data.upjong);
+            $("#VenderForm input[name=license]").val(data.license);
+            $("#VenderForm input[name=owner_nm]").val(data.owner_nm);
+            $("#VenderForm input[name=phone]").val(data.phone);
+            $("#VenderForm input[name=fax]").val(data.fax);
+            $("#VenderForm input[name=zipcode]").val(data.zipcode);
+            $("#VenderForm input[name=address]").val(data.address);
+            $("#VenderForm input[name=commercial_personnel]").val(data.commercial_personnel);
+            $("#VenderForm input[name=technical_personnel]").val(data.technical_personnel);
+            $("#VenderForm input[name=personnel_tel1]").val(data.personnel_tel1);
+            $("#VenderForm input[name=personnel_tel2]").val(data.personnel_tel2);
+            $("#VenderForm input[name=personnel_email1]").val(data.personnel_email1);
+            $("#VenderForm input[name=personnel_email2]").val(data.personnel_email2);
+            $("#VenderForm input[name=idate]").val(data.idate);
+            $("#VenderForm input[name=bigo]").val(data.bigo);
+
+            if (data.use_yn === "Y") {
+                $("#VenderForm input[name=use_yn][value='Y']").prop("checked", true);
+            } else {
+                $("#VenderForm input[name=use_yn][value='N']").prop("checked", true);
+            }
+
+            if (data.buy_ck === "Y") {
+                $("#VenderForm input[name=buy_ck][value='Y']").prop("checked", true);
+            } else {
+                $("#VenderForm input[name=buy_ck][value='N']").prop("checked", true);
+            }
+
+            if (data.sell_cust_ck === "Y") {
+                $("#VenderForm input[name=sell_cust_ck][value='Y']").prop("checked", true);
+            } else {
+                $("#VenderForm input[name=sell_cust_ck][value='N']").prop("checked", true);
+            }
+
+            $("#VenderForm input[name=email_ad]").val(data.email_ad);
+            $("#VenderForm select[name=vender_gb]").val(data.vender_gb);
+
+        }
+
+        // 수정중인지 체크
+        function venderEditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#VenderSave").dxButton().parent().parent().removeClass("display-none");
+                $("#VenderUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#VenderSearch").dxButton().parent().parent().addClass("display-none");
+                $("#VenderInput").dxButton().parent().parent().addClass("display-none");
+                $("#VenderEdit").dxButton().parent().parent().addClass("display-none");
+                $("#VenderDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#VenderForm :disabled").attr('disabled', false);
+                $("#VenderGrid").dxDataGrid("option", "disabled", true);
+
+            }
+            if (!nowEdit) {
+
+                $("#VenderSave").dxButton().parent().parent().addClass("display-none");
+                $("#VenderUndo").dxButton().parent().parent().addClass("display-none");
+                $("#VenderSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#VenderInput").dxButton().parent().parent().removeClass("display-none");
+                $("#VenderEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#VenderDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#VenderForm :enabled").attr('disabled', true);
+                $("#VenderGrid").dxDataGrid("option", "disabled", false);
+            }
+
+        }
+
+        // 다음 주소 찾기 api
+        function findVenderAddress() {
+            new daum.Postcode({
+                oncomplete: function (data) {
+                    // 팝업에서 검색결과 항목을 클릭했을때 실행할 코드를 작성하는 부분.
+
+                    // 도로명 주소의 노출 규칙에 따라 주소를 표시한다.
+                    // 내려오는 변수가 값이 없는 경우엔 공백('')값을 가지므로, 이를 참고하여 분기 한다.
+                    var roadAddr = data.roadAddress; // 도로명 주소 변수
+                    var extraRoadAddr = ''; // 참고 항목 변수
+
+                    // 법정동명이 있을 경우 추가한다. (법정리는 제외)
+                    // 법정동의 경우 마지막 문자가 "동/로/가"로 끝난다.
+                    if (data.bname !== '' && /[동|로|가]$/g.test(data.bname)) {
+                        extraRoadAddr += data.bname;
+                    }
+                    // 건물명이 있고, 공동주택일 경우 추가한다.
+                    if (data.buildingName !== '' && data.apartment === 'Y') {
+                        extraRoadAddr += (extraRoadAddr !== '' ? ', ' + data.buildingName : data.buildingName);
+                    }
+                    // 표시할 참고항목이 있을 경우, 괄호까지 추가한 최종 문자열을 만든다.
+                    if (extraRoadAddr !== '') {
+                        extraRoadAddr = ' (' + extraRoadAddr + ')';
+                    }
+
+                    // 우편번호와 주소 정보를 해당 필드에 넣는다.
+                    $("#VenderForm input[name=zipcode]").val(data.zonecode);
+                    $("#VenderForm input[name=address]").val(roadAddr);
+
+                }
+            }).open({
+                popupName: 'postcodePopup',
+                autoClose: true
+            });
+        }
+
+        function VenderSearch() {
+
+            var formData = new FormData($("#VenderSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysCom/SelectVender',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#VenderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    }else{
+                        $("#VenderGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "VenderGrid");
+        }
+
+        function VenderInput() {
+            venderEditCheck(true);
+            _venderCRUDGubun = "I";
+            $("#VenderForm")[0].reset();
+            $("#VenderForm input[name=vender_cd]").val("거래처코드는 사업자번호로 자동생성 됩니다.");
+            set_date();
+        }
+
+        function VenderEdit() {
+            venderEditCheck(true);
+            _venderCRUDGubun = "U";
+            $("#VenderForm input[name=license]").attr('disabled', true);
+        }
+
+        function VenderDelete() {
+
+            var isOk = confirm("이 데이터를 삭제하시겠습니까?");
+
+            if (!isOk) {
+                return;
+            }
+
+            var grid = $("#VenderGrid").dxDataGrid("instance");
+
+            var data = getGridRowByKey('VenderGrid', grid.option("focusedRowKey"));
+
+            _venderCRUDGubun = "D";
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/VenderCRUD',
+                data: {
+                    vender_cd: data.vender_cd,
+                    gubun: _venderCRUDGubun
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        alert(json.messege);
+                    }
+                    venderEditCheck(false);
+                    VenderSearch();
+                }
+            })
+        }
+
+        function VenderSave() {
+
+            if (!UtilView.checkValidForm("VenderForm")) {
+                return;
+            }
+
+            var email_ad = $("#VenderForm input[name=email_ad]").val();
+            var email_validation = true;
+            if (email_ad != null && email_ad != "") {
+                email_validation = checkEmail(email_ad);
+            }
+
+            if (email_validation == false) {
+                alert("올바른 이메일 주소를 입력 해 주세요.");
+                return;
+            }
+
+            if (_venderCRUDGubun == "I") {
+
+                var vender_cd = $("#VenderForm input[name=license]").val().replace(/\-/g, "");
+
+                if (vender_cd.length != 10) {
+                    alert("사업자 등록번호는 -제외 10자리 입니다. (-포함해서 입력가능)");
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysCom/VenderCdValidation',
+                    data: {
+                        vender_cd: vender_cd
+                    },
+                    success: function (result) {
+                        if (vender_cd == result) {
+                            alert("동일한 사업자번호가 있습니다.");
+                            return;
+                        }
+                        else {
+                            var formData = new FormData($("#VenderForm")[0]);
+                            formData.set("gubun", _venderCRUDGubun);
+                            formData.set("vender_cd", vender_cd);
+                            venderCRUD(formData);
+                        }
+                    }
+                });
+            }
+            else {
+                var formData = new FormData($("#VenderForm")[0]);
+                formData.set("gubun", _venderCRUDGubun);
+                venderCRUD(formData);
+            }
+
+    }
+
+    function venderCRUD(formData) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/VenderCRUD',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    alert(json.messege);
+                }
+                venderEditCheck(false);
+                VenderSearch();
+            }
+        });
+    }
+
+    function VenderUndo() {
+
+        venderEditCheck(false);
+
+        venderSelectVender();
+    }
+
+    function VenderExcel() {
+        gridExportToExcel("VenderGrid", "VenderData");
+    }
+
+    function checkEmail(myValue) {
+    var email = myValue;
+    var regExp = /^[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*@@[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*\.[a-zA-Z]{2,3}$/i;
+
+        if (regExp.test(email)==false){
+            //이메일 형식이 알파벳+숫자@알파벳+숫자.알파벳+숫자 형식이 아닐경우
+            return false;
+        }
+        return true;
+    }
+
+</script>
+
+
+<div id="Vender" autoresize="Y">
+
+    <div id="VenderPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="VenderSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">거래처</span>
+                        </div>
+                        <input type="text" class="form-control" name="vender_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="venderSearchVender()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">거래처구분</span>
+                        </div>
+                        <select class="form-control" name="vender_gb">
+                            @foreach (DataRow row in ((DataTable)ViewBag.venderGubun).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="use_yn" checked="checked" onclick="VenderSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="use_yn" onclick="VenderSearch()" checked="checked" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="use_yn" onclick="VenderSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("VenderGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    //.Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("vender_cd")
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnFocusedRowChanged("venderSelectVender")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("vender_cd").Caption("거래처코드");
+                        c.Add().DataField("vender_nm").Caption("거래처명");
+                        c.Add().DataField("vender_gb_nm").Caption("거래처구분");
+                        c.Add().DataField("sell_cust_ck").Caption("판매업체")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.sell_cust_ck == ""Y"" || rowData.sell_cust_ck == true); }");
+                        c.Add().DataField("buy_ck").Caption("구입업체")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.buy_ck == ""Y"" || rowData.buy_ck == true); }");
+                        c.Add().DataField("use_gb").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+
+                    })
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-4">
+
+            <div class="box pl-0">
+
+                <div class="divName">
+                    <p>거래처 관리</p>
+                    <span id="" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="VenderForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">거래처코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="vender_cd" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">거래처명 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="vender_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">거래처영문명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="vender_enm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">거래처구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="vender_gb">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.formVenderGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">업태</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="uptae">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">업종</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="upjong">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업자등록번호</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="license">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">대표자명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="owner_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">대표전화</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="phone">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">대표팩스</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="fax">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">대표이메일</label>
+                            <div class="input-group col-8">
+                                <input type="email" class="form-control col-12" name="email_ad">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">우편번호</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="zipcode" onclick="findVenderAddress()">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">주소</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="address">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">영업담당자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="commercial_personnel">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">영업담당자전화</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="personnel_tel1">
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3">영업담당자메일</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="personnel_email1">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">기술담당자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="technical_personnel">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">기술담당자전화</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="personnel_tel2">
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3">기술담당자메일</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="personnel_email2">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">등록일</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker" name="idate">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="use_yn" value="Y" />예 </label>
+                                    <label><input type="radio" name="use_yn" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="bigo">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">판매업체여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="sell_cust_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="sell_cust_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">구입업체여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="buy_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="buy_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

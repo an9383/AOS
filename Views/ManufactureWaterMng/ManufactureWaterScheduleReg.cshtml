@@ -1,0 +1,1010 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    var itemWater = @Html.Raw(Json.Encode(ViewBag.itemWater.Data));
+    var employee = @Html.Raw(Json.Encode(ViewBag.employee.Data));
+}
+
+@*제조용수 시험 스케줄*@
+
+<script id="@(pagePrefix)Js">
+
+    $(function () {
+
+        var ManufactureWaterScheduleRegPopupColumns = {
+            "water": [{ dataField: "item_cd", caption: "제조용수코드" }
+                , { dataField: "item_nm", caption: "제조용수명" }
+                , { dataField: "remark", caption: "루프" }],
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }
+                , { dataField: "emp_nm", caption: "사원명" }
+                , { dataField: "dept_cd", caption: "부서코드" }
+                , { dataField: "dept_nm", caption: "부서명" }]
+        };
+
+        createPopup("ManufactureWaterScheduleRegWater", "제조용수 조회", @itemWater, ManufactureWaterScheduleRegPopupColumns.water);
+        createPopup("ManufactureWaterScheduleRegEmp", "사원 조회", @employee, ManufactureWaterScheduleRegPopupColumns.employee);
+
+        $('input[name=point_cd]+div>button'
+            + ', input[name=charge_cd]+div>button'
+            , $('#' + "ManufactureWaterScheduleRegWriteForm")).click(function (event) {
+                ManufactureWaterScheduleRegPopUpSearch(event);
+            });
+
+        $('input[name=s_point_cd]+div>button'
+            , $('#' + "ManufactureWaterScheduleRegSearchForm")).click(function (event) {
+                ManufactureWaterScheduleRegPopUpSearch(event);
+            });
+
+        $('#ManufactureWaterScheduleReg .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });
+
+        $("#ManufactureWaterScheduleRegSearchForm input[name=s_sdate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+        $("#ManufactureWaterScheduleRegSearchForm input[name=s_edate]").datepicker("update", '@DateTime.Now.AddYears(1).ToShortDateString()');
+
+        $("#ManufactureWaterScheduleDetailSearchForm input[name=s_sdate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+        $("#ManufactureWaterScheduleDetailSearchForm input[name=s_edate]").datepicker("update", '@DateTime.Now.AddYears(1).ToShortDateString()');
+
+        ManufactureWaterScheduleRegEditCheck(false, "N");
+        ManufactureWaterScheduleRegSearch();
+
+    });
+
+    // 수정중인지 체크
+    function ManufactureWaterScheduleRegEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "ManufactureWaterScheduleRegToolbar"
+            , "ManufactureWaterScheduleRegGrid;ManufactureWaterScheduleGrid"
+            , "ManufactureWaterScheduleRegWriteForm"
+            , "water_gb;point_cd"
+        );
+
+        $("#ManufactureWaterScheduleRegWriteForm input[name=gubun]").val(status);
+    }
+
+    // 마스터 그리드 포커스 변경
+    function ManufactureWaterScheduleRegFocusChanged() {
+        UtilView.setDataGridFormBind("ManufactureWaterScheduleRegGrid", "ManufactureWaterScheduleRegWriteForm");
+
+        var grid = $("#ManufactureWaterScheduleRegGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ManufactureWaterScheduleRegGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'GET',
+            url: '/ManufactureWaterMng/ManufactureWaterScheduleSelect',
+            dataType: "json",
+            data: {
+                s_water_gb: gridData.water_gb,
+                s_point_cd: gridData.point_cd,
+                s_sdate: $("#ManufactureWaterScheduleDetailSearchForm input[name=s_sdate]").val(),
+                s_edate: $("#ManufactureWaterScheduleDetailSearchForm input[name=s_edate]").val()
+            },
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#ManufactureWaterScheduleGrid").dxDataGrid("option", "dataSource", jsonData);
+                }
+                catch (e) {
+                    $("#ManufactureWaterScheduleGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    //#region 팝업 관련
+
+    var ManufactureWaterScheduleRegHelpPopUpCurInputName = "";
+
+    function ManufactureWaterScheduleRegPopUpSearch(e) {
+        ManufactureWaterScheduleRegHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (ManufactureWaterScheduleRegHelpPopUpCurInputName) {
+            case "s_point_cd":
+            case "point_cd":
+                popupId = "ManufactureWaterScheduleRegWater";
+                break;
+            case "charge_cd":
+                popupId = "ManufactureWaterScheduleRegEmp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    function ManufactureWaterScheduleRegWaterRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        switch (ManufactureWaterScheduleRegHelpPopUpCurInputName) {
+            case "s_point_cd":
+                $("input[name=s_point_cd]", $("#ManufactureWaterScheduleRegSearchForm")).val(data.item_cd);
+                $("input[name=s_point_nm]", $("#ManufactureWaterScheduleRegSearchForm")).val(data.item_nm);
+                break;
+            case "point_cd":
+                $("input[name=point_cd]", $("#ManufactureWaterScheduleRegWriteForm")).val(data.item_cd);
+                $("textarea[name=point_nm]", $("#ManufactureWaterScheduleRegWriteForm")).text(data.item_nm);
+                break;
+        }
+
+        $("#ManufactureWaterScheduleRegWaterPopup").dxPopup("instance").hide();
+    }
+
+    function ManufactureWaterScheduleRegEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=charge_cd]", $("#ManufactureWaterScheduleRegWriteForm")).val(data.emp_cd);
+        $("input[name=charge_nm]", $("#ManufactureWaterScheduleRegWriteForm")).val(data.emp_nm);
+
+        $("#ManufactureWaterScheduleRegEmpPopup").dxPopup("instance").hide();
+    }
+
+    //#endregion
+
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function ManufactureWaterScheduleRegSearch() {
+        $("#ManufactureWaterScheduleRegWriteForm")[0].reset();
+        $("#ManufactureWaterScheduleGrid").dxDataGrid("option", "dataSource", []);
+        UtilView.dataGridSelect('ManufactureWaterScheduleRegGrid', 'ManufactureWaterScheduleRegSearchForm');
+    }
+
+    // 입력
+    function ManufactureWaterScheduleRegInput() {
+        $("#ManufactureWaterScheduleRegWriteForm")[0].reset();
+        ManufactureWaterScheduleRegEditCheck(true, "I");
+    }
+
+    // 수정
+    function ManufactureWaterScheduleRegEdit() {
+
+        var grid = $("#ManufactureWaterScheduleRegGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정할 사항이 없습니다.");
+            return;
+        }
+
+        ManufactureWaterScheduleRegEditCheck(true, "U");
+    }
+
+    // 삭제
+    function ManufactureWaterScheduleRegDelete() {
+
+    }
+
+    // 저장
+    function ManufactureWaterScheduleRegSave() {
+        if (!UtilView.checkValidForm("ManufactureWaterScheduleRegWriteForm")) {
+            return;
+        }
+
+        var form = $('#ManufactureWaterScheduleRegWriteForm')[0];
+        var formData = new FormData(form);
+
+        UtilView.dataGridTRX(formData, () => ManufactureWaterScheduleRegSearch());
+        ManufactureWaterScheduleRegEditCheck(false, "N");
+    }
+
+    // 취소
+    function ManufactureWaterScheduleRegUndo() {
+        ManufactureWaterScheduleRegEditCheck(false, "N");
+        ManufactureWaterScheduleRegFocusChanged();
+    }
+
+    //#endregion
+
+
+    //#region 스케줄 관련
+
+    // 스케줄 생성 버튼 클릭
+    function ManufactureWaterCreateSchedule() {
+
+        var grid = $("#ManufactureWaterScheduleRegGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            return;
+        }
+
+        var popup = $("#ManufactureWaterSchedulePopup").dxPopup("instance");
+        popup.show();
+    }
+
+    // 스케줄 생성 팝업 폼 초기화
+    function ManufactureWaterScheduleSetForm() {
+
+        $("#ManufactureWaterScheduleFormDiv > div").hide();
+        $("#ManufactureWaterSchedulePopupForm")[0].reset();
+        ManufactureWaterScheduleHolidayChk(1);
+
+        $('#ManufactureWaterSchedulePopupForm .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });
+
+        var grid = $("#ManufactureWaterScheduleRegGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ManufactureWaterScheduleRegGrid", grid.option("focusedRowKey"));
+
+        //console.log(gridData);
+
+        $("#ManufactureWaterSchedulePopupForm input[name=water_gb]").val(gridData.water_gb);
+        $("#ManufactureWaterSchedulePopupForm input[name=item_cd]").val(gridData.point_cd);
+
+        $("#ManufactureWaterSchedulePopupForm input[name=start_date]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+        $("#ManufactureWaterSchedulePopupForm input[name=end_date]").datepicker("update", '@DateTime.Now.AddYears(1).ToShortDateString()');
+    }
+
+    // 반복 빈도 선택 변경
+    function ManufactureWaterScheduleChangeLoop() {
+
+        var idx = $("#ManufactureWaterSchedulePopupForm select[name=frequency]").val();
+        $("#ManufactureWaterScheduleFormDiv > div").hide();
+        $("#ManufactureWaterScheduleFormDiv input").prop("disabled", true);
+        $("#ManufactureWaterScheduleFormDiv select").prop("disabled", true);
+        $("#ManufactureWaterScheduleDiv" + (parseInt(idx) + 2)).show();
+        $("#ManufactureWaterScheduleDiv" + (parseInt(idx) + 2) + " input").prop("disabled", false);
+        $("#ManufactureWaterScheduleDiv" + (parseInt(idx) + 2) + " select").prop("disabled", false);
+
+        $("#ManufactureWaterSchedulePopupForm select[name=period_type]").val((parseInt(idx) + 1));
+        $("#ManufactureWaterSchedulePopupForm select[name=period_type]").readonly(true);
+
+        if (idx === "-1") {
+            $("#ManufactureWaterScheduleDiv1 input[name=repeat_standard][value=date]").prop("checked", true);
+            ManufactureWaterScheduleFormChange(1, 1);
+            ManufactureWaterScheduleHolidayChk(1);
+        }
+        else if (idx === "0") {
+            ManufactureWaterScheduleHolidayChk(2);
+        }
+        else if (idx === "2") {
+            $("#ManufactureWaterScheduleDiv4 input[name=repeat_standard][value=date]").prop("checked", true);
+            ManufactureWaterScheduleFormChange(4, 1);
+        }
+        else if (idx === "3") {
+            $("#ManufactureWaterScheduleDiv5 input[name=repeat_standard][value=date]").prop("checked", true);
+            ManufactureWaterScheduleFormChange(5, 1);
+        }
+    }
+
+    // 반복 빈도 선택 변경에 따른 폼 조작
+    function ManufactureWaterScheduleFormChange(pNum, cNum) {
+        $("#ManufactureWaterScheduleDiv" + pNum + " .hideCtrl").hide();
+        $("#ManufactureWaterScheduleDiv" + pNum + "_" + cNum).show();
+    }
+
+    // 반복 옵션 휴일 체크 유무에 따른 옵션 조작
+    function ManufactureWaterScheduleHolidayChk(divNum) {
+        var isChecked = $("#ManufactureWaterScheduleDiv" + divNum + " input[name=holiday_yn]").is(":checked");
+
+        if (isChecked) {
+            $("#ManufactureWaterScheduleDiv" + divNum + " .ManufactureWaterScheduleDisabledCtrl input").prop("disabled", false);
+        } else {
+            $("#ManufactureWaterScheduleDiv" + divNum + " .ManufactureWaterScheduleDisabledCtrl input").prop("checked", false);
+            $("#ManufactureWaterScheduleDiv" + divNum + " .ManufactureWaterScheduleDisabledCtrl input").prop("disabled", true);
+        }
+    }
+
+    // 스케줄 입력
+    function ManufactureWaterScheduleInput() {
+
+        var form = $("#ManufactureWaterSchedulePopupForm")[0];
+        var formData = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/ManufactureWaterMng/ManufactureWaterScheduleInput',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                alert(result.message);
+                $("#ManufactureWaterSchedulePopup").dxPopup("instance").hide();
+                ManufactureWaterScheduleRegFocusChanged();
+            }
+        })
+    }
+
+    // 스케줄 삭제
+    function ManufactureWaterDeleteSchedule() {
+
+        var grid = $("#ManufactureWaterScheduleGrid").dxDataGrid("instance");
+        var data = grid.getSelectedRowsData();
+
+
+        if (data.length < 1) {
+            return;
+        }
+
+        if (!confirm("선택된 스케줄을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/ManufactureWaterMng/ManufactureWaterScheduleDelete',
+            data: {
+                schedules: JSON.stringify(data)
+            },
+            success: function (result) {
+                alert(result.message);
+                ManufactureWaterScheduleRegFocusChanged();
+            }
+        })
+
+    }
+
+    // 시험의뢰
+    function ManufactureWaterTestRequest() {
+
+        var grid = $("#ManufactureWaterScheduleGrid").dxDataGrid("instance");
+        var data = grid.getSelectedRowsData();
+
+        if (data.length < 1) {
+            return;
+        }
+
+        if (!confirm("시험의뢰 하시겠습니까?")) {
+            return;
+        }
+
+        var grid2 = $("#ManufactureWaterScheduleRegGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ManufactureWaterScheduleRegGrid", grid2.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/ManufactureWaterMng/ManufactureWaterTestRequest',
+            data: {
+                schedules: JSON.stringify(data),
+                water_gb: gridData.water_gb
+            },
+            success: function (result) {
+                alert(result.message);
+                ManufactureWaterScheduleRegFocusChanged();
+            }
+        })
+
+    }
+
+    //#endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="ManufactureWaterScheduleRegWaterPopup"></div>
+    <div id="ManufactureWaterScheduleRegEmpPopup"></div>
+
+    @(Html.DevExtreme().Popup()
+        .ID("ManufactureWaterSchedulePopup")
+        .Width(650)
+        .Height(300)
+        .Visible(false)
+        .ShowTitle(true)
+        .Title("스케줄 생성 옵션")
+        .CloseOnOutsideClick(false)
+        .ContentTemplate(new TemplateName("ManufactureWaterSchedulePopupTemplate"))
+        .OnShowing("ManufactureWaterScheduleSetForm")
+        .OnShown("ManufactureWaterScheduleChangeLoop")
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("ManufactureWaterSchedulePopupTemplate"))
+    {
+        <form id="ManufactureWaterSchedulePopupForm">
+
+            <input type="text" name="water_gb" hidden="hidden"/>
+            <input type="text" name="item_cd" hidden="hidden"/>
+
+            <div class="input-wrapper mb-1">
+                <label class="col-2">반복주기</label>
+                <div class="input-group col-4">
+                    <select class="form-control" name="frequency" onchange="ManufactureWaterScheduleChangeLoop()">
+                        @*<option value="-1"></option>*@
+                        <option value="0">일(Day)</option>
+                        <option value="1">주(Week)</option>
+                        <option value="2">월(Month)</option>
+                        <option value="3">년(Year)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="ManufactureWaterScheduleFormDiv">
+
+                <div id="ManufactureWaterScheduleDiv1">
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2"></label>
+                        <div class="radioDiv col-4">
+                            <label><input type="radio" name="repeat_standard" value="date" onclick="ManufactureWaterScheduleFormChange(1,1)" />일(Date) </label>
+                            <label><input type="radio" name="repeat_standard" value="day" onclick="ManufactureWaterScheduleFormChange(1,2)" />요일(Day) </label>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv1_1" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="month">
+                                @for (int i = 1; i < 13; i++)
+                                {
+                                    string text = i.ToString() + '월';
+                                    <option value=@i>@text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="day">
+                                @for (int i = 1; i < 32; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv1_2" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="month">
+                                @for (int i = 1; i < 13; i++)
+                                {
+                                    string text = i.ToString() + '월';
+                                    <option value=@i>@text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="weekofmonth">
+                                <option value="1">First</option>
+                                <option value="2">Second</option>
+                                <option value="3">Third</option>
+                                <option value="4">fourth</option>
+                                <option value="5">Last</option>
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="dayofweek">
+                                <option value="1">일요일</option>
+                                <option value="2">월요일</option>
+                                <option value="4">화요일</option>
+                                <option value="8">수요일</option>
+                                <option value="16">목요일</option>
+                                <option value="32">금요일</option>
+                                <option value="64">토요일</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복옵션</label>
+                        <div class="input-group col-2">
+                            <label><input type="checkbox" name="holiday_yn" value="Y" onclick="ManufactureWaterScheduleHolidayChk(1)"/>휴일체크</label>
+                        </div>
+                        <div class="radioDiv col-4 ManufactureWaterScheduleDisabledCtrl">
+                            <label><input type="radio" name="holiday_option" value="previous" />당기기 </label>
+                            <label><input type="radio" name="holiday_option" value="next" />미루기 </label>
+                            <label><input type="radio" name="holiday_option" value="pass" />생략 </label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="ManufactureWaterScheduleDiv2">
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복주기</label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="schedule_period">
+                                @for (int i = 1; i < 32; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="period_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC069")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복옵션</label>
+                        <div class="input-group col-2">
+                            <label><input type="checkbox" name="holiday_yn" value="Y" onclick="ManufactureWaterScheduleHolidayChk(2)"/>휴일체크</label>
+                        </div>
+                        <div class="radioDiv col-4 ManufactureWaterScheduleDisabledCtrl">
+                            <label><input type="radio" name="holiday_option" value="previous"/>당기기 </label>
+                            <label><input type="radio" name="holiday_option" value="next"/>미루기 </label>
+                            <label><input type="radio" name="holiday_option" value="pass"/>생략 </label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="ManufactureWaterScheduleDiv3">
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복주기</label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="schedule_period">
+                                @for (int i = 1; i < 17; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="period_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC069")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2"></label>
+                        <div class="input-group col-9">
+                            <label><input type="checkbox" name="repeat_days" value="1"/>일요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="2"/>월요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="4"/>화요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="8"/>수요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="16"/>목요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="32"/>금요일</label>
+                            <label><input type="checkbox" name="repeat_days" value="64"/>토요일</label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="ManufactureWaterScheduleDiv4">
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복주기</label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="schedule_period">
+                                @for (int i = 1; i < 13; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="period_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC069")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2"></label>
+                        <div class="radioDiv col-4">
+                            <label><input type="radio" name="repeat_standard" value="date" onclick="ManufactureWaterScheduleFormChange(4,1)"/>일(Date) </label>
+                            <label><input type="radio" name="repeat_standard" value="day" onclick="ManufactureWaterScheduleFormChange(4,2)"/>요일(Day) </label>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv4_1" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="day">
+                                @for (int i = 1; i < 32; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv4_2" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="weekofmonth">
+                                <option value="1">First</option>
+                                <option value="2">Second</option>
+                                <option value="3">Third</option>
+                                <option value="4">fourth</option>
+                                <option value="5">Last</option>
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="dayofweek">
+                                <option value="1">일요일</option>
+                                <option value="2">월요일</option>
+                                <option value="4">화요일</option>
+                                <option value="8">수요일</option>
+                                <option value="16">목요일</option>
+                                <option value="32">금요일</option>
+                                <option value="64">토요일</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="ManufactureWaterScheduleDiv5">
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2">반복주기</label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="schedule_period">
+                                @for (int i = 1; i < 11; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="period_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC069")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper mb-1">
+                        <label class="col-2"></label>
+                        <div class="radioDiv col-4">
+                            <label><input type="radio" name="repeat_standard" value="date" onclick="ManufactureWaterScheduleFormChange(5,1)"/>일(Date) </label>
+                            <label><input type="radio" name="repeat_standard" value="day" onclick="ManufactureWaterScheduleFormChange(5,2)"/>요일(Day) </label>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv5_1" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="month">
+                                @for (int i = 1; i < 13; i++)
+                                {
+                                    string text = i.ToString() + '월';
+                                    <option value=@i>@text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="day">
+                                @for (int i = 1; i < 32; i++)
+                                {
+                                    <option value=@i>@i</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="ManufactureWaterScheduleDiv5_2" class="input-wrapper mb-1 hideCtrl">
+                        <label class="col-2"></label>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="month">
+                                @for (int i = 1; i < 13; i++)
+                                {
+                                    string text = i.ToString() + '월';
+                                    <option value=@i>@text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="weekofmonth">
+                                <option value="1">First</option>
+                                <option value="2">Second</option>
+                                <option value="3">Third</option>
+                                <option value="4">fourth</option>
+                                <option value="5">Last</option>
+                            </select>
+                        </div>
+                        <div class="input-group col-2">
+                            <select class="form-control" name="dayofweek">
+                                <option value="1">일요일</option>
+                                <option value="2">월요일</option>
+                                <option value="4">화요일</option>
+                                <option value="8">수요일</option>
+                                <option value="16">목요일</option>
+                                <option value="32">금요일</option>
+                                <option value="64">토요일</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="input-wrapper mb-1">
+                <label class="col-2">시작일자</label>
+                <input type="text" class="form-control datepicker col-4" name="start_date" />
+            </div>
+            <div class="input-wrapper mb-1">
+                <label class="col-2">종료일자</label>
+                <input type="text" class="form-control datepicker col-4" name="end_date" />
+            </div>
+
+            <div style="position: fixed;width: 95%;bottom: 20px;text-align: end;">
+                <button type="button" class="btn btn-secondary" onclick="ManufactureWaterScheduleInput()">확인</button>
+            </div>
+
+        </form>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control" name="s_water_gb">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("기타품목구분", "S", "")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">포인트</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_point_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="s_point_nm" readonly="readonly">
+                    </div>
+
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시작일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="s_sdate" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="s_edate" autocomplete="off">
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1 mb-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ManufactureWaterScheduleRegGrid")
+                    .KeyExpr("point_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(250)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().Lookup(lookup => lookup
+                             .DataSource(d => d.WebApi()
+                                .RouteName("Comm")
+                                .LoadAction("GetCommon")
+                                .LoadMethod("GET")
+                                .LoadParams(new
+                                {
+                                    pGubun = "공통코드",
+                                    pDiv = "N",
+                                    pStrWhere = "QC068",
+                                    pTableName = "water_gb"
+                                }).Key("keyfield"))
+                             .ValueExpr("keyfield")
+                             .DisplayExpr("displayfield")
+                             ).DataField("water_gb")
+                             .Caption("구분");
+                        c.Add().DataField("point_cd").Caption("포인트코드");
+                        c.Add().DataField("point_nm").Caption("포인트명");
+                        c.Add().DataField("start_date").Caption("시작일자");
+                        c.Add().DataField("period").Caption("주기");
+                        c.Add().DataField("charge_nm").Caption("담당자");
+                    })
+                    .OnFocusedRowChanged("ManufactureWaterScheduleRegFocusChanged")
+                    //.OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0 mb-1">
+
+            <div class="box mb-0">
+
+                <form id="ManufactureWaterScheduleRegWriteForm">
+
+                    <input name="gubun" hidden="hidden" />
+
+                    <div class="divName mb-1">
+                        <p>포인트 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">제조용수구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control required" name="water_gb">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC068")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">포인트</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="point_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4"></label>
+                            <textarea class="form-control col-7" readonly="readonly" name="point_nm"></textarea>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">시작일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control datepicker" name="start_date" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">주기</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control" name="period_qty" />
+                            </div>
+                            <div class="input-group col-3">
+                                <select class="form-control" name="period_unit">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC069")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">담당자</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="charge_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                                <input type="text" class="form-control" name="charge_nm">
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+        <div class="col-12">
+
+            <div class="box mb-0">
+
+                <form id="ManufactureWaterScheduleDetailSearchForm">
+                    <button type="button" class="btn btn-secondary margin-5" onclick="ManufactureWaterCreateSchedule()">스케줄 생성</button>
+
+                    <div class="input-group col-4">
+                        <div class="input-group-prepend" style="height:23px;">
+                            <span class="input-group-text" style="font-size:inherit;">스케줄일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="s_sdate" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control datepicker text-center" name="s_edate" autocomplete="off">
+                    </div>
+
+                    <button type="button" class="btn btn-secondary margin-5" onclick="ManufactureWaterDeleteSchedule()">스케줄 삭제</button>
+
+                    <div class="float-right">
+                        <button type="button" class="btn btn-secondary margin-5" onclick="ManufactureWaterTestRequest()">시험의뢰</button>
+                    </div>
+                </form>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ManufactureWaterScheduleGrid")
+                    .KeyExpr("schedule_date")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(selection => selection.Mode(SelectionMode.Multiple))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("point_cd").Caption("포인트코드");
+                        c.Add().DataField("point_nm").Caption("포인트명");
+                        c.Add().DataField("schedule_date").Caption("스케줄일자");
+                        c.Add().DataField("test_no").Caption("시험의뢰번호");
+                        c.Add().DataField("schedule_result").Caption("결과");
+                    })
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

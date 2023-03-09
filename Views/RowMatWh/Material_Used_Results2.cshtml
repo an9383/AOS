@@ -1,0 +1,206 @@
+﻿@model HACCP.Models.RowMatWh.Material_Used_Results2
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Material_Used_Results2";
+}
+@{
+    var Material_Used_Results2Data = @Html.Raw(Json.Encode(ViewBag.Material_Used_Results2Data.Data));
+    var Material_Used_Results2Auth = @Html.Raw(Json.Encode(ViewBag.Material_Used_Results2Auth.Data));
+}
+@{
+    //string[] MUR2_gridkey = { "order_date", "item_cd", "item_nm", "lot_no", "order_qty", "weighing_start_time" };
+    string[] MUR2_gridkey = { "order_no", "process_cd" };
+}
+
+<script id="Material_Used_Results2Js" type="text/javascript">
+    var _Material_Used_Results2Auth;
+    var Material_Used_Results2Data = @Material_Used_Results2Data;
+
+    $(function () {
+        setDatePicker("#Material_Used_Results2 .datepicker");
+
+        if (Material_Used_Results2Data.length <= 0) {
+            $("#Material_Used_Results2Grid").dxDataGrid("instance").option("dataSource", []);
+            $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#Material_Used_Results2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@Material_Used_Results2Data));
+            $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //사용자 권한
+        _Material_Used_Results2Auth = JSON.parse(@Material_Used_Results2Auth)[0];
+
+        if (_Material_Used_Results2Auth.form_query != "Y") {
+            $("#Material_Used_Results2Search").remove();
+        }
+    });
+
+    //조회
+    function Material_Used_Results2Search() {
+        var formData = new FormData($("#Material_Used_Results2_form")[0]);
+        formData.set("S_ORDER_START_DATE", $("#Material_Used_Results2_form input[name=Result2_start_date]").val());
+        formData.set("S_ORDER_END_DATE", $("#Material_Used_Results2_form input[name=Result2_end_date]").val());
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/Material_Used_Results2_S',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#Material_Used_Results2Grid").dxDataGrid("instance").option("dataSource", []);
+                    $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#Material_Used_Results2DetailGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#Material_Used_Results2DetailGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#Material_Used_Results2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+        })
+    }
+
+        //상단 그리드 변경 시, 하단 그리드 이벤트 처리
+        function Material_Used_Results2Focus_changed() {
+
+            if ($("#Material_Used_Results2Grid").dxDataGrid("option", "focusedRowIndex") < 0) {
+                return;
+            }
+
+            var grid = $("#Material_Used_Results2Grid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("Material_Used_Results2Grid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatWh/Material_Used_Results2_S2',
+                data: {
+                    order_no: gridData.order_no,
+                    input_order_id: gridData.input_order_id,
+                    process_cd: gridData.process_cd
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#Material_Used_Results2DetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#Material_Used_Results2DetailGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#Material_Used_Results2DetailGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+            });
+        }
+
+        //재조회시 0번 Focus
+        //function Material_Used_Results2Focus() {
+        //    $("#Material_Used_Results2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        //}
+
+</script>
+
+<div id="Material_Used_Results2" autoresize="Y">
+    @*<h4 class="divTitle">원료 사용 실적</h4>*@
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="Material_Used_Results2_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Result2_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Result2_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!--상단 그리드-->
+        <div class="col-12 pb-1">
+            <div id="Material_Used_Results2Main" class="box mb-1">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Material_Used_Results2Grid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr(MUR2_gridkey)
+                    //.OnContentReady("Material_Used_Results2Focus")
+                    .Height(500)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_date").Caption("지시일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("item_cd").Caption("제조제품번호");
+                        c.Add().DataField("item_nm").Caption("제조제품명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("order_qty").Caption("지시량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("weighing_start_time").Caption("칭량일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                    })
+                    .OnFocusedRowChanged("Material_Used_Results2Focus_changed")
+                )
+            </div>
+        </div>
+
+        <!--하단 그리드-->
+        <div class="col-12">
+            <div id="Material_Used_Results2Detail" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Material_Used_Results2DetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("seq")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("seq").Caption("순번").Width(50);
+                        c.Add().DataField("child_cd").Caption("원료번호");
+                        c.Add().DataField("item_nm").Caption("원료명");
+                        c.Add().DataField("standard_qty").Caption("기준량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("qc_no").Caption("시험번호");
+                        c.Add().DataField("use_qty").Caption("사용량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

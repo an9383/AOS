@@ -1,0 +1,2461 @@
+﻿@*자율점검 조치 결과*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var SelfAuditResult2Data = @Html.Raw(Json.Encode(ViewBag.SelfAuditResult2Data.Data));
+    var SelfAuditResult2Auth = @Html.Raw(Json.Encode(ViewBag.SelfAuditResult2Auth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+    var deptPopupJosn = @Html.Raw(Json.Encode(ViewBag.deptPopupData.Data));
+}
+
+<script type="text/javascript" id="SelfAuditResult2Js">
+
+    var toDay = new Date();
+    var _CRUDGubun = "";
+    var _signGubun = "";
+    var sign_type = "";
+    var sign_seq = "";
+    var ac_commnt_Gubun = "";
+    var a_commnt_Gubun = "";
+
+    $(function () {
+        SelfAuditResult2_contentResize();
+        Result2CommonEditCheck(false);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+
+
+        $("#SelfAuditResult2SearchForm #s_start_date").val(getFormatDate(sDate));
+        $("#SelfAuditResult2SearchForm #s_end_date").val(getFormatDate(toDay));
+
+        $("#SelfAuditResult2SearchForm #auditor_cd").val(sessionStorage.getItem("loginCD"));
+        $("#SelfAuditResult2SearchForm #auditor_nm").val(sessionStorage.getItem("loginNM"));
+
+        $("#SelfAuditResult2SearchForm #audit_step").val(5);
+        $("#SelfAuditResult2SearchForm #audit_status").val(5);
+
+
+
+        if (@Html.Raw(Json.Encode(ViewBag.SelfAuditResult2Data.Data)) != "") {
+            $("#SelfAuditResult2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@SelfAuditResult2Data));
+            $("#SelfAuditResult2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#SelfAuditResult2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            Result2GridSelect(JSON.parse(@SelfAuditResult2Data)[0]);
+        }
+
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+        var columns1 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("Result2AuditorSearch", "사원조회", @empPopupJson, columns, "emp_cd");
+        createPopup("Result2CaOEmpSearch", "지시자조회", @empPopupJson, columns, "emp_cd");
+        createPopup("Result2CaDeptSearch", "부서조회", @deptPopupJosn, columns1, "dept_cd");
+        createPopup("Result2CaDeptEmpSearch", "부서장조회", @empPopupJson, columns, "emp_cd");
+
+
+        // CRUD체크
+        var SelfAuditResult2Auth = JSON.parse(@SelfAuditResult2Auth)[0];
+        if (SelfAuditResult2Auth.form_query != "Y") {
+            $("#SelfAuditResult2Search").remove();
+        }
+        if (SelfAuditResult2Auth.form_insert != "Y") {
+            $("#SelfAuditResult2Input").remove();
+        }
+        if (SelfAuditResult2Auth.form_edit != "Y") {
+            $("#SelfAuditResult2Edit").remove();
+        }
+        if (SelfAuditResult2Auth.form_delete != "Y") {
+            $("#SelfAuditResult2Delete").remove();
+        }
+
+        $("#SelfAuditResult2Excel").dxButton().parent().parent().addClass("display-none");
+        $("#SelfAuditResult2Print").dxButton().parent().parent().addClass("display-none");
+        $("#SelfAuditResult2Preview").dxButton().parent().parent().addClass("display-none");
+
+        setDatePicker("#SelfAuditResult2 .datepicker");
+
+    });
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function Result2CommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#SelfAuditResult2Save").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditResult2Undo").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditResult2Search").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Input").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Edit").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Delete").dxButton().parent().parent().addClass("display-none");
+
+            $("#result2_revision_from #self_audit_ca_o_emp").css("background", "#f6c4db");
+            $("#result2_revision_from #self_audit_ca_dept").css("background", "#f6c4db");
+            $("#result2_revision_from #self_audit_ca_dept_emp").css("background", "#f6c4db");
+
+            $("#SelfAuditResult2Grid").dxDataGrid("option", "disabled", true);
+            $("#SelfAuditResult2DetailGrid").dxDataGrid("option", "disabled", true);
+            $("#SelfAuditResult2FileGrid").dxDataGrid("option", "disabled", true);
+            $("#SelfAuditResult2RevisionGrid").dxDataGrid("option", "disabled", true);
+
+            _CRUDGubun = "IU";
+        }
+        if (!nowEdit) {
+            $("#SelfAuditResult2Save").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Undo").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Search").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditResult2Input").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditResult2Edit").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditResult2Delete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#result2_revision_from #self_audit_ca_o_emp").css("background", "");
+            $("#result2_revision_from #self_audit_ca_dept").css("background", "");
+            $("#result2_revision_from #self_audit_ca_dept_emp").css("background", "");
+
+            $("#SelfAuditResult2Grid").dxDataGrid("option", "disabled", false);
+            $("#SelfAuditResult2DetailGrid").dxDataGrid("option", "disabled", false);
+            $("#SelfAuditResult2FileGrid").dxDataGrid("option", "disabled", false);
+            $("#SelfAuditResult2RevisionGrid").dxDataGrid("option", "disabled", false);
+
+
+            $("#SelfAuditResult2CommentDiv #ac_comment").attr("readonly", true);
+
+            $("#SelfAuditResult2CommentDiv #a_comment").attr("readonly", true);
+
+            ac_commnt_Gubun = "";
+            a_commnt_Gubun = "";
+
+            _CRUDGubun = "";
+        }
+    }
+
+
+    function Result2ChangeBtn(check) {
+
+        if (check) {
+            Result2CommonEditCheck(false);
+        }
+
+        if (!check) {
+            $("#SelfAuditResult2Save").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Undo").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Search").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Input").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Edit").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditResult2Delete").dxButton().parent().parent().addClass("display-none");
+        }
+
+    }
+
+
+    // 조회버튼 기능
+    function SelfAuditResult2Search() {
+        $("#SelfAuditResult2CommentDiv #ac_comment").val("");//검토자 의견
+        $("#SelfAuditResult2CommentDiv #a_comment").val("");//승인자 의견
+
+        gridReset("SelfAuditResult2Grid");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/SelfAuditResult2Search',
+            data: {
+                sDate: $("#SelfAuditResult2SearchForm #s_start_date").val(),
+                eDate: $("#SelfAuditResult2SearchForm #s_end_date").val(),
+                emp_cd: $("#SelfAuditResult2SearchForm #auditor_cd").val(),
+                step: $("#SelfAuditResult2SearchForm #audit_step").val(),
+                status: $("#SelfAuditResult2SearchForm #audit_status").val()
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    gridReset("SelfAuditResult2DetailGrid");
+                    $("#SelfAuditResult2Menu2Div_1 #result2DetailForm")[0].reset();
+
+                    gridReset("SelfAuditResult2RevisionGrid");
+                    $("#SelfAuditResult2Menu2Div_3 #result2_revision_from")[0].reset();
+
+                    gridReset("SelfAuditResult2RevisionResultGrid");
+                    $("#SelfAuditResult2Menu2Div_4 #result2_revision_result_from")[0].reset();
+
+                    gridReset("SelfAuditResult2FileGrid");
+                    gridReset("SelfAuditResult2SignGrid");
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditResult2Grid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditResult2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditResult2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+
+                Result2GridSelect(json[0]);
+            }
+        })
+
+    }
+
+
+    // 입력버튼 기능
+    function SelfAuditResult2Input() {
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("입력할 대상이 없습니다");
+
+            Result2CommonEditCheck(false);
+            return;
+        }
+
+
+        var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 1) {
+            // 점검결과는 수정만 가능 >> 입력버튼 클릭 시 수정버튼 기능으로
+            //Result2ResultInput();
+            alert("점검결과는 조회만 가능합니다.");
+
+            return;
+        }
+        else if (tap_no == 3) {
+            var signGrid = $("#SelfAuditResult2SignGrid").dxDataGrid("instance");
+            if (signGrid.totalCount() > 0) {
+                if (signGrid.getDataSource().items()[1].sign_yn == "1") {
+
+                    Result2CommonEditCheck(false);
+
+                    _signGubun = "Check";
+                    sign_seq = "2";
+                    _CRUDGubun = "Edit";
+
+
+                    var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#SelfAuditResult2SignPopupTemplate"));
+                    popup.show()
+
+                } else {
+                    Result2RevisionInput();
+
+                }
+            }
+
+        } else if (tap_no == 4) {
+            alert("조치결과는 수정만 가능합니다.");
+
+            return;
+        }
+    }
+
+
+    // 수정버튼 기능
+    function SelfAuditResult2Edit() {
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            if (grid.totalCount() <= 0) {
+                alert("수정할 대상이 없습니다");
+
+                Result2CommonEditCheck(false);
+                return;
+            }
+        }
+
+
+        var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 1) {
+            alert("점검결과는 조회만 가능합니다.");
+
+            return;
+
+        }
+        else if (tap_no == 3) {
+            alert("수정조치는 입력만 가능합니다");
+
+            return;
+        } else if (tap_no == 4) {
+            var subGrid = $("#SelfAuditResult2RevisionResultGrid").dxDataGrid("instance");
+
+            if (subGrid.totalCount() <= 0) {
+                alert("수정할 항목이 없습니다");
+
+                return;
+            }
+
+            var signGrid = $("#SelfAuditResult2SignGrid").dxDataGrid("instance");
+            if (signGrid.totalCount() > 0) {
+                if (signGrid.getDataSource().items()[1].sign_yn == "1") {
+
+                    Result2CommonEditCheck(false);
+
+                    _signGubun = "Check";
+                    sign_seq = "2";
+                    _CRUDGubun = "Edit";
+
+
+                    var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#SelfAuditResult2SignPopupTemplate"));
+                    popup.show()
+
+                } else {
+                    Result2RevisionResultEdit();
+
+                }
+            }
+
+        }
+    }
+
+
+    // 취소버튼 기능
+    function SelfAuditResult2Undo() {
+        Result2CommonEditCheck(false);
+
+        var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 3) {
+
+            $("#SelfAuditResult2Menu2Div_3 #result2_revision_from")[0].reset();
+
+            $("#result2_revision_from #ca_o_emp_search_btn").attr("disabled", true);
+            $("#result2_revision_from #ca_dept_search_btn").attr("disabled", true);
+            $("#result2_revision_from #ca_dept_emp_search_btn").attr("disabled", true);
+            $("#result2_revision_from #self_audit_ca_o_contents").attr("readonly", true);
+
+            Result2RevisionSelect({ rowIndex: "0" });
+        } else if (tap_no == 4) {
+            $("#result2_revision_result_from #self_audit_ca_doc_result_contents").attr("readonly", true);
+            $("#result2_revision_result_from #self_audit_ca_result_special_detail").attr("readonly", true);
+
+            Result2RevisionResultSelect({ rowIndex: "0" });
+        }
+    }
+
+
+    // 저장버튼 기능
+    function SelfAuditResult2Save() {
+        var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 3) {
+            Result2RevisionSave();
+        } else if (tap_no == 4) {
+            Result2RevisionResultSave();
+        }
+    }
+
+
+    // 삭제버튼 기능
+    function SelfAuditResult2Delete() {
+        var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 1) {
+            alert("점검결과는 조회만 가능합니다.");
+        } else if (tap_no == 3 || tap_no == 4) {
+
+            var grid = $("#SelfAuditResult2RevisionGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('SelfAuditResult2RevisionGrid', grid.option("focusedRowKey"));
+
+                if (data.self_audit_ca_status != "1") {
+                    alert("수정조치가 진행된 항목은 삭제할 수 없습니다.");
+
+                    return;
+                }
+
+                if (confirm("수정조치 내용을 삭제하시겠습니까?")) {
+
+                    var signGrid = $("#SelfAuditResult2SignGrid").dxDataGrid("instance");
+                    if (signGrid.totalCount() > 0) {
+                        if (signGrid.getDataSource().items()[1].sign_yn == "1") {
+
+                            _signGubun = "Check";
+                            _CRUDGubun = "Delete";
+                            sign_seq = "1";
+                            sign_type = "ac";
+
+                            var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+                            popup.option("contentTemplate", $("#SelfAuditResult2SignPopupTemplate"));
+                            popup.show();
+
+                        } else {
+                            Result2RevisionDelete();
+                        }
+                    }
+
+
+
+                }
+            } else {
+                alert("삭제할 수정조치 항목이 없습니다");
+
+                return;
+            }
+        }
+
+    }
+
+
+    // 프린트버튼 기능
+    function SelfAuditResult2Print() {
+
+    }
+
+
+    // 엑셀버튼 기능
+    function SelfAuditResult2Excel() {
+
+    }
+
+
+    // 미리보기버튼 기능
+    function SelfAuditResult2Preview() {
+
+    }
+
+
+    function SelfAuditResult2_CRUDBtn_Reset(check) {
+        if (check) {
+            $("#SelfAuditResult2Input").dxButton("instance").option("disabled", false);
+            $("#SelfAuditResult2Edit").dxButton("instance").option("disabled", false);
+            $("#SelfAuditResult2Delete").dxButton("instance").option("disabled", false);
+
+        }
+        if (!check) {
+            $("#SelfAuditResult2Input").dxButton("instance").option("disabled", true);
+            $("#SelfAuditResult2Edit").dxButton("instance").option("disabled", true);
+            $("#SelfAuditResult2Delete").dxButton("instance").option("disabled", true);
+
+        }
+    }
+
+    // #endregion
+
+
+    // #region 그리드 선택 시
+    // 메인 그리드 선택 시
+    function Result2GridSelect() {
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        // 서명 정보 조회
+        Result2DisplayESInfo(data);
+
+        // 점검결과 조회
+        Result2DetailSearch(data);
+
+        // 첨부파일 조회
+        Result2FileSearch(data);
+
+        // 수정조치 조회
+        Result2RevisionSearch(data);
+
+        // 조치결과 조회
+        Result2RevisionResultSearch(data);
+
+    }
+
+
+    // 점검결과 그리드 선택 시
+    function Result2DetailSelect() {
+        var mainData;
+        var subData;
+
+        if (arguments[0].rowIndex == null) {
+
+            mainData = arguments[0];
+            subData = arguments[1];
+
+        } else {
+            var mainGrid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (mainGrid.totalCount() > 0) {
+                mainData = getGridRowByKey('SelfAuditResult2Grid', mainGrid.option("focusedRowKey"));
+
+                var subGrid = $("#SelfAuditResult2DetailGrid").dxDataGrid("instance");
+
+                if (subGrid.totalCount() > 0) {
+
+                    subData = getGridRowByKey('SelfAuditResult2DetailGrid', subGrid.option("focusedRowKey"));
+
+                } else {
+                    return;
+                }
+
+            } else {
+                return;
+            }
+
+        }
+
+
+        $("#result2DetailForm #self_audit_plan_object").val(subData.self_audit_plan_object);
+        $("#result2DetailForm #self_audit_result").val(subData.self_audit_result);
+        $("#result2DetailForm #self_audit_date").val(subData.self_audit_date);
+        $("#result2DetailForm #self_audit_status").val(subData.self_audit_status);
+
+        $("#result2DetailForm #self_audit_doc_revision_result").val(mainData.self_audit_doc_revision_result);
+        $("#result2DetailForm #self_audit_result_special_detail").val(mainData.self_audit_result_special_detail);
+    }
+
+
+    // 수정조치 그리드 선택 시
+    function Result2RevisionSelect() {
+        //$("#SelfAuditResult2Menu2Div_3 #result2_revision_from")[0].reset();
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#SelfAuditResult2RevisionGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+                data = getGridRowByKey('SelfAuditResult2RevisionGrid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+        $("#result2_revision_from #self_audit_ca_o_emp").val(data.self_audit_ca_o_emp);
+        $("#result2_revision_from #self_audit_ca_o_emp_nm").val(data.self_audit_ca_o_emp_nm);
+        $("#result2_revision_from #self_audit_ca_o_date").val(data.self_audit_ca_o_date);
+        $("#result2_revision_from #self_audit_ca_dept").val(data.self_audit_ca_dept);
+        $("#result2_revision_from #self_audit_ca_dept_nm").val(data.self_audit_ca_dept_nm);
+        $("#result2_revision_from #self_audit_ca_dept_emp").val(data.self_audit_ca_dept_emp);
+        $("#result2_revision_from #self_audit_ca_dept_emp_nm").val(data.self_audit_ca_dept_emp_nm);
+        $("#result2_revision_from #self_audit_ca_o_contents").val(data.self_audit_ca_o_contents);
+
+        $("#result2_revision_from #self_audit_ca_id").val(data.self_audit_ca_id);
+        $("#result2_revision_from #self_audit_ca_plan_limit").val(data.self_audit_ca_plan_limit);
+
+    }
+
+
+    // 조치결과 그리드 선택 시
+    function Result2RevisionResultSelect() {
+        var mainData;
+        var subData;
+
+        if (arguments[0].rowIndex == null) {
+
+            mainData = arguments[0];
+            subData = arguments[1];
+
+        } else {
+            var mainGrid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (mainGrid.totalCount() > 0) {
+
+                mainData = getGridRowByKey('SelfAuditResult2Grid', mainGrid.option("focusedRowKey"));
+
+                var subGrid = $("#SelfAuditResult2RevisionResultGrid").dxDataGrid("instance");
+
+                if (subGrid.totalCount() > 0) {
+
+                    subData = getGridRowByKey('SelfAuditResult2RevisionResultGrid', subGrid.option("focusedRowKey"));
+
+                } else {
+                    return;
+                }
+
+            } else {
+                return;
+            }
+
+        }
+
+        $("#result2_revision_result_from #self_audit_ca_o_contents_2").val(subData.self_audit_ca_o_contents);
+        $("#result2_revision_result_from #self_audit_ca_contents").val(subData.self_audit_ca_contents);
+        $("#result2_revision_result_from #self_audit_ca_date").val(subData.self_audit_ca_date);
+        $("#result2_revision_result_from #self_audit_ca_status").val(subData.self_audit_ca_status);
+        $("#result2_revision_result_from #self_audit_ca_doc_result_contents").val(mainData.self_audit_ca_doc_result_contents);
+        $("#result2_revision_result_from #self_audit_ca_result_special_detail").val(mainData.self_audit_ca_result_special_detail);
+
+    }
+
+    // #endregion
+
+
+    //#region 점검결과 관련
+    // 점검결과 조회
+    function Result2DetailSearch() {
+        gridReset("SelfAuditResult2DetailGrid");
+        $("#SelfAuditResult2Menu2Div_1 #result2DetailForm")[0].reset();
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2DetailSearch',
+            data: {
+                aduit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditResult2DetailGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditResult2DetailGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditResult2DetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                Result2DetailSelect(data, json[0]);
+            }
+        })
+
+    }
+
+
+    // 점검결과 반려
+    function Result2ReturnStatus() {
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+        var data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+        var detailGrid = $("#SelfAuditResult2DetailGrid").dxDataGrid("instance");
+        var detailData = getGridRowByKey('SelfAuditResult2DetailGrid', detailGrid.option("focusedRowKey"));
+
+
+        //var signGrid = $("#SelfAuditResult2SignGrid").dxDataGrid("instance");
+        //if (signGrid.totalCount() > 0) {
+
+        //    if (signGrid.getDataSource().items()[0].sign_yn == "1" || signGrid.getDataSource().items()[1].sign_yn == "1") {
+        //        alert("자율점검 결과가 승인되어 있는 상태입니다");
+
+        //        return;
+        //    }
+        //}
+
+
+        if (data.self_audit_rc_emp_cd != null || data.self_audit_r_emp_cd != null) {
+                alert("자율점검 결과가 승인되어 있는 상태입니다");
+
+                return;
+        }
+
+
+        if (detailData.self_audit_status == "2") {
+            if (confirm("반려하시겠습니까?")) {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Insp/Result2ReturnStatus',
+                    data: {
+                        audit_year: data.self_audit_year,
+                        audit_no: data.self_audit_no,
+                        audit_dept_cd: detailData.self_audit_dept_cd,
+                        audit_auditor: detailData.self_audit_auditor
+                    },
+                    success: function (result) {
+                        if (result <= 0) {
+
+                            return;
+                        }
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.messege != "") {
+                            alert(json.messege);
+
+                            Result2DetailSearch();
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+                    }
+                })
+            }
+        } else {
+            alert("진행상태를 확인하세요");
+
+            return;
+        }
+
+
+    }
+    //#endregion
+
+
+    // #region 수정조치 관련
+    // 수정조치 조회
+    function Result2RevisionSearch() {
+        gridReset("SelfAuditResult2RevisionGrid");
+        //$("#SelfAuditResult2Menu2Div_3 #result2_revision_from")[0].reset();
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2RevisionSearch',
+            data: {
+                audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditResult2RevisionGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditResult2RevisionGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditResult2RevisionGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                Result2RevisionSelect(json[0]);
+            }
+        })
+
+    }
+
+
+    // 수정조치 입력
+    function Result2RevisionInput() {
+        Result2CommonEditCheck(true);
+
+        $("#SelfAuditResult2Menu2Div_3 #result2_revision_from")[0].reset();
+
+        $("#result2_revision_from #ca_o_emp_search_btn").attr("disabled", false);
+        $("#result2_revision_from #ca_dept_search_btn").attr("disabled", false);
+        $("#result2_revision_from #ca_dept_emp_search_btn").attr("disabled", false);
+        $("#result2_revision_from #self_audit_ca_o_contents").attr("readonly", false);
+
+        $("#result2_revision_from #self_audit_ca_id").val("");
+        $("#result2_revision_from #self_audit_ca_o_date").val(getFormatDate(toDay));
+    }
+
+
+    // 수정조치 저장
+    function Result2RevisionSave() {
+
+        var input_arr = $("#result2_revision_from [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/Result2RevisionSave',
+                data: {
+                    audit_year: data.self_audit_year,
+                    audit_no: data.self_audit_no,
+                    self_audit_ca_o_contents: $("#result2_revision_from #self_audit_ca_o_contents").val(),
+                    self_audit_ca_o_date: $("#result2_revision_from #self_audit_ca_o_date").val(),
+                    self_audit_ca_o_emp: $("#result2_revision_from #self_audit_ca_o_emp").val(),
+                    self_audit_ca_plan_contents: $("#result2_revision_from #self_audit_ca_plan_contents").val(),
+                    self_audit_ca_dept_emp: $("#result2_revision_from #self_audit_ca_dept_emp").val(),
+                    self_audit_ca_plan_limit: $("#result2_revision_from #self_audit_ca_plan_limit").val(),
+                    self_audit_ca_dept: $("#result2_revision_from #self_audit_ca_dept").val(),
+                    self_audit_ca_id: $("#result2_revision_from #self_audit_ca_id").val()
+                },
+                success: function (result) {
+                    if (result <= 0) {
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.messege != "") {
+                        alert(json.messege);
+
+                        Result2CommonEditCheck(false);
+
+                        $("#result2_revision_from #ca_o_emp_search_btn").attr("disabled", true);
+                        $("#result2_revision_from #ca_dept_search_btn").attr("disabled", true);
+                        $("#result2_revision_from #ca_dept_emp_search_btn").attr("disabled", true);
+                        $("#result2_revision_from #self_audit_ca_o_contents").attr("readonly", true);
+
+                        Result2RevisionSearch(data);
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            })
+
+        }
+
+    }
+
+
+    // 수정조치 삭제
+    function Result2RevisionDelete() {
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+        var data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2RevisionDelete',
+            data: {
+                audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no,
+                self_audit_ca_id: $("#result2_revision_from #self_audit_ca_id").val()
+            },
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.messege != "") {
+                    alert(json.messege);
+
+                    Result2CommonEditCheck(false);
+
+                    Result2RevisionSearch(data);
+                } else {
+                    alert("실패하였습니다.");
+                }
+            }
+        })
+    }
+
+    // #endregion 수정조치 관련 END
+
+
+    // #region 조치결과 관련
+    // 조치결과 조회
+    function Result2RevisionResultSearch() {
+        gridReset("SelfAuditResult2RevisionResultGrid");
+        $("#SelfAuditResult2Menu2Div_4 #result2_revision_result_from")[0].reset();
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2RevisionResultSearch',
+            data: {
+                audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditResult2RevisionResultGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditResult2RevisionResultGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditResult2RevisionResultGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                Result2RevisionResultSelect(data, json[0]);
+            }
+        })
+
+    }
+
+
+    // 조치결과 수정
+    function Result2RevisionResultEdit() {
+        Result2CommonEditCheck(true);
+
+        $("#result2_revision_result_from #self_audit_ca_doc_result_contents").attr("readonly", false);
+        $("#result2_revision_result_from #self_audit_ca_result_special_detail").attr("readonly", false);
+
+        $("#result2_revision_result_from #self_audit_ca_doc_result_contents").select();
+
+    }
+
+
+    // 점검결과 저장
+    function Result2RevisionResultSave() {
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/Result2RevisionResultSave',
+                data: {
+                    audit_year: data.self_audit_year,
+                    audit_no: data.self_audit_no,
+                    audit_result: $("#result2_revision_result_from #self_audit_ca_doc_result_contents").val(),
+                    audit_sepcial: $("#result2_revision_result_from #self_audit_ca_result_special_detail").val()
+                },
+                success: function (result) {
+                    if (result <= 0) {
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.messege != "") {
+                        alert(json.messege);
+
+                        Result2CommonEditCheck(false);
+
+                        $("#result2_revision_result_from #self_audit_ca_doc_result_contents").attr("readonly", true);
+                        $("#result2_revision_result_from #self_audit_ca_result_special_detail").attr("readonly", true);
+
+                        SelfAuditResult2Search();
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            })
+
+        }
+
+    }
+
+    // #endregion 조치결과 관련 END
+
+
+    // #region 서명 관련
+    // 서명 정보 조회
+    function Result2DisplayESInfo() {
+        gridReset("SelfAuditResult2SignGrid");
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2DisplayESInfo',
+            data: {
+                audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no,
+                sign_set_cd: "5207"
+            },
+            success: function (result) {
+                var json = JSON.parse(result);
+
+                if (json == "") {
+
+                    return;
+                }
+
+                $("#SelfAuditResult2SignGrid").dxDataGrid("option", "dataSource", json);
+                $("#SelfAuditResult2CommentDiv #ac_comment").val(json[0].sign_comment);
+                $("#SelfAuditResult2CommentDiv #a_comment").val(json[1].sign_comment);
+            }
+        });
+
+    }
+
+
+    function SelfAuditResult2Sign_Check(e) {
+        if (e.data.sign_set_dt_seq == "1") {
+            Result2SignCheck_ac(e.data);
+        } else if (e.data.sign_set_dt_seq == "2") {
+            Result2SignCheck_a(e.data);
+        }
+    }
+
+
+    // 검토자 서명 체크
+    function Result2SignCheck_ac(_data) {
+        _signGubun = "ES";
+        sign_seq = "1";
+        sign_type = "ac";
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("전자서명 대상이 없습니다");
+
+            return;
+        }
+
+        if (_CRUDGubun == "IU") {
+            alert("수정 상태에선 서명할 수 없습니다");
+
+            return;
+        }
+
+        var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+        if (_data.sign_yn == "1") {
+            if (_data.next_sign_yn == "0") {
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                    _signGubun = "DEL_ES";
+                } else {
+                    return;
+                }
+            } else {
+                alert("승인자의 서명이 되어있습니다");
+
+                return;
+            }
+        } else {
+            if (!(data.self_audit_step == "5" && data.self_audit_step_status == "5")) {
+                alert("진행단계와 진행상태를 확인하세요");
+
+                return;
+            }
+
+        }
+
+
+        var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditResult2SignPopupTemplate"));
+        popup.show();
+
+    }
+
+
+    // 승인자 서명 체크
+    function Result2SignCheck_a(_data) {
+        _signGubun = "ES";
+        sign_seq = "2";
+        sign_type = "a";
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("전자서명 대상이 없습니다");
+
+            return;
+        }
+
+        if (_CRUDGubun == "IU") {
+            alert("수정 상태에선 서명할 수 없습니다");
+
+            return;
+        }
+
+        if (_data.prev_sign_yn == "0") {
+            alert("검토자 승인 후 작성이 가능합니다.");
+
+            return;
+        }
+
+        var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+        if (_data.sign_yn == "1") {
+
+            if (data.self_audit_step == "6" && data.self_audit_step_status == "3") {
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                    _signGubun = "DEL_ES";
+                } else {
+                    return;
+                }
+            } else {
+                alert("진행단계와 진행상태를 확인하세요");
+
+                return;
+            }
+
+        } else {
+            if (!(data.self_audit_step == "5" && data.self_audit_step_status == "5")) {
+                alert("진행단계와 진행상태를 확인하세요");
+
+                return;
+            }
+
+        }
+
+        var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditResult2SignPopupTemplate"));
+        popup.show();
+
+    }
+
+
+    // 서명 권한 체크(id, pw)
+    async function SelfAuditResult2SignSubmit() {
+        var data = new FormData($('#SelfAuditResult2SignForm')[0]);
+
+        data.set("gubun", "S");
+
+
+        if (!await SelfAuditResult2ValidationCheck(data)) {
+
+            Result2CommonEditCheck(false);
+
+            var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        if (!await SelfAuditResult2AuthorityCheck($("input[name='emp_cd']").val())) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        await SelfAuditResult2PlanExecuteSign();
+
+    }
+
+
+    function SelfAuditResult2ValidationCheck(data) {
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    $("input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                    $("input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+                    $("input[name='emp_cd']").val(JSON.parse(result)[0].emp_cd);
+
+                    check = true;
+                } else {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+                    check = false;
+                }
+
+                var signGrid = $("#SelfAuditResult2SignGrid").dxDataGrid("instance");
+
+                if ((_signGubun == "DEL_ES" || _CRUDGubun == "Delete") &&
+                    JSON.parse(result)[0].emp_cd != signGrid.getDataSource().items()[sign_seq - 1].sign_emp_cd) {
+
+                    sign_type = "";
+                    alert("서명자의 서명이 필요합니다");
+
+                    check = false;
+
+                    return;
+                }
+            }
+        });
+
+        return check;
+    }
+
+
+    function SelfAuditResult2AuthorityCheck(emp_cd) {
+        var check = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Comm/AuthorityCheck',
+            data: {
+                emp_cd: emp_cd,
+                sign_set_cd: "5207",
+                sign_set_seq: sign_seq
+            },
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    sign_set_seq = "";
+
+                    check = true;
+                }
+            }
+        });
+
+        return check;
+    }
+
+
+    function SelfAuditResult2PlanExecuteSign() {
+        if (_signGubun != "Check") {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+            var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+
+            setTimeout(function () {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Insp/Result2_SignCRUD',
+                    data: {
+                        gubun: _signGubun,
+                        audit_year: data.self_audit_year,
+                        audit_no: data.self_audit_no,
+                        emp_cd: $("input[name='emp_cd']").val(),
+                        type: sign_type
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.messege != "") {
+                            alert(json.messege);
+
+                            SelfAuditResult2Search();
+
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+
+                    }
+                });
+
+                _signGubun = "";
+
+                var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+        }
+        else {
+            setTimeout(function () {
+                var popup = $("#SelfAuditResult2SignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000)
+
+            var tap_no = $("#SelfAuditResult2Menu2Div > div").not('.display-none').attr("id").slice(-1);
+
+            if (_CRUDGubun == "Edit") {
+
+                if (tap_no == 3) {
+                    Result2RevisionInput();
+                } else if (tap_no == 4) {
+                    Result2RevisionResultEdit();
+                }
+            } else if (_CRUDGubun == "Delete") {
+                _CRUDGubun = "";
+
+                if (tap_no == 3) {
+                    Result2RevisionDelete();
+                }
+            }
+        }
+    }
+
+
+    // 검토자 의견 입력/수정
+    function Result2CommentInsert_ac() {
+        if (ac_commnt_Gubun == "") {
+            $("#SelfAuditResult2CommentDiv #ac_comment").attr("readonly", false);
+            $("#SelfAuditResult2CommentDiv #ac_comment").focus();
+
+            ac_commnt_Gubun = "I";
+
+            return;
+        }
+
+        if (ac_commnt_Gubun == "I") {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Insp/Result2CommentInsert_ac',
+                    data: {
+                        self_audit_year: data.self_audit_year,
+                        audit_no: data.self_audit_no,
+                        ac_comment: $("#SelfAuditResult2CommentDiv #ac_comment").val()
+                    },
+                    success: function (result) {
+                        var json = JSON.parse(result)
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.messege != "") {
+                            alert(json.messege);
+
+                            Result2DisplayESInfo();
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+                    }
+                });
+
+                $("#SelfAuditResult2CommentDiv #ac_comment").attr("readonly", true);
+
+                ac_commnt_Gubun = "";
+
+                return;
+            }
+        }
+    }
+
+
+    // 승인자 의견 입력/수정
+    function Result2CommentInsert_a() {
+        if (a_commnt_Gubun == "") {
+            $("#SelfAuditResult2CommentDiv #a_comment").attr("readonly", false);
+            $("#SelfAuditResult2CommentDiv #a_comment").focus();
+
+            a_commnt_Gubun = "I";
+
+            return;
+        }
+
+        if (a_commnt_Gubun == "I") {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Insp/Result2CommentInsert_a',
+                    data: {
+                        self_audit_year: data.self_audit_year,
+                        audit_no: data.self_audit_no,
+                        a_comment: $("#SelfAuditResult2CommentDiv #a_comment").val()
+                    },
+                    success: function (result) {
+                        var json = JSON.parse(result)
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.messege != "") {
+                            alert(json.messege);
+
+                            Result2DisplayESInfo();
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+                    }
+                });
+
+                $("#SelfAuditResult2CommentDiv #a_comment").attr("readonly", true);
+
+                a_commnt_Gubun = "";
+
+                return;
+            }
+        }
+    }
+
+
+    function Result2ClearSignInput() {
+        $('#SelfAuditResult2SignForm')[0].reset();
+        $("input[name='dept_nm']").val("");
+        $("input[name='emp_nm']").val("");
+    }
+    // #endregion
+
+
+    //#region 팝업 관련
+    // 검색용 점검책임자 팝업
+    function Result2AuditorSearch() {
+        $("#SelfAuditResult2 #Result2AuditorSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 검색용 점검책임자 팝업 로우 더블클릭
+    function Result2AuditorSearchRowDblClick(selectedItems) {
+        $("#SelfAuditResult2SearchForm #auditor_cd").val(selectedItems.data.emp_cd);
+        $("#SelfAuditResult2SearchForm #auditor_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditResult2 #Result2AuditorSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 지시자 팝업
+    function CaOEmpSearch() {
+        $("#SelfAuditResult2 #Result2CaOEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 지시자 팝업 로우 더블클릭
+    function Result2CaOEmpSearchRowDblClick(selectedItems) {
+        $("#result2_revision_from #self_audit_ca_o_emp").val(selectedItems.data.emp_cd);
+        $("#result2_revision_from #self_audit_ca_o_emp_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditResult2 #Result2CaOEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 부서 팝업
+    function CaDeptSearch() {
+        $("#SelfAuditResult2 #Result2CaDeptSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 부서 팝업 로우 더블클릭
+    function Result2CaDeptSearchRowDblClick(selectedItems) {
+        $("#result2_revision_from #self_audit_ca_dept").val(selectedItems.data.dept_cd);
+        $("#result2_revision_from #self_audit_ca_dept_nm").val(selectedItems.data.dept_nm);
+
+
+        var popup = $("#SelfAuditResult2 #Result2CaDeptSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 부서장 팝업
+    function CaDeptEmpSearch() {
+        $("#SelfAuditResult2 #Result2CaDeptEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 부서장 팝업 로우 더블클릭
+    function Result2CaDeptEmpSearchRowDblClick(selectedItems) {
+        $("#result2_revision_from #self_audit_ca_dept_emp").val(selectedItems.data.emp_cd);
+        $("#result2_revision_from #self_audit_ca_dept_emp_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditResult2 #Result2CaDeptEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //#endregion
+
+
+    // #region 파일첨부 관련
+    //파일 조회
+    function Result2FileSearch() {
+        gridReset("SelfAuditResult2FileGrid");
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/Result2FileSearch',
+            data: {
+                self_audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditResult2FileGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditResult2FileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditResult2FileGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+
+    // 파일 첨부
+    function Result2FileAdd() {
+
+        $("#SelfAuditResult2Menu2Div_2 #result2_file_data").click();
+    }
+
+
+    $("#SelfAuditResult2Menu2Div_2 #result2_file_data").change(function () {
+        var formData = new FormData($("#SelfAuditResult2Menu2Div_2 #result2_file_insert_form")[0]);
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey("SelfAuditResult2Grid", grid.option("focusedRowKey"));
+
+            formData.append("uploadfile", $("#SelfAuditResult2Menu2Div_2 #result2_file_data")[0].files[0]);
+            formData.append("audit_no", data.self_audit_no);
+            formData.append("audit_step_cd", data.self_audit_step);
+            formData.append("self_audit_year", data.self_audit_year);
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/Result2FileAdd',
+                contentType: false,
+                processData: false,
+                data: formData,
+                success: function (result) {
+
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.messege != "") {
+                        alert(json.messege);
+                        $("#SelfAuditResult2Menu2Div_2 #result2_file_data").val("");
+                        Result2FileSearch(data);
+                    } else {
+                        alert("저장에 실패하였습니다.");
+                    }
+                }
+            });
+        }
+    })
+
+
+    // 파일 삭제
+    function Result2FileDelete() {
+        // 첨부파일 그리드
+        var fileGrid = $("#SelfAuditResult2FileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("삭제할 문서가 없습니다.");
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("SelfAuditResult2FileGrid", fileGrid.option("focusedRowKey"));
+
+        var mainGrid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+        var mainData = getGridRowByKey("SelfAuditResult2Grid", mainGrid.option("focusedRowKey"));
+
+        if (confirm("삭제하시겠습니까?")) {
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/Result2FileDelete',
+                data: {
+                    audit_year: mainData.self_audit_year,
+                    audit_no: mainData.self_audit_no,
+                    audit_file: fileData.self_audit_file,
+                    file_id: fileData.file_id
+                },
+                success: function (result) {
+
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.messege != "") {
+                        alert(json.messege);
+
+                        Result2FileSearch(mainData);
+                    } else {
+                        alert("삭제에 실패하였습니다.");
+                    }
+                }
+            });
+        }
+    }
+
+
+    // 파일열기
+    function Result2FileOpen() {
+        var fileGrid = $("#SelfAuditResult2FileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("첨부된 문서가 없습니다.")
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("SelfAuditResult2FileGrid", fileGrid.option("focusedRowKey"));
+        document.location.assign('/Insp/Result2FileOpen?file_id=' + fileData.file_id);
+
+    }
+
+    // #endregion
+
+
+    // 체크리스트 조회
+    function Result2CheckListSearch() {
+        gridReset("SelfAuditResult2ListGrid");
+
+        var grid = $("#SelfAuditResult2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('SelfAuditResult2Grid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/Result2CheckListSearch',
+                data: {
+                    audit_year: data.self_audit_year,
+                    audit_no: data.self_audit_no
+                },
+                async: false,
+                success: function (result) {
+                    if (result <= 0) {
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#SelfAuditResult2ListGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#SelfAuditResult2ListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#SelfAuditResult2ListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            })
+
+        }
+    }
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.16
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+
+    function SelfAuditResult2_contentResize() {
+        var topPoint1 = document.getElementById("SelfAuditResult2MainDiv").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1 + 1) - 20
+        //console.log(content_max_height);
+
+        document.getElementById("SelfAuditResult2Grid").style.height = content_max_height + "px";
+        document.getElementById("SelfAuditResult2ListGrid").style.height = content_max_height + "px";
+
+    }
+</script>
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+    #SelfAuditResult2CommentDiv div.input-group-append {
+        width: 50px;
+        height: auto !important;
+    }
+
+    #SelfAuditResult2CommentDiv div.input-group-append > button {
+        width: 100%;
+        height: 100%;
+    }
+
+</style>
+
+<div id="SelfAuditResult2">
+    <div id="Result2AuditorSearchPopup"></div>
+    <div id="Result2CaOEmpSearchPopup"></div>
+    <div id="Result2CaDeptSearchPopup"></div>
+    <div id="Result2CaDeptEmpSearchPopup"></div>
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("SelfAuditResult2SignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("Result2ClearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("SelfAuditResult2SignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="SelfAuditResult2SignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-outline-secondary" onclick="SelfAuditResult2SignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <label class="col-3">부서</label>
+        <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+        <label class="col-3">성명</label>
+        <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        <input type="hidden" name="emp_cd" />
+    }
+
+
+    <div id="SelfAuditResult2_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="SelfAuditResult2SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">점검일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">점검책임자</span>
+                        </div>
+                        <input type="text" class="form-control" name="auditor_cd" id="auditor_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="result2_auditor_btn" onclick="Result2AuditorSearch()"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control" name="auditor_nm" id="auditor_nm" readonly />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">단계</span>
+                        </div>
+                        <select class="form-control col-10" name="audit_step" id="audit_step">
+                            @foreach (DataRow row in ((DataTable)ViewBag.auditStep).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control col-8" name="audit_status" id="audit_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.auditStepStatus).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs box mb-0" id="SelfAuditResult2MainDiv">
+        <li class="nav-item">
+            <a class="nav-link active" onclick="menutab('SelfAuditResult2MainDiv', 'SelfAuditResult2MainDiv', 1); Result2ChangeBtn(true);">점검목록</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" onclick="menutab('SelfAuditResult2MainDiv', 'SelfAuditResult2MainDiv', 2); Result2ChangeBtn(false); Result2CheckListSearch();">체크리스트</a>
+        </li>
+    </ul>
+
+    <div id="SelfAuditResult2MainDiv">
+        <div id="SelfAuditResult2MainDiv_1">
+            <div class="row">
+                <div id="SelfAuditResult2LeftMain_1" class="col-8 pr-0">
+                    <div class="box mb-0">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("SelfAuditResult2Grid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(817)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .SearchPanel(s => s.Visible(true))
+                            .KeyExpr("self_audit_no")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("self_audit_no").Caption("계획서 번호").Width("20%");
+                                c.Add().DataField("self_audit_object").Caption("제목").Width("35%");
+                                c.Add().DataField("self_audit_date").Caption("진행시작일").Width("10%");
+                                c.Add().DataField("self_audit_step_nm").Caption("단계").Width("15%");
+                                c.Add().DataField("self_audit_step_status_nm").Caption("상태").Width("10%");
+                                c.Add().DataField("self_audit_director_nm").Caption("점검책임자").Width("10%");
+
+                                c.Add().DataField("self_audit_year").Visible(false);
+                                c.Add().DataField("self_audit_director").Visible(false);
+                                c.Add().DataField("self_audit_step").Visible(false);
+                                c.Add().DataField("self_audit_step_status").Visible(false);
+                                c.Add().DataField("self_audit_doc_revision_result").Visible(false);
+                                c.Add().DataField("self_audit_ca_doc_result_contents").Visible(false);
+                                c.Add().DataField("self_audit_result_special_detail").Visible(false);
+                                c.Add().DataField("self_audit_ca_result_special_detail").Visible(false);
+                                c.Add().DataField("self_audit_purpose_detail").Visible(false);
+                                c.Add().DataField("self_audit_plan_detail").Visible(false);
+                                c.Add().DataField("self_audit_doc_revision_plan").Visible(false);
+                                c.Add().DataField("self_audit_special_detail").Visible(false);
+                                c.Add().DataField("self_audit_w_emp_cd").Visible(false);
+                                c.Add().DataField("self_audit_w_emp_nm").Visible(false);
+                                c.Add().DataField("self_audit_w_date").Visible(false);
+                                c.Add().DataField("self_audit_purpose").Visible(false);
+                                c.Add().DataField("self_audit_purpose_nm").Visible(false);
+                                c.Add().DataField("self_audit_purpose_detail").Visible(false);
+                                c.Add().DataField("self_audit_date_end").Visible(false);
+                                c.Add().DataField("self_audit_date").Visible(false);
+                                c.Add().DataField("self_audit_check_gb").Visible(false);
+                            })
+                            .OnFocusedRowChanged("Result2GridSelect")
+                        )
+                    </div>
+                </div>
+
+                <div id="SelfAuditResult2RightMain_1" class="col-4">
+                    <div class="box mb-0">
+
+                        <div class="divName mb-0">
+                            <p>결과 승인</p>
+                        </div>
+                        <div id="SelfAuditResult2SignDiv">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                .ID("SelfAuditResult2SignGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .HoverStateEnabled(true)
+                                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .FocusedRowEnabled(true)
+                                .Height(137)
+                                .OnCellClick("SelfAuditResult2Sign_Check")
+                                .KeyExpr("sign_set_dt_id")
+                                .Columns(columns =>
+                                {
+                                    columns.Add().DataField("displayfield").Caption("구분");
+                                    columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                                    columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                                    columns.Add().DataField("sign_image").Caption("서명")
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+                            </div>
+                        </div>
+
+
+
+                        <div class="divName mb-0">
+                            <p>검토의견</p>
+                        </div>
+
+                        <div id="SelfAuditResult2CommentDiv" class="m-1">
+                            <div class="input-wrapper">
+                                <label class="col-3">검토자 의견</label>
+                                <div class="input-group col-8">
+                                    <textarea id="ac_comment" name="ac_comment" class="form-control" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly></textarea>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="Result2CommentInsert_btn_ac" onclick="Result2CommentInsert_ac()"><i class="fa fa-pencil-square-o fa-2x"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">승인자 의견</label>
+                                <div class="input-group col-8">
+                                    <textarea id="a_comment" name="a_comment" class="form-control" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly></textarea>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="Result2CommentInsert_btn_a" onclick="Result2CommentInsert_a()"><i class="fa fa-pencil-square-o fa-2x"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                      
+
+                        <ul class="nav nav-tabs" id="SelfAuditResult2Menu2Div">
+                            <li class="nav-item">
+                                <a class="nav-link active" onclick="menutab('SelfAuditResult2Menu2Div', 'SelfAuditResult2Menu2Div', 1); SelfAuditResult2Undo(); Result2DetailSearch(); SelfAuditResult2_CRUDBtn_Reset(true); ">점검결과</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" onclick="menutab('SelfAuditResult2Menu2Div', 'SelfAuditResult2Menu2Div', 2); SelfAuditResult2Undo(); Result2FileSearch(); SelfAuditResult2_CRUDBtn_Reset(false); ">첨부파일</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" onclick="menutab('SelfAuditResult2Menu2Div', 'SelfAuditResult2Menu2Div', 3); SelfAuditResult2Undo(); Result2RevisionSearch(); SelfAuditResult2_CRUDBtn_Reset(true); ">수정 조치</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" onclick="menutab('SelfAuditResult2Menu2Div', 'SelfAuditResult2Menu2Div', 4); SelfAuditResult2Undo(); Result2RevisionResultSearch(); SelfAuditResult2_CRUDBtn_Reset(true); ">조치 결과</a>
+                            </li>
+                        </ul>
+
+                        <div id="SelfAuditResult2Menu2Div">
+                            <div id="SelfAuditResult2Menu2Div_1">
+                                <div id="resultDetailDiv">
+                                    <div>
+                                        @(Html.DevExtreme().DataGrid()
+                                            .ID("SelfAuditResult2DetailGrid")
+                                            .ShowBorders(true)
+                                            .Selection(s => s.Mode(SelectionMode.Single))
+                                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                            .Height(165)
+                                            .ShowColumnLines(true)
+                                            .HoverStateEnabled(true)
+                                            .ColumnAutoWidth(true)
+                                            .KeyExpr("row_num")
+                                            .Columns(c =>
+                                            {
+                                                c.Add().DataField("self_audit_dept_nm").Caption("부서명");
+                                                c.Add().DataField("self_audit_auditor_nm").Caption("점검자");
+                                                c.Add().DataField("self_audit_status_nm").Caption("상태");
+                                                c.Add().Caption("반려").Type(GridCommandColumnType.Buttons).Width("15%")
+                                                    .Buttons(b => {
+                                                        b.Add()
+                                                            .Hint("항목을 계획 상태로 되돌립니다.")
+                                                            .Icon("undo")
+                                                            .OnClick("Result2ReturnStatus");
+                                                    });
+
+                                                c.Add().DataField("self_audit_dept_cd").Visible(false);
+                                                c.Add().DataField("self_audit_auditor").Visible(false);
+                                                c.Add().DataField("self_audit_date").Visible(false);
+                                                c.Add().DataField("self_audit_result").Visible(false);
+                                                c.Add().DataField("self_audit_status").Visible(false);
+                                                c.Add().DataField("self_audit_plan_object").Visible(false);
+                                            })
+                                            .OnFocusedRowChanged("Result2DetailSelect")
+                                        )
+                                    </div>
+
+                                    <form id="result2DetailForm" class="m-1">
+                                        <div class="input-wrapper">
+                                            <label class="col-3">부서별 점검사항</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_plan_object" id="self_audit_plan_object" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">점검결과</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_result" id="self_audit_result" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">점검일 / 상태</label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_date" id="self_audit_date" disabled>
+                                            </div>
+
+                                            <div class="input-group col-4">
+                                                <select class="form-control" name="self_audit_status" id="self_audit_status" disabled>
+                                                    @foreach (DataRow row in ((DataTable)ViewBag.auditResultStatus).Rows)
+                                                    {
+                                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <hr class="mt-2 mb-2" />
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">관련문서 개정결과</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_doc_revision_result" id="self_audit_doc_revision_result" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">특기사항</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_result_special_detail" id="self_audit_result_special_detail" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                </div>
+                            </div>
+
+                            <div class="display-none" id="SelfAuditResult2Menu2Div_2">
+                                <div id="result2_file_info">
+                                    <div align="right" id="btnDiv" class="m-1">
+                                        <button class="btn btn-secondary" id="result2_file_add" onclick="Result2FileAdd()">첨부</button>
+                                        <button class="btn btn-secondary" id="result2_file_open" onclick="Result2FileOpen()">다운로드</button>
+                                        <button class="btn btn-secondary" id="result2_file_delete" onclick="Result2FileDelete()">삭제</button>
+                                        <input type="file" id="result2_file_data" style="display: none;" />
+                                    </div>
+
+                                    <form id="result2_file_insert_form" enctype="multipart/form-data" style="display: none;">
+                                    </form>
+
+                                    <div>
+                                        @(Html.DevExtreme().DataGrid()
+                                            .ID("SelfAuditResult2FileGrid")
+                                            .ShowBorders(true)
+                                            .Selection(s => s.Mode(SelectionMode.Single))
+                                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                            .Height(432)
+                                            .ShowColumnLines(true)
+                                            .HoverStateEnabled(true)
+                                            .ColumnAutoWidth(true)
+                                            .KeyExpr("file_id")
+
+                                            .Columns(c =>
+                                            {
+                                                c.Add().DataField("doc_name").Caption("문서명").Width("55%");
+                                                c.Add().DataField("upload_step_nm").Caption("첨부단계").Width("25%");
+                                                c.Add().DataField("upload_emp_nm").Caption("첨부자").Width("20%");
+                                                c.Add().DataField("self_audit_file").Visible(false);
+                                                c.Add().DataField("file_id").Visible(false);
+                                            })
+                                        )
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <div class="display-none" id="SelfAuditResult2Menu2Div_3">
+                                <div id="revisionGridDiv">
+                                    <div>
+                                        @(Html.DevExtreme().DataGrid()
+                                            .ID("SelfAuditResult2RevisionGrid")
+                                            .ShowBorders(true)
+                                            .Selection(s => s.Mode(SelectionMode.Single))
+                                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                            .Height(262)
+                                            .ShowColumnLines(true)
+                                            .HoverStateEnabled(true)
+                                            .ColumnAutoWidth(true)
+                                            .KeyExpr("self_audit_ca_id")
+                                            .Columns(c =>
+                                            {
+                                                c.Add().DataField("self_audit_ca_o_date").Caption("지시일자");
+                                                c.Add().DataField("self_audit_ca_dept_nm").Caption("부서");
+                                                c.Add().DataField("self_audit_ca_status_nm").Caption("상태").Width("20%");
+
+                                                c.Add().DataField("self_audit_ca_id").Visible(false);
+                                                c.Add().DataField("self_audit_ca_type").Visible(false);
+                                                c.Add().DataField("self_audit_ca_type_nm").Visible(false);
+                                                c.Add().DataField("self_audit_ca_o_emp").Visible(false);
+                                                c.Add().DataField("self_audit_ca_o_emp_nm").Visible(false);
+                                                c.Add().DataField("self_audit_ca_o_contents").Visible(false);
+                                                c.Add().DataField("self_audit_ca_dept").Visible(false);
+                                                c.Add().DataField("self_audit_ca_dept_emp").Visible(false);
+                                                c.Add().DataField("self_audit_ca_dept_emp_nm").Visible(false);
+                                                c.Add().DataField("self_audit_ca_plan_contents").Visible(false);
+                                                c.Add().DataField("self_audit_ca_plan_limit").Visible(false);
+                                                c.Add().DataField("self_audit_ca_status").Visible(false);
+                                                c.Add().DataField("db_check").Visible(false);
+                                            })
+                                            .OnFocusedRowChanged("Result2RevisionSelect")
+                                        )
+                                    </div>
+
+                                    <form id="result2_revision_from" class="m-1">
+                                        <input type="hidden" id="self_audit_ca_id" name="self_audit_ca_id" />
+                                        <input type="hidden" id="self_audit_ca_plan_limit" name="self_audit_ca_plan_limit" />
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">지시자<star>*</star></label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_o_emp" id="self_audit_ca_o_emp" readonly required>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-outline-secondary" type="button" id="ca_o_emp_search_btn" onclick="CaOEmpSearch()" disabled><i class="fa fa-search"></i></button>
+                                                </div>
+                                            </div>
+
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_o_emp_nm" id="self_audit_ca_o_emp_nm" readonly>
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">점검일자<star>*</star></label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control datepicker required" name="self_audit_ca_o_date" id="self_audit_ca_o_date" disabled required />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">부서<star>*</star></label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_dept" id="self_audit_ca_dept" readonly required>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-outline-secondary" type="button" id="ca_dept_search_btn" onclick="CaDeptSearch()" disabled><i class="fa fa-search"></i></button>
+                                                </div>
+                                            </div>
+
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_dept_nm" id="self_audit_ca_dept_nm" readonly>
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">부서장<star>*</star></label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_dept_emp" id="self_audit_ca_dept_emp" readonly required>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-outline-secondary" type="button" id="ca_dept_emp_search_btn" onclick="CaDeptEmpSearch()" disabled><i class="fa fa-search"></i></button>
+                                                </div>
+                                            </div>
+
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_dept_emp_nm" id="self_audit_ca_dept_emp_nm" readonly>
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">지시사항<star>*</star></label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control required" name="self_audit_ca_o_contents" id="self_audit_ca_o_contents" cols="100" rows="5" style="height: 91px; resize: vertical;" readonly required />
+                                            </div>
+                                        </div>
+
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="display-none" id="SelfAuditResult2Menu2Div_4">
+                                <div id="revisionGridDiv">
+                                    <div>
+                                        @(Html.DevExtreme().DataGrid()
+                                            .ID("SelfAuditResult2RevisionResultGrid")
+                                            .ShowBorders(true)
+                                            .Selection(s => s.Mode(SelectionMode.Single))
+                                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                            .Height(165)
+                                            .ShowColumnLines(true)
+                                            .HoverStateEnabled(true)
+                                            .ColumnAutoWidth(true)
+                                            .KeyExpr("self_audit_ca_id")
+                                            .Columns(c =>
+                                            {
+                                                c.Add().DataField("self_audit_ca_date").Caption("지시일자");
+                                                c.Add().DataField("self_audit_ca_dept_nm").Caption("부서");
+                                                c.Add().DataField("self_audit_ca_status_nm").Caption("상태").Width("20%");
+                                            })
+                                            .OnFocusedRowChanged("Result2RevisionResultSelect")
+                                        )
+                                    </div>
+
+                                    <form id="result2_revision_result_from" class="m-1">
+                                        <div class="input-wrapper">
+                                            <label class="col-3">부서별 지시사항</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_ca_o_contents_2" id="self_audit_ca_o_contents_2" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">조치결과</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_ca_contents" id="self_audit_ca_contents" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">조치일자 / 상태</label>
+                                            <div class="input-group col-4">
+                                                <input type="text" class="form-control" name="self_audit_ca_date" id="self_audit_ca_date" disabled>
+                                            </div>
+
+                                            <div class="input-group col-4">
+                                                <select class="form-control" name="self_audit_ca_status" id="self_audit_ca_status" disabled>
+                                                    @foreach (DataRow row in ((DataTable)ViewBag.auditResultCaStatus).Rows)
+                                                    {
+                                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <hr class="mt-2 mb-2" />
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">관련문서 개정결과</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_ca_doc_result_contents" id="self_audit_ca_doc_result_contents" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+
+                                        <div class="input-wrapper">
+                                            <label class="col-3">특기사항</label>
+                                            <div class="input-group col-8">
+                                                <textarea class="form-control" name="self_audit_ca_result_special_detail" id="self_audit_ca_result_special_detail" cols="100" rows="5" style="height: 60px; resize: vertical;" readonly />
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div id="SelfAuditResult2MainDiv_2" class="display-none">
+            <div class="row">
+                <div id="SelfAuditResult2LeftMain_2" class="col-12">
+                    <div class="box mb-0">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("SelfAuditResult2ListGrid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(817)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .KeyExpr("self_audit_check_record_item_no")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("self_audit_check_record_seq").Caption("점검순서");
+                                c.Add().DataField("self_audit_check_record_item").Caption("점검항목").Width("30%");
+                                c.Add().DataField("self_audit_check_record_result").Caption("점검결과").Width("20%");
+                                c.Add().DataField("self_audit_check_record_evaluation_nm").Caption("평가");
+                                c.Add().DataField("self_audit_check_record_opinion").Caption("점검자 의견").Width("20%");
+                                c.Add().DataField("self_audit_check_record_emp_nm").Caption("점검자");
+                                c.Add().DataField("self_audit_check_record_gb_nm").Caption("점검구분").GroupIndex(0);
+                                c.Add().DataField("self_audit_check_record_range_nm").Caption("점검범위").GroupIndex(1);
+                                c.Add().DataField("self_audit_check_record_object").Caption("점검대상").GroupIndex(2);
+
+                                c.Add().DataField("self_audit_check_record_item_no").Visible(false);
+                                c.Add().DataField("self_audit_check_record_gb").Visible(false);
+                                c.Add().DataField("self_audit_check_record_range").Visible(false);
+                                c.Add().DataField("self_audit_check_record_evaluation").Visible(false);
+                                c.Add().DataField("self_audit_check_record_no").Visible(false);
+                                c.Add().DataField("self_audit_check_record_emp_cd").Visible(false);
+                            })
+                        //.OnFocusedRowChanged("StartCheckListSelect")
+                        )
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+

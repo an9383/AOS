@@ -1,0 +1,639 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.Equipment.TroubleConduct.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeStatus = (DataTable)ViewBag.le_repair_status;       //  폼용_상태
+    var codeStatus2 = (DataTable)ViewBag.le_repair_status2;      // 검색용_상태
+    var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+<script id="@(pagePrefix)Js">
+    // 0. 공통변수 설정
+    // 0.1 form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+    // 1. 화면 Load 영역
+    $(function () {
+        // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+"TroubleConduct"+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+"TroubleConduct"+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+"TroubleConduct"+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+        $('input:radio[name=rb_gb][value=@srch.rb_gb]', $('#'+'TroubleConductSearchForm')).prop('checked', true);
+        $('select[name=status]', $('#' + 'TroubleConductSearchForm')).val('@srch.status');
+
+        //1.3. help팝업설정
+        var TroubleConductPopupColumns = {
+            "equip"    : [{ dataField: "equip_cd", caption: "기계코드" }, { dataField: "equip_nm", caption: "기계명" }]
+         ,  "employee":  [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+
+        };
+        createPopup("TroubleConduct" + "Equip", "기계기구조회 조회", @equipPopupData, TroubleConductPopupColumns.equip);
+        createPopup("TroubleConduct" + "Emp", "사원조회", @empPopupData, TroubleConductPopupColumns.employee);
+
+        //1.4 툴바 활성/비활성
+        TroubleConductEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=rb_gb],input[name*=date], select[name=status]', $('#'+'TroubleConductSearchForm')).change(function () {
+            TroubleConductSelect();
+        });
+
+        $('input[name=equipment]+div>button', $('#' + 'TroubleConductSearchForm')).click(function (event) {
+            TroubleConductHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+        $('input[name=equip_cd]+div>button, input[name*=_emp_cd]+div>button', $('#'+'TroubleConductWriteForm')).click(function (event) {
+            TroubleConductHelpPopUpSearch(event);
+        });
+
+        //1.5.3 공통객체
+        //datepicker
+        setDatePicker("#TroubleConduct .datepicker");
+
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var TroubleConductHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function TroubleConductHelpPopUpSearch(e) {
+        TroubleConductHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (TroubleConductHelpPopUpCurInputName)
+        {
+            case "equipment":
+            case "equip_cd":
+                popupId = "TroubleConduct"+"Equip";
+                break;
+            case "notify_emp_cd":
+            case "receipt_emp_cd":
+            case "repair_emp_cd":
+                popupId = "TroubleConduct"+"Emp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#'+popupId+'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function TroubleConductEquipRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (TroubleConductHelpPopUpCurInputName == "equipment") {
+            $("input[name="+TroubleConductHelpPopUpCurInputName+"]",$('#'+'TroubleConductSearchForm')).val(data.equip_nm);
+        } else if (TroubleConductHelpPopUpCurInputName == "equip_cd") {
+            $("input[name=equip_cd]", $('#'+'TroubleConductWriteForm')).val(data.equip_cd);
+            $("input[name=equip_nm]",$('#'+'TroubleConductWriteForm')).val(data.equip_nm);
+        }
+        $("#"+"TroubleConduct"+"EquipPopup").dxPopup("instance").hide();
+    }
+
+    function TroubleConductEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = TroubleConductHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+        if (strIndex > -1) {
+            var inputPrefix = TroubleConductHelpPopUpCurInputName.substring(0, strIndex);
+            var inputSubfix = TroubleConductHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name='+inputPrefix+'_emp_cd]',$('#'+'TroubleConductWriteForm')).val(data.emp_cd);
+            $('input[name='+inputPrefix+'_emp_nm]',$('#'+'TroubleConductWriteForm')).val(data.emp_nm);
+        }
+        $("#"+"TroubleConduct"+"EmpPopup").dxPopup("instance").hide();
+    }
+
+    // 3. 툴바영역
+    //조회
+    function TroubleConductSearch() {
+        TroubleConductSelect();
+    }
+
+    //입력
+    function TroubleConductInput() { }
+
+    //수정
+    function TroubleConductEdit() {
+        TroubleConductEditCheck(true,'U');
+    }
+    //삭제
+    function TroubleConductDelete() { }
+
+    //저장
+    function TroubleConductSave() {
+        if (UtilView.checkValidForm('TroubleConductWriteForm')) {
+            TroubleConductTrx('TroubleConductWriteForm', 'TroubleConductSearchForm');
+        }
+    }
+    //취소
+    function TroubleConductUndo() {
+        TroubleConductEditCheck(false, 'N');
+        TroubleConductFocusChanged();
+    }
+
+    // 프린트
+    function TroubleConductPrint() {
+
+    }
+
+    // 엑셀다운로드
+    function TroubleConductExcel() {
+
+    }
+
+    // 즐겨찾기
+    function TroubleConductFavorite() {
+
+    }
+
+    // 트랜잭션처리
+    function TroubleConductTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+
+        //subGrid 데이터 가져오기
+        /* grid데이터를 읽어와서, 데이터를 저장시에는 아래 주석을 풀어서,
+         * formdata.append 하여 사용한다. 현재, 한풍, 영진, 그린 다 체크해봤지만, subgrid 저장하는 로직이없어 주석처리한다
+
+        aryGridData = TroubleConductSubGridGetData('#' + "TroubleConduct" + 'SubGrid');
+        formData.append("dtos", JSON.stringify(aryGridData));
+        */
+
+        UtilView.dataGridTRX(formData, () => TroubleConductSelect());
+
+
+        //var paramData = formData;
+        //$.ajax({
+        //    type: 'POST',
+        //    url: UtilView.getActionUrl("TRX"),
+        //    data: paramData,
+        //    processData: false,
+        //    contentType: false,
+        //    success: function (result) {
+        //        if (JSON.parse(result[0]).sessionLoss) {
+        //            alert("세션이 만료되었습니다.");
+        //            sessionStorage.clear();
+        //            location.replace("/Comm/Login");
+        //        } else {
+        //            alert(result);
+        //            console.log(result);
+        //        }
+        //        TroubleConductSelect();
+        //    }
+        //});
+    }
+
+    // subGrid Data 가져오기
+    function TroubleConductSubGridGetData(girdId) {
+        // subGrid row 가져오기
+        var gridObj = $(girdId).dxDataGrid('instance');
+
+        if (gridObj.hasEditData()) {
+            alert("[사용부품] 데이터가 저장되지 않았습니다.\m저장버튼을 눌러 주세요!");
+            return;
+            
+        }
+        // 전송 데이터 객체 생성
+        var objData = {};
+        var objDatas = [];
+
+        var objRows = gridObj.getVisibleRows();
+        var objRow;
+        for (var index in objRows) {
+            objRow = objRows[index].data;
+            objData = {
+                "row_status": "I"
+                , "afterservice_no": objRow["afterservice_no"]
+                , "usedpart_cd": objRow["usedpart_cd"]
+                , "part_buy_amt": objRow["part_buy_amt"]
+                , "usedpart_qty": objRow["usedpart_qty"]
+            };
+            objDatas.push(objData);
+        }
+        return objDatas;
+    }
+    // 수정중인지 체크
+    function TroubleConductEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "TroubleConductGrid;TroubleConductSubGrid"
+            , "@(pagePrefix)WriteForm"
+            , "afterservice_no;equip_cd;notify_emp_cd;notify_date;notify_reason"
+        );
+
+        //그리드 수정모드 변경
+        // data그리드 수정이 필요할때 주석을 풀어 구현해준다
+        //TroubleConductEditSubGrid(nowEdit, status);
+    }
+
+
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function TroubleConductSelect() {        
+        // form claear
+        TroubleConductWriteFormClear();
+
+        // edit 해제
+        TroubleConductEditCheck(false, 'N');
+
+        // 메인grid
+        UtilView.dataGridSelect('TroubleConductGrid', 'TroubleConductSearchForm');       
+    }
+
+    // 3.2 Row focus changed
+    function TroubleConductFocusChanged() {
+        var gridId = "TroubleConduct" + "Grid";
+
+        // form claear
+        TroubleConductWriteFormClear();
+        // datagrid 폼바인딩
+        UtilView.setDataGridFormBind(gridId, 'TroubleConductWriteForm');
+
+        // 우측 gird바인딩
+        TroubleConductSelectSub(gridId, "TroubleConduct"+"SubGrid");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+    function TroubleConductWriteFormClear() {
+        $('#' +"TroubleConductWriteForm")[0].reset();
+        $("textarea", $('#' +'TroubleConductWriteForm')).text("");
+        //$("#TroubleConductWriteR2 input[name=newsGubun][value=1]").prop("checked", true);
+    }
+
+    //5.2 조회 :우측 Grid (사용부품)
+    function TroubleConductSelectSub(sGridId, tGridId) {
+        var sGrid = $('#' + sGridId).dxDataGrid("instance");
+        var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+        var data = { afterservice_no: gridData.afterservice_no };
+
+        UtilView.dataGridSimpleSelect(tGridId, data, 'SelectSub');       
+    }
+
+    // 5.3 그리드 수정모드 지정
+    // 데이터 그리드 수정이 필요할때 아래주석을 풀어 사용한다.
+    //function TroubleConductEditSubGrid(nowEdit, status) {
+    //    // editing 속성
+    //    var editingYes = { allowAdding: true, allowDeleting: true, mode: 'batch' };
+    //    //var editingNo = null;     //dev에 버그있는듯...js 초기화하면 속성값 중 allowDeleting이 먹지않음
+    //    var editingNo =  { allowAdding: false, allowDeleting: false, mode: '' };
+
+    //    // 그리드속성 결정
+    //    var editingProp = editingNo;
+
+    //    // 그리드별 설정
+    //    var grid;
+    //    subGrid = "#" + "TroubleConduct" + "SubGrid";
+    //    if ($(subGrid).length >= 1) {
+    //        if (nowEdit) {
+    //            if (status == "I" || status == "U") {
+    //                editingProp = editingYes
+    //            }
+    //        };
+    //        $(subGrid).dxDataGrid("option", "disabled", false);
+    //        $(subGrid).dxDataGrid("option", "editing", editingProp);
+    //    }
+    //}
+
+    //function TroubleConductSubGridInsert() {
+    //    alert('Grid에 Insert 수행');
+    //}
+
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)EquipPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">설비 고장수리 관리</h4>*@
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="rb_gb1" name="rb_gb" />
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb1">신고일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="rb_gb2" name="rb_gb" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb2">처리일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center" name="sdate" value="@srch.sdate">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="edate" value="@srch.edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="status" value="">
+                            @foreach (DataRow row in codeStatus.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설비</span>
+                        </div>
+                        <input type="text" class="form-control" name="equipment">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo");}
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("TroubleConduct" + "Grid")
+                        .KeyExpr("afterservice_no")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("900")
+                        .ShowBorders(true)
+                        //.Selection(s => s.Mode(SelectionMode.Single))
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .AllowColumnResizing(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("afterservice_no").Caption("신고번호");
+                            c.Add().DataField("equip_cd").Caption("설비코드");
+                            c.Add().DataField("equip_nm").Caption("설비명");
+                            c.Add().DataField("notify_date").Caption("신고일자");
+                            c.Add().DataField("repair_date").Caption("처리일자");
+                            c.Add().DataField("repair_status_nm").Caption("처리상태");
+                            c.Add().DataField("repair_price").Caption("처리비용");
+                        })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("TroubleConduct" + "FocusChanged")
+                    )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4"  >
+            <div class="box mb-0">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName">
+                        <p>고장신고</p>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고번호</label>
+                        @*<div class="margin-0-10">*@
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-6" name="afterservice_no">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">설비코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="equip_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="equip_nm" readonly>                            
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="notify_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="notify_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고일자</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-4 datepicker" name="notify_date">
+                        </div>
+
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고사유</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" cols="100" rows="3" name="notify_reason"></textarea>
+                        </div>
+                    </div>
+                    <div class="divName">
+                        <p>처리상태</p>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">접수자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="receipt_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="receipt_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">수리자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="repair_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="repair_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">고장내용</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control col-12" cols="100" rows="3" name="error_content"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">처리방법</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control col-12" cols="100" rows="3" name="repair_method"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">처리일자</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-4 datepicker" name="repair_date">
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">처리상태</label>
+                            <div class="input-group col-4">
+                                <select class=" form-control" name="repair_status_cd" value="">
+                                    @foreach (DataRow row in codeStatus.Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3">수리비용</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control" name="repair_price">
+                            </div>
+                        </div>
+                        <div class="divName mb-0">
+                            <p>사용부품</p>
+                        </div>
+                        <div class="input-wrapper">
+                            @(Html.DevExtreme().DataGrid()
+                            .ID("TroubleConduct" + "SubGrid")
+                            .KeyExpr("usedpart_cd")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("900")
+                            .ShowBorders(true)
+                             //.Selection(s => s.Mode(SelectionMode.Single))
+                             .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            //.OnCellPrepared("NotifyEditableColumn")
+                            //.OnRowInserting("TroubleConduct" + "SubGridInsert")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("usedpart_cd").Caption("부품코드");
+                                c.Add().DataField("usedpart_nm").Caption("부품명");
+                                c.Add().DataField("usedpart_qty").Caption("사용부품수");
+                                c.Add().DataField("usedpart_price").Caption("부품비용");
+                                //c.Add()
+                                //    .DataField("emp_chk")
+                                //    .Caption("발신")
+                                //    .DataType(GridColumnDataType.Boolean)
+                                //    .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                            })
+                        )
+                        </div>
+                        <!-- $Contets Right > GRID -->
+                        @*<div id="@(pagePrefix)Grid3" class="display-none margin-0-10">
+            @(Html.DevExtreme().DataGrid()
+                .ID("NoticeTargetGrid3")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Height(250)
+                .OnCellPrepared("NotifyEditableColumn")
+                .Columns(c =>
+                {
+                    c.Add().DataField("emp_cd").Caption("사원코드");
+                    c.Add().DataField("emp_nm").Caption("사원명");
+                    c.Add().DataField("emp_joinDept").Caption("소속부서");
+                    c.Add()
+                        .DataField("emp_chk")
+                        .Caption("발신")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                })
+            )
+        *@
+        </div>
+
+</form>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+

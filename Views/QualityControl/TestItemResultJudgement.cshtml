@@ -1,0 +1,1853 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    // : 시험성적서 작성
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.QualityControl.TestItemResultJudgement.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    mainGrid = ("".Equals(mainGrid)) ? mainGrid : "null";
+    //itemGrid = ("".Equals(itemGrid)) ? itemGrid : "null";
+    //itemGrid = string.IsNullOrEmpty(itemGrid) ? "[]" : itemGrid;
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeTest_type = (DataTable)ViewBag.le_s_test_type;
+    var codeItem_form_cd = (DataTable)ViewBag.le_item_form_cd;
+
+    var codeLe_s_testitem_type = (DataTable)ViewBag.le_s_testitem_type;
+    //var codeGrid_lookup_gubun = Html.Raw(Json.Encode(ViewBag.grid_lookup_gubun));
+    //var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+
+    var codeHelpType = CodeHelpType.employee;
+
+}
+
+@*시험성적서 작성*@
+
+<script id="@(pagePrefix)Js">
+
+    // hidden grid 데이터 정의
+    var _TestItemResultJudgement_hiddenGridData_Tester;        // 시험자조회
+
+    // 1. 화면 Load 영역
+    $(function () {
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/TestTest',
+            async: false,
+            data: {
+                codeHelpType:  '@codeHelpType',
+                plant: "",
+                defaultCode: ""
+            },
+            success: function (result) {
+                //console.log(result);
+            }
+        });
+
+        // 1.1. 좌측 Grid 바인딩
+        $("#" + "TestItemResultJudgement" + "Grid").dxDataGrid({
+            // [툴바 기본속성정의]
+            dataSource: JSON.parse(@mainGrid),
+            focusedRowEnabled: true,
+            focusedRowIndex: 0,
+
+            // [툴바 이벤트 정의]
+            onFocusedRowChanged: (_) => TestItemResultJudgementFocusChanged(),
+            onCellPrepared: (e) => TestItemResultJudgement_CellPrepared(e),
+            onCellDblClick: (e) => TestItemResultJudgement_CellDblClick(e)
+            // (1) 툴바 save,revert 버튼 제거
+            //onToolbarPreparing: (e) => {
+            //    var toolbarItems = e.toolbarOptions.items;
+            //    $.each(toolbarItems, (_, item) => { if (item.name == "saveButton" || item.name == "revertButton") item.visible = false });
+            //},
+            //onEditorPreparing: (e) => TestItemResultJudgement_EditorPreparing(e),
+            //onRowUpdated:        (e) => TestItemResultJudgement_RowUpdated(e),
+            //onRowUpdating:       (e) => TestItemResultJudgement_RowUpdating(e)
+        });
+
+        // 1.2. 검색 설정
+        $('input:radio[name=re_date_option][value=@srch.re_date_option]', $('#' + "TestItemResultJudgementSearchForm")).prop('checked', true);
+        $('select[name=le_s_test_type]', $('#' + "TestItemResultJudgementSearchForm")).val('@srch.le_s_test_type');
+        $('select[name=ce_gubun_number]', $('#' + "TestItemResultJudgementSearchForm")).val('@srch.ce_gubun_number');
+        $('select[name=re_test_status]', $('#' + "TestItemResultJudgementSearchForm")).val('@srch.re_test_status');
+        $('select[name=le_item_form_cd]', $('#' + "TestItemResultJudgementSearchForm")).val('@srch.le_item_form_cd');
+
+        //1.3. help팝업설정
+        var TestItemResultJudgementPopupColumns = {
+           "employee":  [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+
+        };
+
+        createPopup("TestItemResultJudgement" + "Emp", "사원 조회", @empPopupData, TestItemResultJudgementPopupColumns.employee);
+
+        //1.4 툴바 활성/비활성
+        TestItemResultJudgementEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name*=date]', $('#' + "TestItemResultJudgementSearchForm")).change(function () {
+            TestItemResultJudgementSelect();
+        });
+
+        // 파일관리 설정
+        //  시험지시에대한 첨부파일
+        $($("#TestItemResultJudgementUploadFileBtn")).click(function (event) { TestItemResultJudgementUploadFileBtn(event); });
+        $($("#TestItemResultJudgementDownloadFileBtn")).click(function (event) { TestItemResultJudgementDownloadFileBtn(event); });
+        $($("#TestItemResultJudgementDeleteFileBtn")).click(function (event) { TestItemResultJudgementDeleteFileBtn(event); });
+
+        //1.5.2 form
+
+        //1.5.3 공통객체
+        //datepicker
+        $('#TestItemResultJudgement .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            autoclose: true,
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko",	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+            enableOnReadonly: true
+        });
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var TestItemResultJudgementHelpPopUpCurInputName = "";
+
+
+    // help popup 공통 검색창 오픈
+    function TestItemResultJudgementHelpPopUpSearch(e) {
+        //TestItemResultJudgementHelpPopUpCurInputName = $(e.target).parent().parent().prev().attr('name');
+        TestItemResultJudgementHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (TestItemResultJudgementHelpPopUpCurInputName)
+        {
+            //case "equipment":
+            //case "equip_cd":
+            //    popupId = "TestItemResultJudgement"+"Equip";
+            //    break;
+            case "be_picking_ordered_emp_cd":
+                popupId = "TestItemResultJudgement"+"Emp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    //function TestItemResultJudgementEquipRowDblClick(selectedItems) {
+    //    var data = selectedItems.data;
+
+    //    if (TestItemResultJudgementHelpPopUpCurInputName == "equipment") {
+    //        $("input[name="+TestItemResultJudgementHelpPopUpCurInputName+"]",$('#'+"TestItemResultJudgementSearchForm")).val(data.equip_nm);
+    //    } else if (TestItemResultJudgementHelpPopUpCurInputName == "equip_cd") {
+    //        $("input[name=equip_cd]", $('#'+"TestItemResultJudgementWriteForm")).val(data.equip_cd);
+    //        $("input[name=equip_nm]",$('#'+"TestItemResultJudgementWriteForm")).val(data.equip_nm);
+    //    }
+    //    $("#"+"TestItemResultJudgement"+"EquipPopup").dxPopup("instance").hide();
+    //}
+
+    function TestItemResultJudgementEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = TestItemResultJudgementHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+        if (strIndex > -1) {
+            //var inputPrefix = TestItemResultJudgementHelpPopUpCurInputName.substring(0, strIndex);
+            //var inputSubfix = TestItemResultJudgementHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name=be_picking_ordered_emp_cd]', $('#' + "TestItemResultJudgementWriteForm")).val(data.emp_cd);
+            $('input[name=lb_picking_ordered_emp_nm]', $('#' + "TestItemResultJudgementWriteForm")).val(data.emp_nm);
+        }
+        $("#" + "TestItemResultJudgement" + "EmpPopup").dxPopup("instance").hide();
+
+    }
+
+    // 3. 툴바영역
+    //조회
+    function TestItemResultJudgementSearch() {
+        TestItemResultJudgementSelect();
+    }
+    //입력
+    function TestItemResultJudgementInput() { }
+
+    //수정
+    async function TestItemResultJudgementEdit() {
+        var tabIndex = $("#TestItemResultJudgement" + "TabPanel").dxTabPanel("instance").option("selectedIndex");
+        var objGrid = $('#' + 'TestItemResultJudgementGrid').dxDataGrid('instance');
+        var objGrid2 = $('#' + 'TestItemResultJudgementDetailGrid').dxDataGrid('instance');
+        var rowIndex = objGrid.option("focusedRowIndex");
+
+        if (rowIndex < 0) return;
+
+        var test_status_cd = objGrid.cellValue(rowIndex, "test_status");
+        var test_result_yn = objGrid.cellValue(rowIndex, "test_result_yn");
+
+        //제조사성적미기재 인 경우에는 입력이 되어야 한다함
+        //if (test_status_cd == 9 || test_status_cd == 11 || test_status_cd == 14)
+        if (test_status_cd == "9" || test_status_cd == "11") {
+            switch (test_result_yn) {
+                case "R":
+                    alert("시험이 적합 또는 부적합 승인이 되어 수정할 수 없습니다.!!!");
+                    return;
+                case "Y":
+                    alert("시험이 적합 또는 부적합 승인이 되어 수정할 수 없습니다.!!!");
+                    return;
+                case "N":
+                    alert("시험이 적합 또는 부적합 승인이 되어 수정할 수 없습니다.!!!");
+                    return;
+                    break;
+            }
+        }
+
+        if (tabIndex == 0) {
+            alert("성적 탭을 선택후 수정할 수 있습니다.!!");
+            return;
+        }
+
+        if (objGrid2.option("focusedRowIndex")  < 0) {
+            return;
+        }
+
+        //검체채취 입력 여부를 체크한다.
+        var testcontrol_id = objGrid.cellValue(rowIndex, "testcontrol_id");
+        var chkFlag = await Sampling_check(testcontrol_id);
+        if (chkFlag == "N") {
+            alert("검체 정보 입력 후 판정할 수 있습니다.\n검체채취 담당자에게 문의하세요!");
+            return;
+        }
+
+        TestItemResultJudgementEditCheck(true,'U');
+    }
+    //삭제
+    async function TestItemResultJudgementDelete() {
+        TestItemResultJudgementEditCheck(false, 'D');
+
+        var objGrid = $('#' + 'TestItemResultJudgementGrid').dxDataGrid('instance');
+        var objGrid2 = $('#' + 'TestItemResultJudgementDetailGrid').dxDataGrid('instance');
+        var tabIndex = $("#TestItemResultJudgement" + "TabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        var rowIndex = objGrid.option("focusedRowIndex");
+
+        if (tabIndex == 1)
+            TestItemJudge();
+        else
+            return;
+
+        // 시험진행 상태가 시험중(6) 일때
+        if (objGrid.cellValue(rowIndex, "test_status") == "6") {
+            // 시험항목 중에서 시험자가 입력 되어 있는 지 확인.
+            var check = 0;
+            var objRows = objGrid2.getVisibleRows();
+
+            for (var index in objRows) {
+                if (objGrid2.cellValue(index, "emp_nm"))
+                    check += 1;
+            }
+
+            // 시험자가 입력 된 부분이 없으면 시험지시로 변경
+            if (check == 0) {
+
+                if (!confirm("시험 지시 상태로 변경하시겠습니까?")) {
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/QualityControl/TestItemResultJudgementChangeStatus',
+                    data: {
+                        testcontrol_id: objGrid.option("focusedRowKey")
+                    },
+                    success: function (result) {
+                        TestItemResultJudgementSelect();
+                    }
+                });
+
+                //var testcontrol_id = objGrid.cellValue(rowIndex, "testcontrol_id");
+                //var objDatas = { testcontrol_id: testcontrol_id };
+                // service 호출.
+                //TestItemResultJudgementDetailTrx(objDatas);
+
+                //// 결과 값이 있으면, 지시 상태로 변경한다.
+                //if (message.Length > 0)
+                //{
+                //    gridView1.SetRowCellValue(gridView1.FocusedRowHandle, g1c_test_status, "12");
+                //    gridView1.SetRowCellValue(gridView1.FocusedRowHandle, g1c_test_status_nm, "지시");
+                //}
+            } else {
+
+                if (!confirm("선택된 시험항목의 판정 결과를 취소하시겠습니까?")) {
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/QualityControl/TestItemResultJudgementCancelResult',
+                    data: {
+                        testcontrol_id: objGrid.option("focusedRowKey"),
+                        teststandardmaster_id: objGrid2.option("focusedRowKey")
+                    },
+                    success: function (result) {
+                        TestItemResultJudgementSelect();
+                    }
+                });
+            }
+        }
+    }
+    //저장
+    function TestItemResultJudgementSave() {
+        //var tabIndex = $("#TestItemResultJudgement" + "TabPanel").dxTabPanel("instance").option("selectedIndex",1);
+        //var objGrid = $('#' + 'TestItemResultJudgementDetailGrid').dxDataGrid('instance');
+
+        //항목시험성적관리 저장
+        TestItemResultJudgementSave_1();
+    }
+
+    // 항목시험성적관리 저장
+    async function TestItemResultJudgementSave_1() {
+
+        // 그리드에 저장된 row => 전송객체로 리턴
+        var objGrid;
+        var objDatas, fields, rowFilterFn;
+        objGrid = $('#' + 'TestItemResultJudgementDetailGrid').dxDataGrid('instance');
+        fields = ["row_status", "testcontrol_id", "teststandardmaster_id", "code_type", "select_yn",
+            "testitem_result_value", "testitem_result_yn", "testitem_start_time", "testitem_end_time",
+            "emp_cd", "testitem_result_remark", "testitem_inputtime","testitem_totaltime"];
+
+        // row 저장후, validation 체크
+        afterSaveRowFn = () => {
+            //반복적으로 필수 입력값을 체크한다.
+            var temp0 = "";
+            var temp = "";
+            var testitem_result, testitem_result_yn, testitem_start_date, testitem_end_date;
+
+            var objRows = objGrid.getVisibleRows();
+            var rowStatus;
+            for (var index in objRows) {
+                rowStatus = objGrid.cellValue(index, "row_status");
+
+                // value update
+                objGrid.cellValue(index, "testitem_type", (objGrid.cellValue(index, "testitem_type")) ? "Y" : "N");
+                objGrid.cellValue(index, "select_yn", (objGrid.cellValue(index, "select_yn")) ? "Y" : "N");
+                objGrid.cellValue(index, "testitem_type", (objGrid.cellValue(index, "testitem_type")) ? "Y" : "N");
+
+                if (!UtilView.isEmpty(objGrid.cellValue(index, "testitem_start_time"))){
+                    objGrid.cellValue(index, "testitem_start_time", (objGrid.cellValue(index, "testitem_start_time")).format("yyyy-MM-dd" ));
+                }
+                if (!UtilView.isEmpty(objGrid.cellValue(index, "testitem_end_date"))) {
+                    objGrid.cellValue(index, "testitem_end_date", (objGrid.cellValue(index, "testitem_end_date")).format("yyyy-MM-dd"));
+                }
+
+                //시험항목이 코드가 아니면(그룹이면), 체크할 필요가 없다.
+                if (objGrid.cellValue(index, "code_type") != "C") continue;
+
+                testitem_result = objGrid.cellValue(index, "testitem_result_value");
+                testitem_result_yn = objGrid.cellValue(index, "testitem_result_yn");
+                testitem_start_date = objGrid.cellValue(index, "testitem_start_time");
+                testitem_end_date = objGrid.cellValue(index, "testitem_end_time");
+
+                testitem_result = !UtilView.isEmpty(testitem_result) ? testitem_result : "";
+                testitem_result_yn = !UtilView.isEmpty(testitem_result_yn) ? testitem_result_yn : "";
+                testitem_start_date = !UtilView.isEmpty(testitem_start_date) ? testitem_start_date : "";
+                testitem_end_date = !UtilView.isEmpty(testitem_end_date) ? testitem_end_date : "";
+
+                // 1. 선택에 체크되지 않은 경우, Confirm메세지 표시
+                if ((testitem_result != ""
+                    || testitem_result_yn != ""
+                    || testitem_start_date != ""
+                    || testitem_end_date != "")
+                    && (objGrid.cellValue(index, "select_yn") != true)) {
+                    //필수입력의 컬럼을 입력하고
+                    if (!confirm("[시험결과 저장 확인] 선택 여부를 체크하지 않으면, 입력 또는 변경된 정보가 저장되지 않습니다.이대로 저장하시겠습니까?")) {
+                        return false;
+                    }
+                }
+
+                // 2. 체크가 되어 있지 않으면 체크하지 않는다.
+                if (objGrid.cellValue(index, "select_yn") != true)
+                    continue;
+
+                // 3. 필수 입력 누락의 경우 유효성 오류 표시
+                if (rowStatus == "U")
+                {
+                    if ((testitem_result == "") ||
+                        (testitem_result_yn == "") ||
+                        (testitem_start_date == "") ||
+                        (testitem_end_date == "")) {
+                        alert("시험결과와 적합/부적합을 입력하고 시험일자를 확인하십시요.!!!");
+                        return false;
+                    }
+
+                    //시험 시간이 현재일자보다 후이면 완료할 수 없도록 수정
+                    temp0 = objGrid.cellValue(index, "testitem_start_time");
+                    temp = objGrid.cellValue(index, "testitem_end_time");
+                    var today = new Date().format("yyyy-MM-dd");
+                    if (Date.parse(temp) > Date.parse(today)) {
+                        alert("시험시간이 현재일자 이후이므로 저장할 수 없습니다. 시험시간을 확인해주세요!!!");
+                        return false;
+                    }
+
+                    var nowYear = new Date().getFullYear().toString();
+                    var temp0_year = UtilView.isEmpty(temp0) ? "" : temp0.format("yyyy");
+                    var temp_year = UtilView.isEmpty(temp) ? "" : temp.format("yyyy");
+
+                    if (nowYear != temp0_year || nowYear != temp_year) {
+                        //날짜 입력 오류 체크 : 입력된 날자의 연도가 현재 연도와 다를 경우 경고 메시지
+                        if (!confirm("[시험결과 저장 확인] 시험일자의 연도가 현재 연도가 아닙니다. 이대로 저장하시겠습니까?")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        rowFilterFn = (row, index) => { if (objGrid.cellValue(index, "row_status") == "U") return true };
+        objDatas = await UtilView.dataGridSave2('TestItemResultJudgementDetailGrid', fields, afterSaveRowFn, rowFilterFn);
+        if (!objDatas) return;
+        //console.log(JSON.stringify(objDatas));
+        // service 호출.
+        TestItemResultJudgementDetailTrx(objDatas);
+        TestItemResultJudgementCheckTest();
+        TestItemResultJudgementCheckTestStandard();
+    }
+
+    function TestItemResultJudgementCheckTest() {
+        //참고시험 있는지 체크
+        var reference_ck = false;
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var gridData = grid.option("dataSource");
+
+        for (var i = 0; i < grid.totalCount(); i++)
+        {
+            if (gridData[i].reference_test_yn == "Y")
+            {
+                reference_ck = true;
+                break;
+            }
+            else
+            {
+                reference_ck = false;
+            }
+        }
+
+        var checktest = false;
+
+        var focusedRowData = getGridRowByKey("TestItemResultJudgementGrid", grid.option("focusedRowKey"));
+
+        var testcontrol_id2 = focusedRowData.testcontrol_id;
+        var test_type = focusedRowData.test_type;
+
+        if (reference_ck == true)
+        {
+            $.ajax({
+                type: 'GET',
+                url: '/QualityControl/TestItemResultJudgementCheckTest',
+                data: {
+                    testcontrol_id: testcontrol_id2,
+                    test_type: test_type
+                },
+                success: function (result) {
+                    checktest = result.checktest;
+                }
+            });
+        }
+        else
+        {
+            checktest = false;
+        }
+
+        return checktest;
+    }
+
+    function TestItemResultJudgementCheckTestStandard() {
+        //참고시험 있는지 체크
+        var reference_ck = false;
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var gridData = grid.option("dataSource");
+
+        for (var i = 0; i < grid.totalCount(); i++) {
+            if (gridData[i].test_standard_cd == "014") {
+                reference_ck = true;
+                break;
+            }
+            else {
+                reference_ck = false;
+            }
+        }
+
+        var checktest = false;
+
+        var focusedRowData = getGridRowByKey("TestItemResultJudgementGrid", grid.option("focusedRowKey"));
+
+        var testcontrol_id2 = focusedRowData.testcontrol_id;
+        var test_type = focusedRowData.test_type;
+
+        if (reference_ck == true) {
+            $.ajax({
+                type: 'GET',
+                url: '/QualityControl/TestItemResultJudgementCheckTestStandard',
+                data: {
+                    testcontrol_id: testcontrol_id2,
+                    test_type: test_type
+                },
+                success: function (result) {
+                    checktest = result.checktest;
+                }
+            });
+        }
+        else {
+            checktest = false;
+        }
+
+        return checktest;
+    }
+
+    // 시험 상태 체크
+    function TestItemResultJudgementCheckTestStatus()
+    {
+        var check = false;
+        var objGrid = $('#' + 'TestItemResultJudgementGrid').dxDataGrid('instance');
+
+        // 시험 상태가 지시 일때만 취소가 가능하다.
+        if (objGrid.cellValue(objGrid.option("focusedRowIndex"), "test_status") == "12")
+        {
+            check = true;
+        }
+        return check;
+    }
+
+    //취소
+    function TestItemResultJudgementUndo() {
+        TestItemResultJudgementEditCheck(false, 'N');
+        TestItemResultJudgementFocusChanged();
+    }
+    // 프린트
+    function TestItemResultJudgementPrint() {}
+    // 엑셀다운로드
+    function TestItemResultJudgementExcel() {
+        var m;
+        try { m = UtilView.getCurMenuInfo('menuname'); } catch (e) { m = '이름없음' };
+        m += "_" + '@DateTime.Now.ToShortDateString()';
+        gridExportToExcel("TestItemResultJudgementGrid", m);
+    }
+    // 즐겨찾기
+    function TestItemResultJudgementFavorite() {
+
+    }
+
+    // 트랜잭션처리
+    function TestItemResultJudgementDetailTrx(objDatas) {
+        let jsonData = JSON.stringify(objDatas);
+        //console.log("jsondata :" + jsonData);
+        //return;
+        //var testcontrol_id = $('input[name=le_testcontrol_id]', $('#TestItemResultJudgementSearchForm')).val();
+        //var instruction_no = $('input[name=te_instruction_no]', $('#TestItemResultJudgementWriteForm')).val();
+        //var picking_ordered_emp_cd = $('input[name=be_picking_ordered_emp_cd]', $('#TestItemResultJudgementWriteForm')).val();
+        //var instruction_date = $('input[name=de_instruction_date]', $('#TestItemResultJudgementWriteForm')).val();
+
+        //console.log("[TestItemResultJudgementDetailTrx] :" + testcontrol_id + "," + instruction_no + "," + picking_ordered_emp_cd + "," + instruction_date);
+        //return;
+        var paramData = {
+            dto: jsonData
+            //testcontrol_id: testcontrol_id,
+            //instruction_no: instruction_no,
+            //picking_ordered_emp_cd: picking_ordered_emp_cd,
+            //instruction_date: instruction_date
+        };
+
+        //console.log(paramData);
+        //return;
+        testcontrol_id = $('input[name=testcontrol_id]', $('#' + "TestItemResultJudgementSearchForm")).val();
+        UtilView.dataGridSaveTRX2(paramData, 'MultiTrx', () => TestItemResultJudgementDetailItem(testcontrol_id));
+    }
+    // 수정중인지 체크
+    function TestItemResultJudgementEditCheck(nowEdit, status) {
+        var programId = UtilView.getCurMenuInfo("pid");
+        //console.log("nowEidt 호출!!");
+        // (공통) 툴바 활성/비활성
+        UtilView.setActiveElementToolbar(nowEdit, "@(pagePrefix)Toolbar", programId);
+
+        // (공통) 그리드 활성/비활성
+        //var editing;
+
+        var editing = { allowUpdating: nowEdit, mode: 'batch' }
+        var index = $("#TestItemResultJudgementTabPanel").dxTabPanel("option", "selectedIndex");
+
+        switch (index) {
+            case 0:
+                UtilView.setActiveElementGrids2(false, editing, "TestItemResultJudgementGrid");
+                break;
+
+            case 1:
+                UtilView.setActiveElementGrids2(false, editing, "TestItemResultJudgementDetailGrid");
+                break;
+        }
+
+        //UtilView.setActiveElementGrids2(false, editing, "TestItemResultJudgementGrid");
+        //if ($('#TestItemResultJudgementDetailGrid').length > 0) {
+        //    UtilView.setActiveElementGrids2(false, editing, "TestItemResultJudgementDetailGrid");
+        //}
+
+        // (공통) 화면영역별 element 활성/비활성처리
+        @*UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "TestItemResultJudgementGrid"
+            , "@(pagePrefix)WriteForm"
+            , "afterservice_no;equip_cd;TestItemResultJudgement_emp_nm"
+        );*@
+
+    }
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function TestItemResultJudgementSelect() {
+        // form claear
+        //TestItemResultJudgementWriteFormClear();
+        // edit 해제
+        TestItemResultJudgementEditCheck(false, 'N');
+
+        TestItemResultJudgementChangeTab();
+
+    }
+
+
+    // 3.2 Row focus changed
+    function TestItemResultJudgementFocusChanged() {
+        TestItemResultJudgementSelectFileList();
+        // data 객체, 폼에 바인딩
+        //UtilView.setDataGridFormBind("TestItemResultJudgement" + "Grid", "TestItemResultJudgement" + "WriteForm");
+
+        // 우측 gird바인딩
+        //TestItemResultJudgementSelectSub(gridId, "TestItemResultJudgement" + "SubGrid");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+    function TestItemResultJudgementWriteFormClear() {
+        //$('#'+"TestItemResultJudgementWriteForm")[0].reset();
+        //$("textarea",$('#'+"TestItemResultJudgementWriteForm")).text("");
+    }
+
+    async function Sampling_check(testcontrol_id) {
+
+        var objParam = { testcontrol_id: testcontrol_id };
+        const result = await $.ajax({
+            type: 'POST',
+            url: '/QualityControl/TestItemResultJudgementSamplingCheck',
+            data: {
+                dto: JSON.stringify(objParam)
+            }
+        });
+        return result;
+    }
+    // 항목시점 성적 관리 조회
+    function TestItemResultJudgementDetailItem(testcontrol_id) {
+        // tab grid 바인딩
+        $('input[name=Gubun]', $('#' + "TestItemResultJudgementSearchForm")).val('S2');
+        $('input[name=testcontrol_id]', $('#' + "TestItemResultJudgementSearchForm")).val(testcontrol_id);
+
+        // edit 해제
+        TestItemResultJudgementEditCheck(false, 'N');
+        $('form[name=TestItemResultJudgementForm]')[0].reset();
+
+        UtilView.dataGridSelect('TestItemResultJudgementDetail' + 'Grid', 'TestItemResultJudgement' + 'SearchForm', null,
+            function (result) {
+                if (result == "") return;
+                objResult = JSON.parse(result);
+
+                if (objResult.length > 0) {
+                    // data 객체, 폼에 바인딩
+                    //UtilView.setDataGridFormBind("TestItemResultJudgementDetailGrid", "TestItemResultJudgementForm");
+                    $('input[name=item_nm]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].item_nm);
+                    $('input[name=item_cd]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].item_cd);
+                    $('input[name=item_packunit]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].item_packunit);
+                    $('input[name=start_qty]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].start_qty);
+                    $('input[name=test_no]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].test_no);
+                    $('input[name=instruction_date]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].instruction_date);
+                    $('input[name=picking_date]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].picking_date);
+                    $('input[name=gubun_nm]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].test_standard_nm);
+                    $('input[name=request_date]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].request_date);
+                    $('input[name=start_no]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].start_no);
+                    $('input[name=start_date]', $('form[name=TestItemResultJudgementForm]')).val(objResult[0].start_date);
+                }
+            }
+        );
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid ($기능입력$)
+    //function TestItemResultJudgementSelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { afterservice_no: gridData.afterservice_no };
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: UtilView.getActionUrl('SelectSub'),
+    //        data: data,
+    //        success: function (result) {
+    //            if (result[0] == "") clear();
+    //            else {
+    //                var jsonResult = JSON.parse(result);
+    //                $('#' + tGridId).dxDataGrid("option", "dataSource", jsonResult);
+    //            }
+    //        }
+    //    })
+    //}
+
+    //#region 파일관리 영역
+    // 파일목록만 조회
+    function TestItemResultJudgementSelectFileList() {
+        var grid = $("#TestItemResultJudgementGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemResultJudgementGrid", grid.option("focusedRowKey"));
+
+        //var testcontrol_id = $("#TestItemResultJudgementWriteForm input[name=testcontrol_id]").val();
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/TestItemResultJudgementSelectFile',
+            data: {
+                testcontrol_id: gridData.testcontrol_id
+            },
+            success: function (result) {
+                try {
+                    var json = JSON.parse(result);
+                    $("#TestItemResultJudgementFileGrid").dxDataGrid("option", "dataSource", json);
+                } catch (e) {
+                    $("#TestItemResultJudgementFileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 파일 업로드 버튼
+    function TestItemResultJudgementUploadFileBtn(event) {
+
+        if (!TestItemResultJudgementCheckEditible()) {
+            return;
+        }
+
+        var grid = $("#TestItemResultJudgementGrid").dxDataGrid("instance");
+        if (grid.option("focusedRowKey")) {
+            var fileUploader = $('#TestItemResultJudgementFileUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        } else {
+            alert("첨부할 항목을 선택하십시오!")
+        }
+    }
+
+    // 파일 업로드
+    function TestItemResultJudgementUploadFile(e) {
+        var grid = $("#TestItemResultJudgementGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemResultJudgementGrid", grid.option("focusedRowKey"));
+
+        var name = e.component.option("name");
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "testcontrol_id", gridData.testcontrol_id);
+        url = updateQueryStringParameter(url, "name", name);
+        e.component.option("uploadUrl", url);
+    }
+
+    // 파일 다운로드
+    function TestItemResultJudgementDownloadFileBtn(e) {
+        var grid = $("#TestItemResultJudgementFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemResultJudgementFileGrid", grid.option("focusedRowKey"));
+
+        var fileId = gridData.file_id;
+
+        if (fileId != "") {
+            var url = "";
+            url = updateQueryStringParameter(url, "testcontrol_id", gridData.testcontrol_id);
+            url = updateQueryStringParameter(url, "file_id", gridData.file_id);
+            document.location.assign('/QualityControl/TestItemResultJudgementDownloadFile' + url);
+        }
+    }
+
+    // 파일 삭제
+    function TestItemResultJudgementDeleteFileBtn() {
+
+        if (!confirm("선택한 파일을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        if (!TestItemResultJudgementCheckEditible()) {
+            return;
+        }
+
+        var grid = $("#TestItemResultJudgementFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemResultJudgementFileGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/TestItemResultJudgementDeleteFile',
+            data: {
+                testcontrol_id: gridData.testcontrol_id,
+                file_id: gridData.file_id
+            },
+            success: function (result) {
+                alert("삭제하였습니다.");
+                TestItemResultJudgementSelectFileList();
+            }
+        });
+    }
+
+    //#endregion
+
+    // NEW 페이지함수 > 1. 전체선택/해제
+    function TestItemResultJudgementGridCheckBoxToggle(gridId, dataField, chkFlag) {
+        var gridObj = $('#' + gridId).dxDataGrid('instance');
+
+        if (!gridObj.option("editing.allowUpdating")) {
+            alert("수정상태에서만 사용할수 있습니다!");
+            return;
+        }
+        var objRows = gridObj.getVisibleRows();
+        for (var index in objRows) {
+            gridObj.cellValue(index, dataField, chkFlag);
+        }
+    }
+
+    // 탭 변경
+    function TestItemResultJudgementChangeTab() {
+
+        var tabIndex = $("#TestItemResultJudgement"+"TabPanel").dxTabPanel("instance").option("selectedIndex");
+        var gridObj = $('#' + "TestItemResultJudgementGrid").dxDataGrid('instance');
+        var testControl_id;
+
+        if (tabIndex == 0) {
+            $('input[name=Gubun]', $('#' + "TestItemResultJudgementSearchForm")).val('S');
+            UtilView.dataGridSelect('TestItemResultJudgement' + 'Grid', 'TestItemResultJudgement' + 'SearchForm');
+        } else if (tabIndex == 1) {
+            var i = gridObj.option("focusedRowIndex");
+            if (i >= 0) {
+                testControl_id = gridObj.cellValue(i, "testcontrol_id");
+                TestItemResultJudgementDetailItem(testControl_id);
+            } else {
+                alert("접수현황을 먼저 조회하십시오.!!!");
+                tabIndex = 0;
+            }
+
+        }
+
+    }
+
+    // 상단 탭매뉴 랜더링
+    function TestItemResultJudgementonItemRenderedTab(e) {
+        // 시험 지시 활성화
+        if (e.itemIndex == 1) {
+            // 검색설정
+            $('input[name*=_emp_cd]+div>button', $('#' + "TestItemResultJudgementWriteForm")).click(function (event) {
+                TestItemResultJudgementHelpPopUpSearch(event);
+            });
+
+            //$('input[class*=srch-hangul]').click(function () {
+            //    //alert($(this).attr('data-value'));
+            //    TestItemResultJudgementSearchPosition($(this).attr('data-value'));
+            //});
+
+            // 항목조정 버튼(추가,하위추가,삽입) 링크
+            $('input[name*=simpleButton]', $('#' + 'TestItemResultJudgementAddForm')).click(function (e) {
+                //console.log("simplbe button 동작");
+                //return;
+                // 서명check (차후에, 공통처리)
+                //if (GetLastSignEmpCheck() == false) {
+                //    MessageBox.Show("최근 서명자만 작업할 수 있습니다.!!!");
+                //    return;
+                //}
+                var itemGbn = null;
+                switch (e.target.name) {
+                    case "simpleButton1":
+                        itemGbn = "A";
+                        break;
+                    case "simpleButton2":
+                        itemGbn = "B";
+                        break;
+                    case "simpleButton3":
+                        itemGbn = "C";
+                        break;
+                }
+                Add_Testitem(itemGbn);
+            });
+
+            $("#" + "TestItemResultJudgementDetail" + "Grid").dxDataGrid({
+
+            // (1) 툴바 save,revert 버튼 제거
+            onToolbarPreparing: (e) => {
+                var toolbarItems = e.toolbarOptions.items;
+                $.each(toolbarItems, (_, item) => { if (item.name == "saveButton" || item.name == "revertButton") item.visible = false });
+            },
+             onEditorPreparing: (e) => TestItemResultJudgementDetailGrid_EditorPreparing(e),
+             onRowUpdated: (e) =>      TestItemResultJudgementDetailGrid_RowUpdated(e),
+            //onRowUpdating:       (e) => TestItemResultJudgement_RowUpdating(e)
+            });
+
+            // 항목조정 조회
+            //TestItemResultJudgementItemMasterSelect();
+
+            // 시험자 조회
+            //TestItemResultJudgementTesterSelect();
+        }
+    }
+
+    function TestItemJudge() {
+        //시험항목이 코드인 경우에만 판정이 필요하다. (그룹인 경우는 단순히 보여주기 위한 용도다.
+        return;
+    }
+
+    // NEW REV > 1. 그리드 이벤트핸들러지정
+    function TestItemResultJudgement_CellPrepared(e) {
+
+        // eobj 변수 설정
+        var dataField = e.column.dataField;
+        var rowType = e.rowType;
+        var cellElement = e.cellElement;
+
+        // css색상지정
+        var objColor_1 = {
+            "1": { "background-color": "LightCyan", "color": "black" },             //원료시험
+            "2": { "background-color": "Khaki", "color": "black" },                 //자재
+            "3": { "background-color": "PaleGreen", "color": "black" },             //반제품
+            "4": { "background-color": "LightSalmon", "color": "black" },           //용출시험
+            "5": { "background-color": "LightGoldenrodYellow", "color": "black" },  //재포장
+            "6": { "background-color": "NavajoWhite", "color": "black" },           //포장
+            "7": { "background-color": "Gray", "color": "black" },                  //출하
+            "8": { "background-color": "DarkCyan", "color": "black" },              //정제수
+            "9": { "background-color": "SkyBlue", "color": "black" }                //청정도
+        };
+        var objColor_2 = {
+            "0": { "background-color": "White", "color": "black" },                 // 상태 : "---"
+            "1": { "background-color": "Silver", "color": "black" },                // 상태 : "의뢰"
+            "2": { "background-color": "Khaki", "color": "black" },                 // 상태 : "접수"
+            "3": { "background-color": "NavajoWhite", "color": "black" },           // 상태 : "채취지시"
+            "4": { "background-color": "Gray", "color": "black" },                  // 상태 : "채취중"
+            "5": { "background-color": "PaleTurquoise", "color": "black" },         // 상태 : "검체채취"
+            "6": { "background-color": "Thistle", "color": "black" },               // 상태 : "시험중"
+            "7": { "background-color": "CornflowerBlue", "color": "black" },        // 상태 : "시험완료"
+            "8": { "background-color": "PaleGreen", "color": "black" },             // 상태 : "확인"
+            "9": { "background-color": "", "color": "" },                           // 상태 : "승인"
+            "10": { "background-color": "Tan", "color": "black" },                  // 상태 : "통보"
+            "11": { "background-color": "LightSlateGray", "color": "black" },       // 상태 : "출하"
+            "12": { "background-color": "Pink", "color": "black" },                 // 상태 : "일정"
+            "13": { "background-color": "Silver", "color": "black" },               // 상태 : "의뢰취소"
+            "14": { "background-color": "Goldenrod", "color": "black" },            // 상태 : "미생물시험완료"
+        };
+
+        // cell 색상지정
+        var printField, valueField, fieldValue;
+        var fieldColorCss;
+        var tmpFieldValue;
+
+        if (rowType != 'data') return;
+        switch (dataField) {
+            case "test_type_nm":
+                printField = dataField;
+                valueField = 'test_type';
+                fieldValue = e.data[valueField];
+                fieldColorCss = objColor_1;
+                break;
+            case "test_status_nm":
+                printField = dataField;
+                valueField = 'test_status';
+                fieldValue = e.data[valueField];
+                fieldColorCss = objColor_2;
+                // 조건추가시사용..
+                tmpFieldValue = e.data['test_result_yn'];
+                break;
+        }
+
+        // 색상지정
+        if (!UtilView.isEmpty(printField)) {
+            var cssConfig = fieldColorCss[fieldValue];
+            // 예외설정
+            if (printField == "test_status_nm") {
+                if (fieldValue == '9') {
+                    if (tmpFieldValue == 'Y') { //적합판정일경우
+                        cssConfig = { "background-color": "LimeGreen", "color": "black" };
+                    } else if (tmpFieldValue == 'N') { //부적합 판정일경우
+                        cssConfig = { "background-color": "LightCoral", "color": "black" };
+                    } else if (tmpFieldValue == 'C') {  //조건부 적합일 경우
+                        cssConfig = { "background-color": "GreenYellow", "color": "black" };
+                    }
+                } else if (fieldValue == '13') {
+                    cssConfig['color'] = 'Crimson';
+                }
+            }
+
+            if (cssConfig != null)  // DB에 쓰레기값이 있어처리
+                cellElement.css(cssConfig);
+        }
+    }
+
+    function TestItemResultJudgement_EditorPreparing(e) {
+        // 수정대상필드
+        editableFields = ["select_yn", "test_result_value0", "bigo"];
+        if (e.parentType === "dataRow") {
+            // 미수정대상 필드
+            if (editableFields.indexOf(e.dataField) == -1) {
+                e.editorOptions.disabled = true;
+            }
+            // 수정대상 필드
+            else {
+                if (e.dataField == "select_yn") {
+                    const defaultValueChangeHandler = e.editorOptions.onValueChanged;
+                    e.editorOptions.onValueChanged = function (args) { // Override the default handler
+                        if (e.value) {
+                            alert("삭제 버튼을 클릭하여 접수 취소를 진행하십시오");
+                            e.setValue(true);
+                            return;
+                        } else {
+                            var temp_date = Date.parse("2015-06-04");
+                            var temp_request_date = Date.parse(e.row.data["request_date"]);
+                            var temp_test_status = e.row.data["test_status"];
+
+                            //console.log(temp_test_status);
+                            if ( (temp_request_date >= temp_date) && (temp_test_status=="1") ) {
+                                alert("시험 단계 간소화로 해당 데이터는\n 시험지시 화면에서 진행되어야 합니다.");
+                                e.setValue(false);
+                                return;
+                                //e.setValue(false);
+                            }
+
+                            // 시험의뢰가 진행 되지 않으면, 접수 할 수 없도록 수정.
+                            if (temp_test_status == "0") {
+                                alert("시험접수는 의뢰상태에서만 가능합니다.");
+                                e.setValue(false);
+                                return;
+                            }
+                        }
+                        defaultValueChangeHandler(args);
+                    }
+                }
+
+            }
+        }
+    }
+    function TestItemResultJudgement_RowUpdating(row) {
+        //console.log(row.data);
+
+    }
+
+    function TestItemResultJudgement_RowUpdated(e) {
+        //var objGrid = $('#' + gridId).dxDataGrid('instance');
+        //console.log(e);
+        var objGrid = e.component;
+        var objRow = e.data;
+        //console.log("row update 되었음: " + e.key);
+        //console.log("grid teset :" + objGrid.getRowIndexByKey(e.key));
+
+        //objGrid.cellValue(e.key, "row_status", "U");
+    }
+
+    function TestItemResultJudgement_CellDblClick(e) {
+        var testcontrol_id = e.data.testcontrol_id;
+        //console.log(e.data);
+        // tab이동
+        $("#TestItemResultJudgement" + "TabPanel").dxTabPanel("instance").option("selectedIndex",1);
+
+        // tab 폼 자동입력
+        //$('input[lb_test_type_nm]', '#TestItemResultJudgementDetailForm').val();
+        //UtilView.setDataGridFormBind('TestItemResultJudgementGrid', 'TestItemResultJudgementForm');
+
+        // tab grid 바인딩
+        //$('input[name=Gubun]', $('#' + "TestItemResultJudgementSearchForm")).val('S2');
+        //$('input[name=le_testcontrol_id]', $('#' + "TestItemResultJudgementSearchForm")).val(testcontrol_id);
+
+        //UtilView.dataGridSelect('TestItemResultJudgementDetail' + 'Grid', 'TestItemResultJudgement' + 'SearchForm', null, null);
+        TestItemResultJudgementDetailItem(testcontrol_id);
+    }
+
+    //*******************************************************************
+    // TestItemResultJudgementDetailGrid 시작
+    //*******************************************************************
+    function TestItemResultJudgementDetailGrid_EditorPreparing(e) {
+        // 수정대상필드
+
+        editableFields = ["select_yn", "testitem_result_value", "testitem_result_yn", "testitem_start_time", "testitem_end_time", "testitem_inputtime","testitem_result_remark" ];
+        if (e.parentType === "dataRow") {
+            // 미수정대상 필드
+            if (editableFields.indexOf(e.dataField) == -1) {
+                e.editorOptions.readOnly = true;
+            }
+            // 수정대상 필드
+            else {
+                if (e.dataField == "testitem_result_value") {
+                    e.editorOptions.onValueChanged = args => {
+
+
+                        var testitem_result = args.value;
+
+                        if (testitem_result == "")
+                            return;
+
+                        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+                        var gridData = getGridRowByKey("TestItemResultJudgementDetailGrid", e.row.key);
+
+                        var testresult_data_type_nm = gridData.testresult_data_type_nm;
+
+                        e.setValue(args.value);
+
+                        var today = "@DateTime.Now.ToShortDateString()";
+
+                        if (testresult_data_type_nm != "") {
+
+                            testitem_result = testitem_result.replaceAll(",", "");
+                            testitem_result = testitem_result.replaceAll("<", "");
+                            testitem_result = testitem_result.replaceAll(">", "");
+                            testitem_result = testitem_result.replaceAll("=", "");
+                            testitem_result = testitem_result.trim();
+
+                            if (testitem_result.includes("^")) {
+                                if (testitem_result.includes("*"))
+                                    testitem_result = testitem_result.replaceAll("*", "x");
+
+                                testitem_result = testitem_result.toLowerCase();
+
+                                var strArray = testitem_result.split('x', '^');
+
+                                var i = parseFloat(strArray[0]);
+                                var k = parseInt(strArray[1]);
+                                var j = parseInt(strArray[2]);
+
+                                var result = Math.Pow(k, j);
+
+                                var final_result = i * result;
+                                testitem_result = final_result.toString();
+
+                            }
+
+                            if (isNaN(testitem_result) == true) {
+                                alert("시험결과에 숫자 형식을 입력하십시요.");
+
+                                grid.cellValue(e.row.rowIndex, "testitem_start_time", today);
+                                grid.cellValue(e.row.rowIndex, "testitem_end_time", today);
+                                grid.cellValue(e.row.rowIndex, "testitem_emp_cd", sessionStorage.getItem("loginCD"));
+                                grid.cellValue(e.row.rowIndex, "emp_cd", sessionStorage.getItem("loginCD"));
+                                grid.cellValue(e.row.rowIndex, "emp_nm", sessionStorage.getItem("loginNM"));
+
+                                SetReject(e);
+
+                                return;
+                            }
+
+                            TestItemCheckResult(testitem_result, e);
+
+                        } else {
+
+                            SetRelease(e);
+
+                        }
+
+                        if (gridData.testitem_type == "Y") {
+                            grid.cellValue(e.row.rowIndex, "testitem_start_time", $("#TestItemResultJudgementForm input[name=picking_date]").val());
+                        }
+                        else {
+                            grid.cellValue(e.row.rowIndex, "testitem_start_time", today);
+                        }
+
+                        grid.cellValue(e.row.rowIndex, "testitem_end_time", today);
+                        grid.cellValue(e.row.rowIndex, "testitem_emp_cd", sessionStorage.getItem("loginCD"));
+                        grid.cellValue(e.row.rowIndex, "emp_cd", sessionStorage.getItem("loginCD"));
+                        grid.cellValue(e.row.rowIndex, "emp_nm", sessionStorage.getItem("loginNM"));
+
+                    };
+                }
+            }
+        }
+    }
+
+    async function TestItemCheckResult(testitem_result, e) {
+
+        var testitem_result_original = "";//original
+
+        try {
+
+            $.ajax({
+                type: 'GET',
+                url: '/QualityControl/TestItemResultJudgementCheckResult',
+                async: false,
+                data: {
+                    testcontrol_id: e.row.data.testcontrol_id,
+                    teststandardmaster_id: e.row.data.teststandardmaster_id,
+                    testitem_result: testitem_result
+                },
+                success: function (result) {
+                    testitem_result_original = result;
+                }
+            });
+        }
+        catch
+        {
+            testitem_result_original = "";
+        }
+
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+
+        // 반올림한 original 데이터와 현재 결과 값을 비교한다.
+        if (testitem_result_original != testitem_result && testitem_result_original != "") {
+            grid.cellValue(e.row.rowIndex, "testitem_result_value", testitem_result_original);
+        }
+
+        //자동 판정
+        setAutoJudge(testitem_result_original, e);
+    }
+
+    function setAutoJudge(testitem_result_original, e) {
+
+        var check = false;
+
+        var gridData = e.row.data;
+
+        var teststandard_type = gridData.teststandard_type;
+
+        var temp = gridData.teststandard_min;
+        temp = (temp == "" ? "0" : temp);
+        var teststandard_min = parseFloat(temp);
+
+        temp = gridData.teststandard_max;
+        temp = (temp == "" ? "0" : temp);
+        var teststandard_max = parseFloat(temp);
+
+        temp = (testitem_result_original == "" ? "0" : testitem_result_original);
+        temp = (temp == "" ? "0" : temp);
+        var result_value = parseFloat(temp);
+
+        //이상
+        if (teststandard_type == "1") {
+            if (result_value >= teststandard_min)
+                SetRelease(e);
+            else
+                SetReject(e);
+        }
+        //이하
+        else if (teststandard_type == "2") {
+            if (result_value <= teststandard_max)
+                SetRelease(e);
+            else
+                SetReject(e);
+        }
+        //범위
+        else if (teststandard_type == "3") {
+            if (result_value >= teststandard_min && result_value <= teststandard_max)
+                SetRelease(e);
+            else
+                SetReject(e);
+        }
+        //초과
+        else if (teststandard_type == "4") {
+            if (result_value > teststandard_min)
+                SetRelease(e);
+            else
+                SetReject(e);
+        }
+        //미만
+        else if (teststandard_type == "5") {
+            if (result_value < teststandard_max)
+                SetRelease(e);
+            else
+                SetReject(e);
+        }
+
+        check = true;
+
+        return check;
+
+    }
+
+    function SetRelease(e) {
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        grid.cellValue(e.row.rowIndex, "testitem_result_yn", "Y");
+    }
+
+    function SetReject(e)
+    {
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        grid.cellValue(e.row.rowIndex, "testitem_result_yn", "N");
+    }
+
+
+    // rowupdated : row_status : "U" 로 업데이트
+    function TestItemResultJudgementDetailGrid_RowUpdated(e) {
+        //console.log("row update됨[TestItemResultJudgementDetailGrid] : " + e.component.getRowIndexByKey(e.key));
+        // row상태 수동 업데이트(필요시 주석해제)
+        var rowIndex = e.component.getRowIndexByKey(e.key);
+        e.component.cellValue(rowIndex, "row_status", "U");
+    }
+
+    //#region 파일 관련
+
+    //
+    function TestItemResultJudgementDetailfocusChange() {
+
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("TestItemResultJudgementDetailGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/testCheckESelectFile',
+            data: {
+                testcontrol_id: data.testcontrol_id,
+                teststandardmaster_id: data.teststandardmaster_id
+            },
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+                    $("#TestItemResultJudgementFileGrid2").dxDataGrid("option", "dataSource", json);
+                } catch (e) {
+                    $("#TestItemResultJudgementFileGrid2").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+
+    }
+
+    // 파일 업로드 버튼
+    function TestItemResultJudgementUploadFile2Btn(event) {
+
+        if (!TestItemResultJudgementCheckEditible()) {
+            return;
+        }
+
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+
+        if (grid.option("focusedRowKey")) {
+
+            var fileUploader = $('#TestItemResultJudgementFileUploader2').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        } else {
+            alert("첨부할 시험항목을 선택하십시오!")
+        }
+    }
+
+    // 파일 업로드
+    function TestItemResultJudgementUploadFile2(e) {
+
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("TestItemResultJudgementDetailGrid", grid.option("focusedRowKey"));
+
+        var name = e.component.option("name");
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "testcontrol_id", data.testcontrol_id);
+        url = updateQueryStringParameter(url, "teststandardmaster_id", data.teststandardmaster_id);
+        url = updateQueryStringParameter(url, "name", name);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 파일 다운로드
+    function TestItemResultJudgementDownloadFile2Btn(event) {
+
+        var grid = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("TestItemResultJudgementDetailGrid", grid.option("focusedRowKey"));
+
+        var grid2 = $("#TestItemResultJudgementFileGrid2").dxDataGrid("instance");
+        var data2 = getGridRowByKey("TestItemResultJudgementFileGrid2", grid2.option("focusedRowKey"));
+
+        var fileId = data2.test_back_data_id;
+
+        if (fileId != "") {
+            var url = "";
+            url = updateQueryStringParameter(url, "testcontrol_id", data.testcontrol_id);
+            url = updateQueryStringParameter(url, "teststandardmaster_id", data.teststandardmaster_id);
+            url = updateQueryStringParameter(url, "doc_file_id", fileId);
+
+            document.location.assign('/QualityControl/RDMSFileDownloadTestFileDownload' + url);
+        }
+    }
+
+    // 파일 삭제
+    function TestItemResultJudgementDeleteFile2Btn(event) {
+
+        if (!confirm("선택한 문서를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        if (!TestItemResultJudgementCheckEditible()) {
+            return;
+        }
+
+        var grid = $("#TestItemResultJudgementFileGrid2").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemResultJudgementFileGrid2", grid.option("focusedRowKey"));
+
+        var grid2 = $("#TestItemResultJudgementDetailGrid").dxDataGrid("instance");
+        var gridData2 = getGridRowByKey("TestItemResultJudgementDetailGrid", grid2.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/TestCheckEDeleteFile',
+            data: {
+                testcontrol_id: gridData2.testcontrol_id,
+                teststandardmaster_id: gridData2.teststandardmaster_id,
+                file_id: gridData.test_back_data_id
+            },
+            success: function (result) {
+
+                alertWarning(result);
+
+                TestItemResultJudgementDetailfocusChange();
+            }
+        });
+    }
+
+    function TestItemResultJudgementCheckEditible() {
+
+        var objGrid = $('#' + 'TestItemResultJudgementGrid').dxDataGrid('instance');
+        var rowIndex = objGrid.option("focusedRowIndex");
+        var test_status_cd = objGrid.cellValue(rowIndex, "test_status");
+        var test_result_yn = objGrid.cellValue(rowIndex, "test_result_yn");
+
+        // 시험 지시, 시험중, 시험완료(시험 성적서 확인 전) 일때 true 리턴
+        if ((test_status_cd == "12" || test_status_cd == "6" || test_status_cd == "7") && test_result_yn != "Y") {
+            return true;
+        } else {
+            alert("시험 성적서가 이미 확인 되었거나 의뢰 상태입니다.");
+            return false;
+        }
+
+    }
+
+    //#endregion
+
+</script>
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)EquipPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">고장신고 등록</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">고장신고</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <input type="hidden" name="Gubun" value="S" />
+                <input type="hidden" name="testcontrol_id" value="@srch.testcontrol_id" />
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="A" name="re_date_option" id="tr_date_option1" />
+                        </div>
+                        <span class="form-control-sm"><label for="tr_date_option1">의뢰</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="B" name="re_date_option" id="tr_date_option2" />
+                        </div>
+                        <span class="form-control-sm"><label for="tr_date_option2">접수</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="C" name="re_date_option" id="tr_date_option3" />
+                        </div>
+                        <span class="form-control-sm"><label for="tr_date_option3">채취</label></span>
+
+                        <input type="text" class="form-control datepicker text-center col-3" name="de_start_date" value="@srch.de_start_date">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control datepicker input-sm  text-center col-3" name="de_end_date" value="@srch.de_end_date">
+                    </div>
+
+                </div>
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="le_s_test_type" value="">
+                            @foreach (DataRow row in codeTest_type.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control col-4" name="ce_gubun_number" value="">
+                            <option value="0">의뢰품목</option>
+                            <option value="1">의뢰번호</option>
+                            <option value="2">제조(관리)번호</option>
+                        </select>
+                        <input type="text" class="form-control col-8" name="te_number" value="@srch.te_number">
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="re_test_status" value="">
+                            <option value="A">전체</option>
+                            <option value="B">대기</option>
+                            <option value="C">진행</option>
+                            <option value="D">완료</option>
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제형</span>
+                        </div>
+                        <select class="form-control" name="le_item_form_cd" value="">
+                            @foreach (DataRow row in codeItem_form_cd.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Edit;Delete;Save;Undo;Excel");}
+
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-4">
+            <span>승인구분 </span>
+            <span class="mt-1 p-2 badge badge-success">적합</span>
+            <span class="mt-1 p-2 badge badge-danger">부적합</span>
+
+        </div>
+    </div>
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets-->
+        <div class="col-12">
+            <div class="box mb-0">
+                <!-- 상단 tab 825-->
+                @(Html.DevExtreme().TabPanel()
+                    .ID(pagePrefix+"TabPanel")
+                    .SelectedIndex(0)
+                    .Loop(false)
+                    .Height(800)
+                    .AnimationEnabled(false)
+                    .SwipeEnabled(false)
+                    .OnTitleClick(pagePrefix + "ChangeTab")
+                    .OnItemRendered(pagePrefix + "onItemRenderedTab")
+                    .Items(config =>
+                    {
+                        config.Add().Title("시험접수현황").Template(new JS("$('#"+ pagePrefix + "TabContent1')"));
+                        config.Add().Title("항목시험 성적 관리").Template(new JS("$('#" + pagePrefix + "TabContent2')"));
+                    })
+                )
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <!-- $Contets-->
+        <!-- tab 컨텐츠-->
+        <div class="col-12">
+            @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent1"))
+            {
+                <div class="row">
+                    <div class="col-10 pr-0">
+                        <div class="box">
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("TestItemResultJudgement" + "Grid")
+                                .KeyExpr("testcontrol_id")
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(758)
+                                .ShowBorders(true)
+                                //.Selection(s => s.Mode(SelectionMode.Multiple))
+                                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .AllowColumnResizing(true)
+                                .AllowColumnReordering(true)
+                                .ColumnAutoWidth(true)
+                                //.Editing( (editing) =>
+                                //{
+                                //    editing.Mode(GridEditMode.Batch);
+                                //    //editing.AllowAdding(false);
+                                //    //editing.AllowDeleting(false);
+                                //    editing.AllowUpdating(false);
+                                //    //editing.Texts(edit => edit.EditRow("test"));
+                                //})
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("test_type_nm").Caption("시험종류");
+                                    c.Add().DataField("test_no").Caption("시험번호");
+                                    c.Add().DataField("item_nm").Caption("품목");
+                                    c.Add().DataField("start_no").Caption("제조번호");
+                                    c.Add().DataField("pack_cnt").Caption("포장수");
+                                    c.Add().DataField("test_standard_nm_1").Caption("규격");
+                                    c.Add().DataField("process_nm").Caption("공정");
+                                    c.Add().DataField("item_form").Caption("제형");
+                                    c.Add().DataField("request_date").Caption("의뢰일자");
+                                    c.Add().DataField("receive_date").Caption("접수일자");
+                                    c.Add().DataField("instruction_date").Caption("지시일자");
+                                    c.Add().DataField("picking_date").Caption("채취일자");
+                                    c.Add().DataField("test_status_nm").Caption("진행상태");
+                                    c.Add().DataField("start_date").Caption("제조일자");
+                                    c.Add().DataField("sign_time").Caption("채취전자서명");
+
+                                    #region visable false 데이터 주석처리
+                                    // visible false컬럼 정의
+                                    c.Add().DataField("row_status").Caption("row_status").Visible(false);   // row상태값
+                                    c.Add().DataField("testcontrol_id").Caption("testcontrol_id").Visible(false);
+                                    c.Add().DataField("test_status").Caption("test_status").Visible(false);
+                                    c.Add().DataField("test_result_yn").Caption("test_result_yn").Visible(false);
+                                    #endregion
+                                })
+                                .OnFocusedRowChanged("TestItemResultJudgementFocusChanged")
+                           )
+                        </div>
+                    </div>
+                    <div class="col-2 pl-1">
+                        <div class="box mb-0">
+                            <div class="align-end-only p-1">
+                                <span class="align-center pr-3">첨부자료</span>
+                                <button class="btn btn-secondary" id="TestItemResultJudgementUploadFileBtn">등록</button>
+                                <button class="btn btn-secondary" id="TestItemResultJudgementDownloadFileBtn">다운로드</button>
+                                <button class="btn btn-secondary" id="TestItemResultJudgementDeleteFileBtn">삭제</button>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("TestItemResultJudgementFileUploader")
+                                .Name("TestItemResultJudgementAttatchedFile")
+                                .Multiple(false)
+                                .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                                .UploadUrl(Url.Action("TestItemResultJudgementUploadFile", "QualityControl"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(int.MaxValue)
+                                .OnValueChanged("TestItemResultJudgementUploadFile")
+                                .OnUploaded("TestItemResultJudgementSelectFileList")
+                            )
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("TestItemResultJudgementFileGrid")
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .ShowRowLines(true)
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .KeyExpr(new string[]{ "testcontrol_id", "file_id"})
+                                .Height(720)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Columns(columns =>
+                                {
+                                    columns.Add()
+                                        .DataField("doc_file_name")
+                                        .Caption("파일명");
+                                })
+                            )
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent2"))
+            {
+                <div class="display-flex">
+                    <div class="col-9 pl-1 pr-0">
+                        <form name="TestItemResultJudgementForm">
+                            <table class="table table-sm table-bordered font-weight-bold mt-1 mb-1">
+                                <tr>
+                                    <th>품명</th>
+                                    <td colspan="3"><input type="text" name="item_nm" class="border-0" readonly="readonly" size="30" /></td>
+                                    <th>코드</th>
+                                    <td><input type="text" name="item_cd" class="border-0" readonly="readonly" size="15" /></td>
+                                    <th>단위</th>
+                                    <td><input type="text" name="item_packunit" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>수량</th>
+                                    <td><input type="text" name="start_qty" class="border-0" readonly="readonly" size="8" /></td>
+                                    <th>시험 번호</th>
+                                    <td><input type="text" name="test_no" class="border-0" readonly="readonly" size="25" /></td>
+                                </tr>
+                                <tr>
+                                    <th>지시일자</th>
+                                    <td><input type="text" name="instruction_date" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>채취일자</th>
+                                    <td><input type="text" name="picking_date" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>규격</th>
+                                    <td><input type="text" name="gubun_nm" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>의뢰일자</th>
+                                    <td><input type="text" name="request_date" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>제조번호</th>
+                                    <td><input type="text" name="start_no" class="border-0" readonly="readonly" size="10" /></td>
+                                    <th>제조일자</th>
+                                    <td><input type="text" name="start_date" class="border-0" readonly="readonly" size="10" /></td>
+                                </tr>
+                            </table>
+                        </form>
+                    </div>
+                    <div class="col-3 pl-0">
+                        <table class="table table-sm table-borderless mt-1 mb-1">
+                            <tr>
+                                <td class="pt-0 pb-0"><input type="button" name="btnSelectYnAll" class="btn btn-sm btn-secondary" value="전체선택" onclick="TestItemResultJudgementGridCheckBoxToggle('TestItemResultJudgementDetailGrid', 'select_yn', true)" /></td>
+                            </tr>
+                            <tr>
+                                <td class="pt-1 pb-0"><input type="button" name="btnSelectYnNothing" class="btn btn-sm btn-secondary" value="전체해제" onclick="TestItemResultJudgementGridCheckBoxToggle('TestItemResultJudgementDetailGrid', 'select_yn', false)" /></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="display-flex">
+                    <div class="col-9 pl-1 pr-0">
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestItemResultJudgementDetail" + "Grid")
+                            .KeyExpr("teststandardmaster_id")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(698)
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .AllowColumnResizing(true)
+                            .AllowColumnReordering(true)
+                            .ColumnAutoWidth(true)
+                            .Editing((editing) =>
+                            {
+                                editing.Mode(GridEditMode.Batch);
+                                //editing.AllowAdding(false);
+                                //editing.AllowDeleting(false);
+                                editing.AllowUpdating(false);
+                                //editing.Texts(edit => edit.EditRow("test"));
+                            })
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("testitem_nm").Caption("시험항목").CustomizeText(@"function(cellInfo){return cellInfo.value.replace(/ /g, '\u00a0')}");
+                                c.Add().DataField("teststandard_nm").Caption("시험기준");
+                                c.Add().DataField("testitem_type").Caption("미생물시험").DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.testitem_type == 'Y' || rowData.testitem_type == true); }");
+                                c.Add().DataField("content_check").Caption("함량");
+                                c.Add().DataField("select_yn").Caption("선택").DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.select_yn == 'Y' || rowData.select_yn == true); }");
+                                c.Add().DataField("testitem_result_value").Caption("시험결과");
+                                c.Add().DataField("testresult_data_type_nm").Caption("단위");
+                                c.Add().Lookup(lookup => lookup
+                                        .DataSource(d => d.WebApi()
+                                        .RouteName("Comm")
+                                        .LoadAction("GetCommon")
+                                        .LoadParams(new
+                                        {
+                                            pGubun = "공통코드"
+                                            ,
+                                            pDiv = "D"
+                                            ,
+                                            pStrWhere = "QC071"
+                                            ,
+                                            pTableName = "grid_lookup_testitem_result_yn"
+                                        }
+                                        ).Key("keyfield"))
+                                        .ValueExpr("keyfield")
+                                        .DisplayExpr("displayfield")
+                                        ).DataField("testitem_result_yn").Caption("적/부");
+                                c.Add().DataField("testitem_start_time").Caption("시험시작일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                                c.Add().DataField("testitem_end_time").Caption("시험종료일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                                c.Add().DataField("testitem_inputtime").Caption("공수(분)");
+                                c.Add().DataField("emp_nm").Caption("시험자");
+                                c.Add().DataField("testitem_result_remark").Caption("비고");
+
+                                #region visable false 데이터 주석처리
+                                // visible false컬럼 정의
+                                c.Add().DataField("row_status").Caption("row_status").Visible(false);   // row상태값
+                                c.Add().DataField("code_type").Caption("code_type").Visible(false);
+                                c.Add().DataField("emp_cd").Caption("emp_cd").Visible(false);
+                                c.Add().DataField("testitem_emp_cd").Caption("testitem_emp_cd").Visible(false);
+                                c.Add().DataField("testitem_totaltime").Caption("testitem_totaltime").Visible(false);
+
+                                #endregion
+                            })
+                            .OnFocusedRowChanged("TestItemResultJudgementDetailfocusChange")
+                        )
+                    </div>
+
+                    <div class="col-3 pl-1 pr-1">
+
+                        @(Html.DevExtreme().FileUploader()
+                            .Visible(false)
+                            .ID("TestItemResultJudgementFileUploader2")
+                            .Name("TestCheckEAttatchedFile")
+                            .Multiple(false)
+                            .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                            .UploadUrl(Url.Action("TestCheckEUploadFile", "QualityControl"))
+                            .UploadMode(FileUploadMode.Instantly)
+                            .MaxFileSize(int.MaxValue)
+                            .OnValueChanged("TestItemResultJudgementUploadFile2")
+                            .OnUploaded("TestItemResultJudgementDetailfocusChange")
+                        )
+
+                        <div class="align-end-only p-1">
+                            <span class="align-center pr-3">첨부자료</span>
+                            <button class="btn btn-secondary" id="TestItemResultJudgementUploadFile2Btn" onclick="TestItemResultJudgementUploadFile2Btn(event)">등록</button>
+                            <button class="btn btn-secondary" id="TestItemResultJudgementDownloadFile2Btn" onclick="TestItemResultJudgementDownloadFile2Btn(event)">다운로드</button>
+                            <button class="btn btn-secondary" id="TestItemResultJudgementDeleteFile2Btn" onclick="TestItemResultJudgementDeleteFile2Btn(event)">삭제</button>
+                        </div>
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestItemResultJudgementFileGrid2")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("test_back_data_id")
+                            .Height(667)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(columns =>
+                            {
+                                columns.Add()
+                                    .DataField("doc_file_name")
+                                    .Caption("파일명");
+                            })
+                        )
+                    </div>
+                </div>
+
+            }
+        </div>
+    </div>
+</div>

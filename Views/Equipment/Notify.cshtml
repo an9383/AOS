@@ -1,0 +1,532 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.Equipment.Notify.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeStatus = (DataTable)ViewBag.le_repair_status;
+    var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+
+    // 1. 화면 Load 영역
+    $(function () {
+                     // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+"Notify"+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+"Notify"+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+"Notify"+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+        $('input:radio[name=rb_gb][value=@srch.rb_gb]', $('#'+"NotifySearchForm")).prop('checked', true);
+        $('select[name=status]', $('#' + "NotifySearchForm")).val('@srch.status');
+
+        //1.3. help팝업설정
+        var NotifyPopupColumns = {
+            "equip"    : [{ dataField: "equip_cd", caption: "기계코드" }, { dataField: "equip_nm", caption: "기계명" }]
+         ,  "employee":  [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+
+        };
+                
+        createPopup("Notify" + "Equip", "기계기구조회 조회", @equipPopupData, NotifyPopupColumns.equip);
+        createPopup("Notify" + "Emp", "사원 조회", @empPopupData, NotifyPopupColumns.employee);
+
+        //1.4 툴바 활성/비활성
+        NotifyEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=rb_gb],input[name*=date], select[name=status]', $('#'+"NotifySearchForm")).change(function () {
+            NotifySelect();
+        });
+        $('input[name=equipment]+div>button',$('#'+"NotifySearchForm")).click(function (event) {
+            NotifyHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+        $('input[name=equip_cd]+div>button, input[name*=_emp_cd]+div>button', $('#'+"NotifyWriteForm")).click(function (event) {
+            NotifyHelpPopUpSearch(event);
+        });
+
+        //1.5.3 공통객체
+        //datepicker
+        setDatePicker("#Notify .datepicker");
+
+        // 화면 resize
+        //screenResize();
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var NotifyHelpPopUpCurInputName = "";
+
+
+    // help popup 공통 검색창 오픈
+    function NotifyHelpPopUpSearch(e) {
+        //NotifyHelpPopUpCurInputName = $(e.target).parent().parent().prev().attr('name');
+        NotifyHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (NotifyHelpPopUpCurInputName)
+        {
+            case "equipment":
+            case "equip_cd":
+                popupId = "Notify"+"Equip";
+                break;
+            case "notify_emp_cd":
+                popupId = "Notify"+"Emp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function NotifyEquipRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (NotifyHelpPopUpCurInputName == "equipment") {
+            $("input[name="+NotifyHelpPopUpCurInputName+"]",$('#'+"NotifySearchForm")).val(data.equip_nm);
+        } else if (NotifyHelpPopUpCurInputName == "equip_cd") {
+            $("input[name=equip_cd]", $('#'+"NotifyWriteForm")).val(data.equip_cd);
+            $("input[name=equip_nm]",$('#'+"NotifyWriteForm")).val(data.equip_nm);
+        }
+        $("#"+"Notify"+"EquipPopup").dxPopup("instance").hide();
+    }
+
+    function NotifyEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = NotifyHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+        if (strIndex > -1) {
+            var inputPrefix = NotifyHelpPopUpCurInputName.substring(0, strIndex);
+            var inputSubfix = NotifyHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name='+inputPrefix+'_emp_cd]', $('#' + "NotifyWriteForm")).val(data.emp_cd);
+            $('input[name='+inputPrefix+'_emp_nm]', $('#' + "NotifyWriteForm")).val(data.emp_nm);
+        }
+        $("#" + "Notify" + "EmpPopup").dxPopup("instance").hide();
+
+    }
+
+    // 3. 툴바영역
+    //조회
+    function NotifySearch() {
+        NotifySelect();
+    }
+    //입력
+    function NotifyInput() {
+        NotifyEditCheck(true, 'I');
+        NotifyWriteFormClear();
+
+        //데이터 저장시 자동채번으로 신고번호 생성
+        //$.ajax({
+        //    type: 'POST',
+        //    url: UtilView.getActionUrl('GetSeqNo'),
+        //    data: "edate="+$('input[name=edate]',$('#'+"NotifySearchForm")).val(),
+        //    success: function (result) {
+        //        $('input[name=afterservice_no]', $('#' + "NotifyWriteForm")).val(result);
+        //        $('input[name=notify_date]', $('#' + "NotifyWriteForm")).val(new Date().format("yyyy-MM-dd"))
+
+
+        //    }
+        //});
+    }
+    //수정
+    function NotifyEdit() {
+        NotifyEditCheck(true,'U');
+    }
+    //삭제
+    function NotifyDelete() {
+        NotifyEditCheck(true, 'D');
+        NotifyTrx("NotifyWriteForm", "NotifySearchForm");
+    }
+    //저장
+    function NotifySave() {
+        if (UtilView.checkValidForm("NotifyWriteForm")) {
+            NotifyTrx("NotifyWriteForm", "NotifySearchForm");
+        }
+    }
+    //취소
+    function NotifyUndo() {
+        NotifyEditCheck(false, 'N');
+        NotifyFocusChanged();
+    }
+
+    // 프린트 - 해당화면에 없지만 샘플코드로 만들어놓은것
+    function NotifyPrint() {
+        //var btnType;
+        //btnType = $(event.target).closest('.dx-button').attr('id');
+        //btnType = $(event.target).closest('.dx-button').attr('id');
+
+        // report 출력 객체 생성
+        var report = new ReportHelper($(event.target));
+        //var report = new ReportHelper();
+        
+        report.addParam({
+            objFile: { path: "test", RptFileName: "PickingRabel" },
+            objSp: { SpName: "SP_PickingManage", gubun: "RPT", reportParam: "order_no:P2000015;input_order_id:9535;process_cd:352;s_gubun:M" },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: "item_nm2=테스트 중", viewerName: "", nCopies: 1 }            
+            // dataset(다중테이블)  사용시, 아래주석을 풀어서 사용한다.
+            //objTblNm: { tblName: "Header,TotalRate" },
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });        
+
+        report.addParam({
+            objFile: { path: "test", RptFileName: "StockStatusR" },
+            objSp: { SpName: "SP_StockStatus2", gubun: "R", reportParam: "item:;s_gubun:3" },
+            objEtcInfo: { subParam: "", viewerName:"" }
+        });
+        report.addParam({
+            objFile: { path: "test", RptFileName: "Testing2" },
+            objSp: { SpName: "", gubun: "", reportParam: "" },
+            objEtcInfo: { subParam: "", viewerName:"", nCopies:2 }
+        });
+        // 레포트테스트(생성객체확인)
+        //report.testObj();
+        report.run();
+        //if (btnType.indexOf('Preview') > -1) {
+        //   report.preview();
+        //} else if (btnType.indexOf('Print') >-1) {
+        //    report.print();
+        //}
+    }
+    // 엑셀다운로드
+    function NotifyExcel() {
+
+    }
+    // 즐겨찾기
+    function NotifyFavorite() {
+
+    }
+    // 트랜잭션처리
+    function NotifyTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+        // form에 추가할 속성
+        var appendData = { "edate": $('input[name=edate]', $('#' + formSearchId)).val() };
+
+        UtilView.dataGridTRX2(formData, appendData, () => NotifySelect());
+    }
+    // 수정중인지 체크
+    function NotifyEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리        
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "NotifyGrid"
+            , "@(pagePrefix)WriteForm"
+            , "afterservice_no;equip_cd;notify_emp_nm"
+        );
+        
+    }
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function NotifySelect() {
+        // form claear
+        NotifyWriteFormClear();
+        // edit 해제
+        NotifyEditCheck(false, 'N');
+        // 메인grid
+        UtilView.dataGridSelect('Notify' + 'Grid', 'Notify'+'SearchForm');
+    }
+    // 3.2 Row focus changed
+    function NotifyFocusChanged() {
+        // data 객체, 폼에 바인딩
+        UtilView.setDataGridFormBind("Notify" + "Grid", "Notify" + "WriteForm");
+
+        // 우측 gird바인딩
+        //NotifySelectSub(gridId, "Notify" + "SubGrid");
+    }
+    // 5. 우측 Form
+    // 5.1. clear form
+    function NotifyWriteFormClear() {
+        $('#'+"NotifyWriteForm")[0].reset();
+        $("textarea",$('#'+"NotifyWriteForm")).text("");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid ($기능입력$)
+    //function NotifySelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { afterservice_no: gridData.afterservice_no };
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: UtilView.getActionUrl('SelectSub'),
+    //        data: data,
+    //        success: function (result) {
+    //            if (result[0] == "") clear();
+    //            else {
+    //                var jsonResult = JSON.parse(result);
+    //                $('#' + tGridId).dxDataGrid("option", "dataSource", jsonResult);
+    //            }
+    //        }
+    //    })
+    //}
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)"  page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)EquipPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+       
+    <!-- $title  -->
+    @*<h4 class="divTitle">고장신고 등록</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">고장신고</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="rb_gb1" name="rb_gb" />
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb1">신고일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="rb_gb2" name="rb_gb" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb2">처리일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center" name="sdate" value="@srch.sdate">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="edate" value="@srch.edate">
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="status" value="">
+                            @foreach (DataRow row in codeStatus.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }                            
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설비</span>
+                        </div>
+                        <input type="text" class="form-control" name="equipment">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- test 2줄 : 검색영역이 2줄이상일때 주석풀고 적절히 내용입력-->
+                @*<div class="input-wrapper" >
+                        <div class="col-5 input-group input-group-sm">
+                            <div class="input-group-prepend">
+                                <div class="input-group-text">
+                                    <input type="radio" value="1" id="rb_gb1" name="rb_gb" />
+                                </div>
+                            </div>
+                            <span class="form-control-sm"><label for="rb_gb1">신고일자</label></span>
+                            <div class="input-group-prepend">
+                                <div class="input-group-text">
+                                    <input type="radio" value="2" id="rb_gb2" name="rb_gb" />
+                                </div>
+                            </div>
+                            <span class="form-control-sm"><label for="rb_gb2">처리일자</label></span>
+                            <input type="text" class="form-control datepicker text-center" name="sdate" value="@srch.sdate">
+                            <label class="col-1 form-text"> ~ </label>
+                            <input type="text" class="form-control input-sm datepicker text-center" name="edate" value="@srch.edate">
+                        </div>
+                        <div class="input-group input-group-sm col-2">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text">상태</span>
+                            </div>
+                            <select class="custom-select" name="status" value="">
+                                @foreach (DataRow row in codeStatus.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="input-group input-group-sm col-2">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text">설비</span>
+                            </div>
+                            <input type="text" class="form-control" name="equipment">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">찾기</button>
+                            </div>
+                        </div>
+                    </div>*@
+
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+          
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Notify" + "Grid")
+                    .KeyExpr("afterservice_no")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height("900")
+                    .ShowBorders(true)
+                    //.Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("afterservice_no").Caption("신고번호");
+                                c.Add().DataField("equip_cd").Caption("설비코드");
+                                c.Add().DataField("equip_nm").Caption("설비명");
+                                c.Add().DataField("notify_date").Caption("신고일자");
+                                c.Add().DataField("repair_status_nm").Caption("처리상태");
+                            })
+                        //.OnSelectionChanged("newsSelectionChanged")
+                        .OnFocusedRowChanged("Notify" + "FocusChanged")
+                   )
+            </div>            
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4">
+            <div class="box">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />                    
+                    <div class="divName">
+                        <p>고장신고</p>
+                    </div>                    
+
+                    <div class="input-wrapper">
+                        <label class="col-3">신고번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="afterservice_no" readonly>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">설비코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="equip_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="equip_nm" readonly>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="notify_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="notify_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                        <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                    </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">신고일자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12 datepicker required" name="notify_date">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">신고사유</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control required" cols="100" rows="5" name="notify_reason"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">사전조치</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control required" cols="100" rows="5" name="pre_fix"></textarea>
+                        </div>
+                    </div>
+
+                </form>                
+            </div>
+
+        </div>
+    </div>
+
+</div>
+

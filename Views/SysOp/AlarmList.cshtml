@@ -1,0 +1,249 @@
+﻿
+@{
+    Layout = null;
+    ViewData["Title"] = "AlarmList";
+
+    var alarms = @Html.Raw(Json.Encode(ViewBag.alarms.Data));
+    var empData = @Html.Raw(Json.Encode(ViewBag.empData.Data));
+}
+
+@{
+    string[] AlarmListGridKey = { "code", "code2", "code3", "code4", "code5" };
+}
+
+@*업무스케쥴 조회*@
+
+<script id="AlarmListJs">
+
+    $(function () {
+
+        if ((@alarms).length > 0) {
+            $("#AlarmListDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@alarms));
+            $("#AlarmListDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#AlarmListDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("AlarmList", "구분 조회", @empData, columns, "emp_cd");
+
+        $("#AlarmListSearchForm input[name=emp_cd]").val(sessionStorage.getItem('loginID'));
+    });
+
+    function alarmListEmpPopup() {
+        $("#AlarmListPopup").dxPopup("instance").show();
+    }
+
+    function AlarmListRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("#AlarmListSearchForm input[name=emp_cd]").val(data.emp_cd);
+        $("#AlarmListSearchForm input[name=emp_nm]").val(data.emp_nm);
+
+        $("#AlarmListPopup").dxPopup("instance").hide();
+    }
+
+    function selectAlarm(gubun) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysOp/SelectAlarm',
+            data: {
+                gubun: gubun,
+                emp_cd: $("#AlarmListSearchForm input[name=emp_cd]").val()
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#AlarmListDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#AlarmListDataGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+        UtilView.setGridFocus("G", "AlarmListDataGrid");
+
+    }
+
+    function AlarmListSetMenu(e) {
+
+        if (!e.data) return;
+
+        var program_cd = e.data.form_cd;
+
+        //form_cd 값이 DB와 매치되지 않는 경우가 있어 일일히 변경해주어야함..
+        //시험 의뢰 관련
+        if (program_cd == "TestRequestE" || program_cd == "TestReceiptE" || program_cd == "TestSchedule" || program_cd == "PickingCompleteE" ||
+            program_cd == "TestItemResultJudgement" || program_cd == "TestCheckE" || program_cd == "TestRecognitionE") {
+            program_cd = "TestRecognitionE_Temp";
+
+            //일탈 관련
+        } else if (program_cd == "Deviation_Registry") {
+            program_cd = "DeviationReg";
+        } else if (program_cd == "Deviation_Receive") {
+            program_cd = "DeviationReceipt";
+
+            //자율점검 관련
+        } else if (program_cd == "SelfAuditPlanWrite") {
+            program_cd = "SelfAuditSchedule";
+        } else if (program_cd == "SelfAuditPlanRecognition") {
+            program_cd = "SelfAuditPlan";
+        } else if (program_cd == "SelfAuditPlanReview") {
+            program_cd = "SelfAuditEditPlanOK";
+        }
+
+        var pageInfo = {
+            tabName: "",
+            tabId: program_cd,
+            url: ""
+        };
+
+        var programSet = getProgramSet(program_cd);
+
+        if (programSet.length > 0) {
+            for (var i = 0; i < programSet.length; i++) {
+                if (programSet[i].form_cd === pageInfo.tabId) {
+                    pageInfo.tabName = programSet[i].form_nm;
+                    pageInfo.url = programSet[i].form_url;
+
+                    break;
+                }
+            }
+        }
+
+        if (pageInfo.tabName != "" && pageInfo.tabName != null && pageInfo.url != "" && pageInfo.url != null) {
+            openOtherPage(pageInfo);
+        }
+
+    }
+
+    function AlarmListConfirm() {
+
+        var grid = $("#AlarmListDataGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("AlarmListDataGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/AlarmListConfirm',
+            data: {
+                table_gb: gridData.table_gb,
+                code: gridData.code,
+                code2: gridData.code2,
+                code3: gridData.code3,
+                code4: gridData.code4,
+                code5: gridData.code5
+            },
+            success: function (result) {
+
+                alert(result);
+
+                selectAlarm('GN');
+            }
+        });
+    }
+
+</script>
+
+
+<div id="AlarmList" autoresize="Y">
+
+    <div id="AlarmListPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="AlarmListSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">담당자</span>
+                        </div>
+                        <input type="text" class="form-control col-5" name="emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="alarmListEmpPopup()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control col-5" name="emp_nm" readonly>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="selectAlarm('GN')">신규 업무</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="AlarmListConfirm()">업무확인</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="selectAlarm('GP')">마감 업무</button>
+
+                </div>
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+
+            @* === CRUD 버튼 === *@
+            @(Html.DevExtreme().Toolbar()
+                .ID("AlarmListToolbar")
+                .Items(items =>
+                {
+                    items.Add()
+                    .Widget(w => w
+                    .Button()
+                    .Type(ButtonType.Default)
+                    .StylingMode(ButtonStylingMode.Contained)
+                    .ID("AlarmListSearch")
+                    .Icon("search")
+                    .Text("조회")
+                    .OnClick(@<text>
+                        function (e) {
+                            selectAlarm ("GN");
+                        }
+                    </text>)
+                    )
+                    .Location(ToolbarItemLocation.After);
+                })
+            )
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("AlarmListDataGrid")
+                    .KeyExpr(AlarmListGridKey)
+                    .ShowBorders(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .FocusedRowEnabled(true)
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item").Caption("업무내용").Width("80%");
+                        c.Add().DataField("emp_nm").Caption("담당자");
+                        c.Add().DataField("confirm").Caption("확인")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.confirm == ""Y"" || rowData.confirm == true); }");
+                    })
+                    .OnRowDblClick("AlarmListSetMenu")
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

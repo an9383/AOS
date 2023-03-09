@@ -1,0 +1,991 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+//*********************************************************
+// ▣ 페이지별 설정
+//*********************************************************
+
+// 1. View데이터 설정
+// 1.1. 검색객체
+//var srch = ViewData["srch"] as HACCP.Models.Account.AccountingDeadLine.SrchParam;
+
+// 1.2. 메인 Grid
+//var AccountingDeadLineList = Html.Raw(Json.Encode(ViewBag.AccountingDeadLineList.Data));
+
+// 1.3. 우측 Form
+
+// 1.4. 코드성 데이터
+
+}
+
+@{
+    string[] AccountGridKey1 = { "b_no", "i_no", "item_cd" };
+    string[] AccountGridKey2 = { "b_no", "item_cd", "lot_no" };
+
+}
+
+@{ 
+
+    var Accounting_tabs = new[] {
+        new { id = 1, text = "매입" },
+        new { id = 2, text = "매출" }
+    };
+
+    var taxfree_yn_ds = new[] {
+        new { keyfield = "N", displayfield = "과세" },
+        new { keyfield = "Y", displayfield = "면세" }
+    };
+}
+
+@*매입, 매출 마감*@
+<style>
+
+    /*구분*/
+    #AccountingDeadLine .beige{ background-color:beige; color: black;}         /* 매입 */
+    #AccountingDeadLine .mediumturquoise{ background-color: mediumturquoise; color: black;}/* 매출 */
+
+    /*발주항목*/
+    #AccountingDeadLine .lavender{ background-color: lavender;  color: black;            } /* 완제품 */
+    #AccountingDeadLine .lightsteelblue{ background-color: lightsteelblue; color: black;}  /* 자재 */
+    #AccountingDeadLine .lime{ background-color: #d0ffdb; color: black;}                   /* 원료 */
+    #AccountingDeadLine .cadetblue{ background-color: cadetblue; color: black;}            /* 상품 */
+
+    /*처리상태*/
+    #AccountingDeadLine .tomato{ background-color: tomato; color: black;}                    /* 완료 */
+    #AccountingDeadLine .khaki{ background-color: khaki; color: black;}                      /* 미완료 */
+
+    /*발주상태*/
+    #AccountingDeadLine .lightCoral{background-color:lightcoral; color:black;} 
+
+</style>
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";    // 폼명-검색용
+    var AccountGrid_gu = "AccountingDeadLineGrid1";
+    var AccountingDeadLine_tab_num = 1;
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    $(function () {
+        setDatePicker("#AccountingDeadLine .datepicker");
+
+        AccountingDeadLineSearch();
+
+    })
+
+
+    function Accounting_Tabs_itemMClick(e) {
+
+        // 현재 보여지고 있는 Tab 이외의 Tab을 선택 했을 시,
+        if (e.itemData.id !== AccountingDeadLine_tab_num) {
+            var detailGrid = $("#AccountingDeadLineDetailGrid2").dxDataGrid("instance");
+
+            // 1.매입
+            if (e.itemData.id === 1) {
+                // 이전 Tab display-none
+                $("#AccountingDeadLine #gu1").removeClass("display-none");
+                AccountGrid_gu = "AccountingDeadLineGrid1";
+                AccountingDeadLine_tab_num = 1
+                $("#AccountingDeadLine #gu2").addClass("display-none");
+
+                //하단 그리드 caption 변경
+                detailGrid.columnOption(0, "caption", "발주번호");
+
+            // 2.매출
+            } else if (e.itemData.id === 2) {
+                // 이전 Tab display-none
+                $("#AccountingDeadLine #gu1").addClass("display-none");
+                AccountGrid_gu = "AccountingDeadLineGrid2";
+                AccountingDeadLine_tab_num = 2
+                $("#AccountingDeadLine #gu2").removeClass("display-none");
+
+                //하단 그리드 caption 변경
+                detailGrid.columnOption(0, "caption", "출고번호");
+
+            }
+            AccountingDeadLineSearch();
+        }
+
+    }
+
+
+    function AccountingDeadLineSearch() {
+        var data = new FormData($("#AccountingDeadLineSearchForm")[0]);
+
+        if (AccountGrid_gu == "AccountingDeadLineGrid1") data.set('gu', "매입");
+        else if (AccountGrid_gu == "AccountingDeadLineGrid2") data.set('gu', "매출");
+        
+
+        $.ajax({
+            type: 'POST',
+            url: '/Account/AccountingDeadLineSearch',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#" + AccountGrid_gu).dxDataGrid("instance").option("dataSource", json);
+                    $("#" + AccountGrid_gu).dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                } else {
+                    $("#" + AccountGrid_gu).dxDataGrid("instance").option("dataSource", []);
+
+                }
+            }
+        })
+
+        $("#AccountingDeadLineDetailGrid1").dxDataGrid("instance").option("dataSource", []);
+        $("#AccountingDeadLineDetailGrid2").dxDataGrid("instance").option("dataSource", []);
+
+        //그리드 체크박스 및 계산서일자 초기화
+        AccountingDeadLine_GridReset();
+
+    }
+
+    function AccountingDeadLine_GridReset() {
+         var grid = $("#" + AccountGrid_gu).dxDataGrid("instance");
+
+        //계산서일자 초기화 및 체크박스 초기화
+        var selectedRowsData = $("#" + AccountGrid_gu).dxDataGrid("instance").getSelectedRowsData(); //같은 발주처 데이터
+        if (selectedRowsData.length > 0) {
+
+            $.map(selectedRowsData, function (value, index) {
+                var rowKey = null;
+
+                if (AccountGrid_gu == "AccountingDeadLineGrid1") rowKey = { "b_no": value.b_no, "i_no": value.i_no, "item_cd": value.item_cd };
+                else rowKey = { "b_no": value.b_no, "item_cd": value.item_cd, "lot_no": value.lot_no };
+
+                var rowIndex = grid.getRowIndexByKey(rowKey);
+                grid.cellValue(rowIndex, "acct_dt", "");
+
+            });
+        }
+
+        $("#" + AccountGrid_gu).dxDataGrid("instance").deselectAll();
+    }
+
+    async function AccountingDeadLineSave() {
+        await $("#" + AccountGrid_gu).dxDataGrid("instance").saveEditData();
+
+        var selectedRowsData = $("#" + AccountGrid_gu).dxDataGrid("instance").getSelectedRowsData(); //같은 발주처 데이터
+
+        if (selectedRowsData.length > 0) {
+
+            //체크한 것중 계산서 일자 설정안한 것이 있는지 체크(미완료상태일 경우)
+            var acct_dt_chk = true;
+            $.map(selectedRowsData, function (value, index) {
+                if (value.itf_completed == "N" && (value.acct_dt == "" || value.acct_dt == null)) acct_dt_chk = false;
+
+                //매입일때
+                if (AccountGrid_gu == "AccountingDeadLineGrid1") {
+                    var i_amt = parseFloat(value.i_amt);
+                    var b_amt = parseFloat(value.b_amt);
+
+                    if (i_amt > b_amt) {
+                        value.i_amt = b_amt;
+                    } 
+                }
+            });
+
+            //체크한 것중 계산서 일자 설정안한 것이 하나라도 있을 때
+            if (!acct_dt_chk) {
+                alert("계산서 일자를 설정하세요"); return;
+            }
+
+
+            //체크한 것 모두 계산서일자가 선택되었을 때 
+            var ok = confirm("선택된 데이터를 처리하시겠습니까?");
+
+                if (ok) {
+                    var n_no = "";
+
+                    for (var i = 0; i < selectedRowsData.length; i++) {
+
+                        var data = selectedRowsData[i];
+
+                        if (i == 0 && data.itf_completed == "N") {
+                            //1. 자동채번으로 발주 전송번호 생성(묶음별 하나만 생성하면 되므로, 한 번만 호출)
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/Account/AccountingDeadLineGetNo',
+                                async: false,
+                                success: function (result) {
+                                    if (result.length > 0) {
+
+                                        console.log("발주 전송번호 : " + result);
+                                        n_no = result;
+                                    }
+                                }
+                            })
+
+                        }
+
+                        //처리상태 변경
+
+                        //case1 ) 미완료 -> 완료 (insert)
+                        //b_status / cnt_status / itf_completed = Y / Y / N 일때 => SP 실행 후 Y / Y / Y 값 변경
+                        //같은 발주처 데이터만 입력, 마지막 데이터에 final_yn = Y, 나머지는 N 
+                        if (data.itf_completed == "N") {
+                            data.row_status = "I";
+                            data.n_no = n_no;
+
+                            if (i == selectedRowsData.length - 1) data.final_yn = "Y";
+                            else data.final_yn = "N";
+                        }
+
+
+                        //case2 ) 완료 -> 미완료 (delete)
+                        //b_status / cnt_status / itf_completed = Y / Y / Y 일때 => SP 실행 후 Y / Y / N 값 변경
+                        if (data.itf_completed == "Y") data.row_status = "D";
+
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/Account/AccountingDeadLineUpdate',
+                            data: data,
+                            async: false,
+                            success: function (result) {
+                                if (result.length > 0) {
+
+                                    var json = JSON.parse(result);
+                                    //console.log(json.message);
+                                    console.log(data);
+
+                                    if (data.itf_completed == "N") {
+                                        if (json.message == "") {
+                                            alert("발주번호" + data.b_no + "실패하였습니다.");
+                                        } else {
+                                            alert(json.message);
+                                        }
+                                    }
+
+                                    if (data.itf_completed == "Y") {
+                                        if (json.message == "") {
+                                            alert("발주 묶음번호" + data.n_no + "실패하였습니다.");
+                                        } else {
+                                            alert(json.message);
+                                        }
+                                    }
+
+                                }
+                            }
+                        })
+                    }
+
+                    //데이터 재조회
+                    AccountingDeadLineSearch();
+                }
+
+        } else {
+            alert("선택된 데이터가 없습니다.");
+        }
+
+
+    }
+
+    function AccountingDeadLineUndo() {
+        var ok = confirm("선택된 데이터를 모두 체크해제 하시겠습니까?");
+
+        if (ok) {
+            AccountingDeadLine_GridReset();
+        }
+
+    }
+
+    function AccountingDeadLineExcel() {
+        gridExportToExcel(AccountGrid_gu, "AccountingDeadLineData");
+    }
+
+
+    function AccountingDeadLineFocusChanged(e) {
+        //하단 거래처별 입고/출고 기준 거래처별 계산서 집계
+        //console.log(e);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Account/AccountingDeadLineDetail1',
+            data: {
+                i_dt: e.row.data.i_date,
+                cust_cd: e.row.data.cust_cd,
+                no_type: e.row.data.gu,
+                acct_dt: e.row.data.acct_dt
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+                    //console.log(json);
+                    $("#AccountingDeadLineDetailGrid1").dxDataGrid("instance").option("dataSource", json);
+                    //$("#AccountingDeadLineDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                } else {
+                    $("#AccountingDeadLineDetailGrid1").dxDataGrid("instance").option("dataSource", []);
+
+                }
+            }
+        })
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Account/AccountingDeadLineDetail2',
+            data: {
+                n_no: e.row.data.n_no,
+                cust_cd: e.row.data.cust_cd,
+                no_type: e.row.data.gu,
+                acct_dt: e.row.data.acct_dt
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+                    //console.log(json);
+                    $("#AccountingDeadLineDetailGrid2").dxDataGrid("instance").option("dataSource", json);
+                    //$("#AccountingDeadLineDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                } else {
+                    $("#AccountingDeadLineDetailGrid2").dxDataGrid("instance").option("dataSource", []);
+
+                }
+            }
+        })
+
+    }
+
+    //그리드 로우 체크박스 이벤트
+    function AccountingDeadLineSelectionChanged(e) {
+
+        var data = e.selectedRowsData; //선택된 데이터 배열
+
+        var grid = $("#" + AccountGrid_gu).dxDataGrid("instance");
+
+        //체크해제시, 계산서일자 값 초기화
+        if (e.currentDeselectedRowKeys.length > 0) {
+
+            var status = $("#AccountingDeadLineSearchForm input[name='b_status']:checked").val();
+            if (status == "N") {
+                var deSelectedRowIndex = grid.getRowIndexByKey(e.currentDeselectedRowKeys[0]);
+                grid.cellValue(deSelectedRowIndex, "acct_dt", "");
+            }
+
+        }
+
+        if (data.length > 0) {
+            var cust_cd = ""; //발주처 코드
+            var cust_nm = ""; //발주처 이름
+            var status = ""; // 1: 미완료 -> 완료 
+                             // 2: 완료 -> 미완료
+            var taxfree_yn = ""; //면세(Y), 과세(N)
+
+            $.map(data, function (value, index) {
+
+                var check = true;
+
+                //처음 체크한 값에 따라 달라짐
+                if (index == 0) {
+
+                    //처리상태 : 미완료 -> 같은 발주처의 미완료 상태만 체크 가능
+                    if (value.itf_completed == "N") {
+                        //처음 선택한 발주처에 대해서만 선택할 수 있도록
+                        cust_cd = value.cust_cd;
+                        cust_nm = value.cust_nm;
+                        taxfree_yn = value.taxfree_yn;
+
+                        status = "1";
+                    }
+
+                    //처리상태 : 완료 -> 하나의 발주만 체크 가능(체크 1개)
+                    if (value.itf_completed == "Y") {
+                        status = "2";
+                    }
+                } 
+
+
+                var rowIndex = -1;
+                var rowKey = null; //그리드 체크박스 선택해제 키값
+                //var key = null 
+
+                if (status == "1") {
+
+                     //계산서일자 세팅
+                    //매입 그리드 계산서일자 
+                    if (AccountGrid_gu == "AccountingDeadLineGrid1") {
+                        rowKey = { "b_no": value.b_no, "i_no": value.i_no, "item_cd": value.item_cd };
+
+                        rowIndex = grid.getRowIndexByKey(rowKey);
+
+                        if (!grid.cellValue(rowIndex, "acct_dt"))
+                            grid.cellValue(rowIndex, "acct_dt", value.i_date);
+
+                    }//매출 그리드 계산서일자
+                    else if (AccountGrid_gu == "AccountingDeadLineGrid2") {
+                        rowKey = { "b_no": value.b_no, "item_cd": value.item_cd, "lot_no": value.lot_no };
+
+                        rowIndex = grid.getRowIndexByKey(rowKey);
+
+                        if (!grid.cellValue(rowIndex, "acct_dt"))
+                            grid.cellValue(rowIndex, "acct_dt", value.b_date);
+                    }
+
+
+                    //입고 확인
+                    if (value.b_status == "N" || value.cnt_status == "N") {
+                        alert(value.part_nm + " 이(가) 입고되지 않았습니다.");
+
+                        grid.cellValue(rowIndex, "acct_dt", "");
+                        grid.deselectRows(rowKey);
+                    }
+
+                    //같은 발주처 확인
+                    if (value.cust_cd != cust_cd) {
+                        alert("발주처 : " + cust_nm + "만 선택할 수 있습니다.");
+
+                        grid.cellValue(rowIndex, "acct_dt", "");
+                        grid.deselectRows(rowKey);
+                    }
+
+                    //면세인것은 면세끼리, 과세인것은 과세끼리 입력가능
+                    if (value.taxfree_yn != taxfree_yn) {
+
+                        if (taxfree_yn == "Y") {
+                            grid.cellValue(rowIndex, "acct_dt", "");
+                            grid.deselectRows(rowKey);
+
+                            alert("면세인 항목만 선택할 수 있습니다."); 
+                        }
+
+                        if (taxfree_yn != "Y") {
+                            grid.cellValue(rowIndex, "acct_dt", "");
+                            grid.deselectRows(rowKey);
+
+                            alert("과세인 항목만 선택할 수 있습니다."); 
+                        } 
+
+                    }
+
+                    //처리상태 확인
+                    if (value.itf_completed == "Y") {
+                        grid.deselectRows(rowKey);
+
+                        alert("처리상태가 완료인 데이터는 선택할 수 없습니다.");                     
+                    }
+
+                    //2021.04.27 매입일때, 입고금액, 발주금액 비교
+                    if (AccountGrid_gu == "AccountingDeadLineGrid1") {
+                        var i_amt = parseFloat(value.i_amt);
+                        var b_amt = parseFloat(value.b_amt);
+
+                        if (i_amt > b_amt) {
+                            var ok = confirm(value.item_cd + ": " + value.item_nm + "의 입고금액이 발주금액보다 큽니다. 발주금액으로 처리하시겠습니까?");
+
+                            //ok하지 않으면 체크해제
+                            if (!ok) {
+                                grid.deselectRows(rowKey);
+                            } 
+                        } 
+
+                    }
+
+                } else {
+
+                    //발주번호 하나만 체크 가능
+                    if (status == "2" && index > 0) {
+
+                        if (AccountGrid_gu == "AccountingDeadLineGrid1") {
+                            rowKey = { "b_no": value.b_no, "i_no": value.i_no, "item_cd": value.item_cd };
+
+                        }//매출 그리드 계산서일자
+                        else if (AccountGrid_gu == "AccountingDeadLineGrid2") {
+                            rowKey = { "b_no": value.b_no, "item_cd": value.item_cd, "lot_no": value.lot_no };
+                        }
+
+                        if (value.itf_completed == "N") {
+                            grid.deselectRows(rowKey);
+                            alert("미완료 상태는 선택할 수 없습니다."); 
+                        }
+                        else {
+                            grid.deselectRows(rowKey);
+                            alert("처리상태가 완료인 데이터는 하나만 선택가능합니다. "); 
+                        }
+
+                       
+                    }
+
+                }
+
+            });
+        }
+
+    }
+
+    //그리드 셀 색상 변경
+    function AccountingDeadLineCellPrepared(cellInfo) {
+
+        //구분 컬럼
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "gu") {
+            if (cellInfo.data.gu == "매입") {
+                cellInfo.cellElement.addClass('beige');
+            } else if (cellInfo.data.date_gu == "매출") {
+                cellInfo.cellElement.addClass('mediumturquoise');
+            }
+        }
+
+        //발주항목 컬럼
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "part_nm") {
+            if (cellInfo.data.part_cd == "1") {//완제품
+                cellInfo.cellElement.addClass('lavender');
+            }else if (cellInfo.data.part_cd == "2") { //자재
+                cellInfo.cellElement.addClass('lightsteelblue');
+            } else if (cellInfo.data.part_cd == "3") {//원료
+                cellInfo.cellElement.addClass('lime');
+            } else if (cellInfo.data.part_cd == "4") {//제조제품
+                cellInfo.cellElement.addClass('cadetblue');
+            }
+        }
+
+        //처리완료 컬럼
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "itf_completed") {
+            if (cellInfo.data.itf_completed == "Y") {
+                cellInfo.cellElement.addClass('tomato');
+            } else if (cellInfo.data.itf_completed == "N") {
+                cellInfo.cellElement.addClass('khaki');
+            }
+        }
+
+        //발주상태 컬럼 
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "b_status_nm") {
+            //매입일 경우
+            if (AccountingDeadLine_tab_num == 1) {
+                if (cellInfo.data.b_status_nm == "입고완료") {
+                    cellInfo.cellElement.addClass('lightCoral');
+                }
+            } else {
+            //매출일 경우
+                if (cellInfo.data.b_status_nm == "출고완료") {
+                    cellInfo.cellElement.addClass('lightCoral');
+                }
+            }
+
+        }
+
+    }
+
+    //수정시, 첫번째 체크박스와 계산서일자, 면세만 수정가능하도록
+    function AccountingDeadLineEditorPreparing(e) {
+        //계산서일자(c_date), type:selection(그리드 로우 선택 체크박스) 셀만 수정가능, 검색어입력 패널도 추가
+
+        var status = $("#AccountingDeadLineSearchForm input[name='b_status']:checked").val();
+
+        if (e.parentType == "searchPanel") {
+            e.editorOptions.disabled = false;
+        }
+        //미완료 상태일때
+        else if ((status == "%" || status == "N") && (e.parentType === "dataRow" && e.dataField == "acct_dt") || (e.parentType === "dataRow" && e.dataField == "taxfree_yn")  || (e.type == "selection") ) { 
+          
+            e.editorOptions.disabled = false;
+
+
+            if ((e.parentType === "dataRow" && e.dataField == "acct_dt")) {
+                e.editorOptions.onValueChanged = function (args) {
+
+                    // e.editorOptions.onValueChanged.apply(this, arguments);
+
+                    var grid = $("#" + AccountGrid_gu).dxDataGrid("instance");
+                    var selectedRowsData = $("#" + AccountGrid_gu).dxDataGrid("instance").getSelectedRowsData(); //같은 발주처 데이터
+
+                    //console.log(args);
+
+                    //날짜 포맷설정
+                    $.map(selectedRowsData, function (value, index) {
+                        var rowKey = null;
+
+                        if (AccountGrid_gu == "AccountingDeadLineGrid1") rowKey = { "b_no": value.b_no, "i_no": value.i_no, "item_cd": value.item_cd };
+                        else                                             rowKey = { "b_no": value.b_no, "item_cd": value.item_cd, "lot_no": value.lot_no };
+
+                        var rowIndex = grid.getRowIndexByKey(rowKey);
+
+                        var date = new Date(args.value);
+                        var acct_dt = date.format("yyyy-MM-dd hh:mm:ss");
+
+                        grid.cellValue(rowIndex, "acct_dt", acct_dt);
+
+                    });
+
+                }
+            }
+
+        }  else {
+            e.editorOptions.disabled = true;
+        }
+    }
+
+    function onClick_SearchType(b_statusVal) {
+        if (b_statusVal == 'Y') {
+            $('#searchTypeName').text('계산서일자');
+        }
+        else {
+            $('#searchTypeName').text('발주일자');
+        }
+    }
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리상태</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="b_status_%" name="b_status" onclick="onClick_SearchType(this.value)" />
+                        </div>
+                        <span class="form-control-sm"><label for="b_status_%">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" id="b_status_Y" name="b_status" onclick="onClick_SearchType(this.value)" />
+                        </div>
+                        <span class="form-control-sm"><label for="b_status_Y">완료</label></span>
+
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" id="b_status_N" name="b_status"  onclick="onClick_SearchType(this.value)" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="b_status_N">미완료</label></span>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span id="searchTypeName" class="input-group-text">발주일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="sdate" value="@DateTime.Now.AddYears(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="edate" value="@DateTime.Now.ToShortDateString()">
+                    </div>
+
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                            <span class="p-1 beige">매입</span>
+                            <span class="p-1 mediumturquoise">매출</span>
+                        </div>
+                    </div>
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">발주항목</span>
+                            <span class="p-1 lavender">완제품</span>
+                            <span class="p-1 lime">원료</span>
+                            <span class="p-1 lightsteelblue">자재</span>
+                            <span class="p-1 cadetblue">상품</span>
+                        </div>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리상태</span>
+                            <span class="p-1 khaki">미완료</span>
+                            <span class="p-1 tomato">완료</span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Save;Excel"); }
+        </div>
+    </div>
+
+    <div class="row margin-bottom">
+
+        <!-- DevExtreme Tab -->
+        <div id="AccountingDeadLine_MTab">
+            @(Html.DevExtreme().Tabs()
+                            .ID("AccountingDeadLine_M")
+                            .DataSource(Accounting_tabs)
+                            .SelectedIndex(0)
+                            .OnItemClick("Accounting_Tabs_itemMClick")
+                        )
+        </div>
+
+        <div class="col-12 ">
+
+            <!-- 매입 그리드 -->
+            <div id="gu1" class="box mb-0 gu1">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid1")
+                    .KeyExpr(AccountGridKey1)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always).AllowSelectAll(false))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(600)
+                    .HoverStateEnabled(true)
+                    .HeaderFilter(fr => fr.Visible(true))
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Cell);
+                        editing.AllowAdding(false);
+                        editing.AllowDeleting(false);
+                        editing.AllowUpdating(true);
+                    })
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("gu").Caption("구분").AllowHeaderFiltering(false);
+                        c.Add().DataField("part_nm").Caption("발주항목").AllowHeaderFiltering(false);
+                        //c.Add().DataField("acct_dt").Caption("계산서일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd").AllowEditing(true).CalculateDisplayValue("i_date"); //2021.04.05 추가 
+                        c.Add().DataField("acct_dt").Caption("계산서일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd"); //2021.04.05 추가 
+
+                        c.Add().DataField("b_no").Caption("발주번호").AllowHeaderFiltering(false);
+                        c.Add().DataField("cust_nm").Caption("발주처").AllowHeaderFiltering(true);
+                        c.Add().DataField("b_date").Caption("발주일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd").AllowHeaderFiltering(true).HeaderFilter(h => h.GroupInterval(3));
+                        c.Add().DataField("b_qty").Caption("발주수량").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_price").Caption("발주단가").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_amt").Caption("발주금액").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_status_nm").Caption("발주상태").AllowHeaderFiltering(false);
+                        c.Add().DataField("item_cd").Caption("코드").AllowHeaderFiltering(false);
+                        c.Add().DataField("item_nm").Caption("이름").AllowHeaderFiltering(false);
+
+                        c.Add().DataField("i_no").Caption("입고번호").AllowHeaderFiltering(false);
+                        c.Add().DataField("i_date").Caption("입고일자").AllowHeaderFiltering(false);
+                        c.Add().DataField("i_qty").Caption("입고수량").Format("#,##0").AllowHeaderFiltering(false);
+                        c.Add().DataField("i_amt").Caption("입고금액").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        //c.Add().DataField("taxfree_yn").Caption("면세").DataType(GridColumnDataType.Boolean).AllowHeaderFiltering(false)
+                        //   .CalculateCellValue(@"function(rowData) { return (rowData.taxfree_yn == ""Y""); }");
+                        c.Add().DataField("taxfree_yn").Caption("면세").AllowHeaderFiltering(false)
+                            .Lookup(
+                                lookup => lookup
+                                .DataSource(taxfree_yn_ds)
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            );
+                        c.Add().DataField("itf_completed").Caption("처리상태")
+                            .CustomizeText(@"function(cellInfo){ return cellInfo.value == ""Y"" ? ""완료"" : ""미완료""}").AllowHeaderFiltering(false);
+                        c.Add().DataField("n_no").Caption("전송번호").AllowHeaderFiltering(false);
+
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        items.Add()
+                            .Column("item_cd")
+                            .ShowInColumn("item_cd")
+                            .SummaryType(SummaryType.Count);
+                        items.Add()
+                        .Column("b_amt")
+                            .ShowInColumn("b_amt")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum);
+                        items.Add()
+                        .Column("i_amt")
+                            .ShowInColumn("i_amt")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum);
+                    }))
+                .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                .OnSelectionChanged(pagePrefix+ "SelectionChanged")
+                .OnCellPrepared(pagePrefix+ "CellPrepared")
+                .OnEditorPreparing(pagePrefix+ "EditorPreparing")
+                .OnToolbarPreparing("HideToolbarButton")
+                )
+            </div>
+
+            <!-- 매출 그리드 -->
+            <div id="gu2" class="box mb-0 display-none">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid2")
+                    .KeyExpr(AccountGridKey2)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always).AllowSelectAll(false))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(600)
+                    .HoverStateEnabled(true)
+                    .HeaderFilter(fr => fr.Visible(true))
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Cell);
+                        editing.AllowAdding(false);
+                        editing.AllowDeleting(false);
+                        editing.AllowUpdating(true);
+                    })
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("gu").Caption("구분").AllowHeaderFiltering(false);
+                        c.Add().DataField("part_nm").Caption("출고항목").AllowHeaderFiltering(false);
+                        //c.Add().DataField("acct_dt").Caption("계산서일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd").AllowEditing(true).CalculateDisplayValue("b_date"); //2021.04.05 추가
+                        c.Add().DataField("acct_dt").Caption("계산서일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd"); //2021.04.05 추가
+
+                        c.Add().DataField("b_no").Caption("출고번호").AllowHeaderFiltering(false);
+                        c.Add().DataField("cust_nm").Caption("납품처").AllowHeaderFiltering(true);
+                        c.Add().DataField("b_date").Caption("출고일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd").AllowHeaderFiltering(true).HeaderFilter(h => h.GroupInterval(3));
+                        c.Add().DataField("b_qty").Caption("출고수량").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_price").Caption("출고단가").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_amt").Caption("출고금액").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+                        c.Add().DataField("b_status_nm").Caption("출고상태").AllowHeaderFiltering(false);
+                        c.Add().DataField("lot_no").Caption("제조번호").AllowHeaderFiltering(false);
+                        c.Add().DataField("item_cd").Caption("코드").AllowHeaderFiltering(false);
+                        c.Add().DataField("item_nm").Caption("이름").AllowHeaderFiltering(false);
+
+                        //c.Add().DataField("i_no").Caption("입고번호").AllowHeaderFiltering(false);
+                        //c.Add().DataField("i_date").Caption("입고일자").AllowHeaderFiltering(false);
+                        //c.Add().DataField("i_qty").Caption("입고수량").AllowHeaderFiltering(false);
+                        //c.Add().DataField("i_amt").Caption("입고금액").Format("#,##0").DataType(GridColumnDataType.Number).AllowHeaderFiltering(false);
+
+                        //c.Add().DataField("taxfree_yn").Caption("면세").DataType(GridColumnDataType.Boolean).AllowHeaderFiltering(false)
+                        //   .CalculateCellValue(@"function(rowData) { return (rowData.taxfree_yn == ""Y""); }");
+                        c.Add().DataField("taxfree_yn").Caption("면세").AllowHeaderFiltering(false)
+                            .Lookup(
+                                lookup => lookup
+                                .DataSource(taxfree_yn_ds)
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            );
+                        c.Add().DataField("itf_completed").Caption("처리상태")
+                            .CustomizeText(@"function(cellInfo){ return cellInfo.value == ""Y"" ? ""완료"" : ""미완료""}").AllowHeaderFiltering(false);
+
+                        c.Add().DataField("n_no").Caption("전송번호").AllowHeaderFiltering(false);
+
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        items.Add()
+                            .Column("item_cd")
+                            .ShowInColumn("item_cd")
+                            .SummaryType(SummaryType.Count);
+                        items.Add()
+                        .Column("b_amt")
+                            .ShowInColumn("b_amt")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum);
+                    }))
+                .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                .OnSelectionChanged(pagePrefix+ "SelectionChanged")
+                .OnCellPrepared(pagePrefix+ "CellPrepared")
+                .OnEditorPreparing(pagePrefix + "EditorPreparing")
+                .OnToolbarPreparing("HideToolbarButton")
+                )
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!-- sum -->
+        <div class="col-3 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "DetailGrid1")
+                    //.KeyExpr(AccountGridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    //.FocusedRowEnabled(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    //.Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(200)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("s_dt").Caption("계산서 시작일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd");
+                        c.Add().DataField("e_dt").Caption("계산서 종료일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd");
+                        c.Add().DataField("amt").Caption("합계금액").Format("#,##0").DataType(GridColumnDataType.Number);
+                    })
+                    .Summary(s => s.TotalItems(items => {
+                        items.Add()
+                        .Column("amt")
+                                .ShowInColumn("amt")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum);
+                    }))
+                )
+            </div>
+
+            </div>
+
+            <!-- 전송번호(n_no) 해당 데이터-->
+            <div class="col-9">
+                <div class="box mb-0 pl-0">
+                    @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "DetailGrid2")
+                    //.KeyExpr(AccountGridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    //.FocusedRowEnabled(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    //.Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(200)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("b_no").Caption("발주번호");
+                        c.Add().DataField("i_no").Caption("입고번호");
+                        c.Add().DataField("i_amt").Caption("입고금액").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("n_no").Caption("전송번호");
+                        c.Add().DataField("isu_doc").Caption("품목");
+                    })
+                    .Summary(s => s.TotalItems(items => {
+                        items.Add()
+                        .Column("i_amt")
+                            .ShowInColumn("i_amt")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum);
+                            //.DisplayFormat("[{0}]");
+                        items.Add()
+                            .Column("i_amt")
+                            .ShowInColumn("b_no")
+                            .SummaryType(SummaryType.Count);
+
+                    }))
+                //.OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                //.OnToolbarPreparing("HideToolbarButton")
+                )
+                </div>
+            </div>
+
+
+        </div>
+
+
+</div>

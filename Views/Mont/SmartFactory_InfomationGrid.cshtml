@@ -1,0 +1,427 @@
+﻿@*자율점검 계획 작성*@ 
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var totalData = @Html.Raw(Json.Encode(ViewBag.totalData.Data));
+    var chartData = @Html.Raw(Json.Encode(ViewBag.chartData.Data));
+    var itemJson = @Html.Raw(Json.Encode(ViewBag.items.Data));
+}
+
+
+    <script type="text/javascript" id="SmartFactory_InfomationGridJs">
+        // SP 구문, gubun 변수
+        var toDay = new Date();
+        var _signGubun = "";
+
+        $(document).ready(function () {
+
+            if (@Html.Raw(Json.Encode(ViewBag.totalData.Data)) != "") {
+                $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@totalData));
+                $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            if (@Html.Raw(Json.Encode(ViewBag.chartData.Data)) != "") {
+                $("#ok_ng_chart").dxChart("option", "dataSource", []);
+                $("#ok_ng_chart").dxChart("option", "dataSource", JSON.parse(@chartData));
+                $("#weight_avg_chart").dxChart("option", "dataSource", []);
+                $("#weight_avg_chart").dxChart("option", "dataSource", JSON.parse(@chartData));
+            }
+
+            var columns = [
+                { dataField: "item_cd", caption: "품목코드" },
+                { dataField: "item_nm", caption: "품목명" }
+            ];
+
+            createPopup("SmartFactory_InfomationGrid_Item", "제품조회", @itemJson, columns, "item_cd");
+
+            setDatePicker("#SmartFactory_InfomationGrid .datepicker");
+
+        })
+
+
+        // 조회버튼 기능
+        function SmartFactory_InfomationGridSearch() {
+            var formData = new FormData($('#' + "SmartFactory_InfomationGridSearchForm")[0]);
+
+            gridReset("SmartFactory_InfomationGridGrid");
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/SmartFactory_InfomationGridSelect',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+
+                    if (result == "") return;
+
+                    if (result != "") {
+                        var jsonData = new Array();
+                        for (let i = 0; i < result.length; i++) {
+
+                            if (result[i] != "" && result[i] != null) {
+                                jsonData[i] = JSON.parse(result[i]);
+                            }
+                            else {
+                                jsonData[i] = result[i];
+                            }
+
+                        }
+                        $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("dataSource", jsonData[0]);
+                        $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                        $("#SmartFactory_InfomationGridGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+
+
+                        $("#ok_ng_chart").dxChart("option", "dataSource", []);
+                        $("#ok_ng_chart").dxChart("option", "dataSource", jsonData[1]);
+                        $("#weight_avg_chart").dxChart("option", "dataSource", []);
+                        $("#weight_avg_chart").dxChart("option", "dataSource", jsonData[1]);
+                    }
+
+
+
+                }
+            })
+        }
+
+        function gridReset(gridName) {
+
+            $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+            $("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", -1);
+            $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+        }
+
+        function SmartFactory_InfomationGrid_ItemPopup() {
+            var popup = $("#SmartFactory_InfomationGrid_ItemPopup").dxPopup("instance");
+
+            popup.show();
+        }
+
+
+        function SmartFactory_InfomationGrid_ItemRowDblClick(selectedItems) {
+
+            $("#SmartFactory_InfomationGrid_item_cd").val(selectedItems.values[0]);
+            $("#SmartFactory_InfomationGrid_item_nm").val(selectedItems.values[1]);
+
+            var popup = $("#SmartFactory_InfomationGrid_ItemPopup").dxPopup("instance");
+            popup.hide();
+        }
+    </script>
+
+
+<style>
+    .chart_div_height {
+        height: 348px;
+    }
+</style>
+
+<div id="SmartFactory_InfomationGrid" autoresize="Y">
+
+    <div id="SmartFactory_InfomationGrid_ItemPopup"></div>
+
+
+    <div id="SmartFactory_InfomationGrid_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="SmartFactory_InfomationGridSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품코드</span>
+                        </div>
+                        <input type="text" class="form-control col-3" id="SmartFactory_InfomationGrid_item_cd" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="SmartFactory_InfomationGrid_ItemPopup()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" id="SmartFactory_InfomationGrid_item_nm" name="item_nm">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).AddDays(1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.AddDays(1).ToShortDateString()" />
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @*=== CRUD 버튼 ===*@
+            @{Html.SetToolbar(0, true, "Search");}
+
+        </div>
+
+    </div>
+
+    <div class="row mb-1">
+        <div class="col-12">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("SmartFactory_InfomationGridGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(500)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .KeyExpr("row_num")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("result_goal_qty").Caption("생산수량");
+                        c.Add().DataField("result_progress_rate").Caption("진행율");
+                        c.Add().DataField("result_start_time").Caption("시작시간");
+                        c.Add().DataField("result_stop_time").Caption("종료시간");
+                        c.Add().DataField("result_UPH_qty").Caption("시간당 생산량");
+                        c.Add().DataField("result_UPS_qty").Caption("초당 생산량");
+                        c.Add().DataField("result_OK_rate").Caption("양품율");
+                        c.Add().DataField("result_defect_qty").Caption("불량수");
+                        c.Add().DataField("result_defect_rate").Caption("불량율");
+                        c.Add().DataField("result_item_content_avg").Caption("평균중량");
+                        c.Add().DataField("result_item_error_range").Caption("표준편차");
+                        c.Add().DataField("result_worker_qty").Caption("투입인원");
+                        c.Add().DataField("result_MEN").Caption("MAN");
+                    })
+                )
+            </div>
+        </div>
+    </div>
+    <div class="row test">
+        <div class="col-6 pr-0 chart_div_height">
+            <div class="box">
+
+                @(Html.DevExtreme().Chart()
+                        .ID("ok_ng_chart")
+                        .ArgumentAxis(a => a
+                            .Label(l => l
+                                .OverlappingBehavior(OverlappingBehavior.Stagger)
+                                .Font(f => f
+                                    .Size(20)
+                                    .Weight(600)
+                                )
+                            )
+                        )
+                        .ValueAxis(a => {
+                            a.Add()
+                                .Name("ok_axis")
+                                .Position(Position.Left)
+                                .Label(l => l
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                            a.Add()
+                                .Name("defect_axis")
+                                .Position(Position.Right)
+                                .Label(l => l
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                        })
+                        .Series(s => {
+                            s.Add()
+                                .Type(SeriesType.Bar)
+                                .ArgumentField("ymd")
+                                .ValueField("goal_qty")
+                                .Axis("ok_axis")
+                                .Name("생산수량")
+                                .HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(0)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                            s.Add()
+                                .Type(SeriesType.Spline)
+                                .ArgumentField("ymd")
+                                .ValueField("defect_qty")
+                                .Axis("defect_axis")
+                                .Name("불량수량")
+                                .HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(0)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                        })
+                        .Legend(l => l
+                            .VerticalAlignment(VerticalEdge.Bottom)
+                            .HorizontalAlignment(HorizontalAlignment.Center)
+                            .Font(f => f
+                                .Size(20)
+                                .Weight(600)
+                            )
+                        )
+                        .DataSource(new[]
+                        {
+                            new {}
+                        })
+                        .Size(s => s
+                            .Height(320)
+                            .Width(800)
+                        )
+                        .Margin(m => m
+                            .Left(15)
+                            .Top(30)
+                        )
+                        .Tooltip(t => t
+                            .Enabled(true)
+                            .Location(ChartTooltipLocation.Edge)
+                            .CustomizeTooltip(@<text>
+                                function(arg) {
+                                    return {
+                                        text: arg.seriesName + " : " + arg.valueText
+                                    };
+                                }
+                            </text>)
+                        )
+                    )
+            </div>
+
+        </div>
+        <div class="col-6 chart_div_height">
+            <div class="box">
+
+
+                @(Html.DevExtreme().Chart()
+                        .ID("weight_avg_chart")
+                        .ArgumentAxis(a => a
+                            .Label(l => l
+                                .OverlappingBehavior(OverlappingBehavior.Stagger)
+                                .Font(f => f
+                                    .Size(20)
+                                    .Weight(600)
+                                )
+                            )
+                        )
+                        .ValueAxis(a => {
+                            a.Add()
+                                .Name("weight_axis")
+                                .Position(Position.Left)
+                                .Label(l => l
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                            a.Add()
+                                .Name("avg_axis")
+                                .Position(Position.Right)
+                                .Label(l => l
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                        })
+                        .Series(s => {
+                            s.Add()
+                                .Type(SeriesType.Bar)
+                                .ArgumentField("ymd")
+                                .ValueField("weight")
+                                .Axis("weight_axis")
+                                .Name("기본중량")
+                                .HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(2)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                            s.Add()
+                                .Type(SeriesType.Spline)
+                                .ArgumentField("ymd")
+                                .ValueField("avg")
+                                .Axis("avg_axis")
+                                .Name("평균중량")
+                                .HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(2)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                        })
+                        .Legend(l => l
+                            .VerticalAlignment(VerticalEdge.Bottom)
+                            .HorizontalAlignment(HorizontalAlignment.Center)
+                            .Font(f => f
+                                .Size(20)
+                                .Weight(600)
+                            )
+                        )
+                        .DataSource(new[]
+                        {
+                            new {}
+                        })
+                        .Size(s => s
+                            .Height(320)
+                            .Width(800)
+                        )
+                        .Margin(m => m
+                            .Left(15)
+                            .Top(30)
+                        )
+                        .Tooltip(t => t
+                            .Enabled(true)
+                            .Location(ChartTooltipLocation.Edge)
+                            .CustomizeTooltip(@<text>
+                                function(arg) {
+                                    return {
+                                        text: arg.seriesName + " : " + arg.valueText
+                                    };
+                                }
+                            </text>)
+                        )
+                    )
+            </div>
+
+        </div>
+    </div>
+
+</div>

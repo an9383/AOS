@@ -1,0 +1,179 @@
+﻿
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@*제조지시별 공정실적현황*@
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var MonitorProcess = Html.Raw(Json.Encode(ViewBag.MonitorProcess.Data));
+    var MakingItems = Html.Raw(Json.Encode(ViewBag.MakingItems.Data));
+}
+
+@{
+    string[] MonitorProcessGridKey = { "order_no", "lot_no", "display_gubun" };
+}
+
+<script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            if ((@MonitorProcess).length > 0) {
+
+                $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@MonitorProcess));
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup(PagePrefix + "Item", "품목 조회", @MakingItems, popupColumns);
+
+            setDatePicker("#Monitor_process .datepicker");
+
+            $("#" + FormNmSearch + " input[name=sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+            $("#" + FormNmSearch + " input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        });
+
+        // 검색용 제조제품 팝업
+        function Monitor_processSelectItem() {
+            $("#Monitor_processItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업 선택
+        function Monitor_processItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Monitor_processSearchForm input[name=item_cd]").val(data.item_cd);
+
+            $("#Monitor_processItemPopup").dxPopup("instance").hide();
+        }
+
+        // 조회
+        function Monitor_processSearch() {
+
+            UtilView.dataGridSelect('Monitor_processGrid', 'Monitor_processSearchForm');
+        }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate">
+                        <input type="text" class="form-control datepicker" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공정상태</span>
+                        </div>
+                        <select class="form-control" name="process_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "RT006")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .Height(900)
+                    .KeyExpr(MonitorProcessGridKey)
+                    .ShowBorders(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("lot_date").Caption("제조지시일자");
+                        c.Add().DataField("valid_Date").Caption("사용기한");
+                        c.Add().DataField("common_part_nm").Caption("공정상태");
+                        c.Add().DataField("process_nm").Caption("공정명");
+                        c.Add().DataField("lot_size").Caption("지시수량");
+                        c.Add().DataField("testrequest_no").Caption("시험번호");
+                        c.Add().DataField("order_proc_qc_qty").Caption("시험여부");
+                        c.Add().DataField("order_proc_receive_qty").Caption("인계량(무게)");
+                        c.Add().DataField("order_proc_receive_ea_qty").Caption("인계량(수량)");
+                        c.Add().DataField("order_proc_real_qty").Caption("생산량(무게)");
+                        c.Add().DataField("order_proc_real_ea_qty").Caption("생산량(수량)");
+                        c.Add().DataField("order_proc_enter_time").Caption("공정종료일시");
+                        c.Add().DataField("order_proc_rate").Caption("공정수율");
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

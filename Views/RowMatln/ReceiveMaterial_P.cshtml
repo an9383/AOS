@@ -1,0 +1,2294 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "ReceiveMaterial_P";
+}
+
+@{
+    var ReceiveMaterial_PData = @Html.Raw(Json.Encode(ViewBag.ReceiveMaterial_PData.Data));
+    var ReceiveMaterial_PAuth = @Html.Raw(Json.Encode(ViewBag.ReceiveMaterial_PAuth.Data));
+
+    var RMP_itemCDJson = @Html.Raw(Json.Encode(ViewBag.RMP_itemCD.Data));
+    var RMP_manufacture = @Html.Raw(Json.Encode(ViewBag.RMP_manufacture.Data));
+    var RMP_supply = @Html.Raw(Json.Encode(ViewBag.RMP_supply.Data));
+}
+
+<script type="text/javascript" id="ReceiveMaterial_PJs">
+
+    // SP 구문, gubun 변수
+    var RMP_Gubun = "";
+
+    // 메뉴 권한
+    var _ReceiveMaterial_PAuth;
+
+    var _ReceiveMaterial_PSignValid = false;
+
+    var _RequestCancel = false;
+
+    var _Validation = false;
+
+    var RMP_packGridEnable = false;
+
+    var RMP_pack_remain_qty = new Array();      //팩 정보 - 팩 재고량 변경 값
+
+    var _ReceiveMaterial_SM = false;            //원료master에 등록된 제조처와 동일한지 check
+
+    var _ReceiveMaterial_ST_P = false;            //실험필요여부 값 check
+
+    $(function () {
+
+        if (!(@ReceiveMaterial_PData === "")) {
+            // 좌측 그리드 객체 생성
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ReceiveMaterial_PData));
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 수정중인지 체크
+        ReceiveMaterial_P_EditCheck(false);
+        //재고수정 활성화
+        RMP_packGridEnable_P_Check(false);
+
+        // 사용자 권한
+        _ReceiveMaterial_PAuth = JSON.parse(@ReceiveMaterial_PAuth)[0];
+
+        if (_ReceiveMaterial_PAuth.form_query != "Y") {
+            $("#ReceiveMaterial_PSearch").remove();
+        }
+
+        setDatePicker("#ReceiveMaterial_P .datepicker");
+
+        // 팝업
+        // 팝업 셋팅
+        /* (검색) 자재 팝업 */
+        var RMP_itemCDPopup_Data = @RMP_itemCDJson;
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "자재코드" },
+            { dataField: "item_nm", caption: "자재명" },
+            { dataField: "trade_nm", caption: "공급처" },
+            { dataField: "item_type3_nm", caption: "원료구분" }
+        ];
+
+        createPopup("RMP_itemCD", "자재 조회", RMP_itemCDPopup_Data, columns1, "item_cd");
+
+        /* 원자재 팝업 */
+        var RMP_itemCD2Popup_Data = @RMP_itemCDJson;
+
+        var columns2 = [
+            { dataField: "item_cd", caption: "자재코드" },
+            { dataField: "item_nm", caption: "자재명" },
+            { dataField: "trade_nm", caption: "공급처" },
+            { dataField: "item_type3_nm", caption: "원료구분" }
+        ];
+
+        createPopup("RMP_itemCD2", "자재 조회", RMP_itemCD2Popup_Data, columns2, "item_cd");
+
+        /* 재조원 팝업 */
+        var manufacturePopup_Data = @RMP_manufacture;
+
+        var columns3 = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("RMP_Manufacture", "제조처 조회", manufacturePopup_Data, columns3, "vender_cd");
+
+        /* 공급처 팝업 */
+        var supplyPopup_Data = @RMP_supply;
+
+        var columns4 = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("RMP_supply", "제조처 조회", supplyPopup_Data, columns4, "vender_cd");
+
+        $("#receipt_check_Click_M").attr('disabled', false); // 입고 검수서 버튼
+    });
+
+    // 수정중인지 체크
+    function ReceiveMaterial_P_EditCheck(nowEdit) {
+
+        // 입력/수정중일 때
+        if (nowEdit) {
+            $("#ReceiveMaterial_PSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PInput").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PDelete").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PExcel").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PPrint").dxButton().parent().parent().addClass("display-none");
+
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("option", "disabled", true);
+            $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', false);
+            $("#RMP_Cancel").attr('disabled', true); // 취소 버튼
+            $("#RMP_TestRequest").attr('disabled', true); // 시험의뢰
+            $("#RMP_TestRequestCancel").attr('disabled', true); // 시험의뢰 취소
+            $("#receipt_check_Click_P").attr('disabled', true); // 입고 검수서 버튼
+            $("#RMP_packGridEnable_Val").attr('disabled', true);    //재고수정 활성화
+        }
+        if (!nowEdit) {
+            $("#ReceiveMaterial_PSave").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PExcel").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiveMaterial_PPrint").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("option", "disabled", false);
+            $("#ReceiveMaterial_P_UpRight_form :enabled").attr('disabled', true);
+            $("#RMP_Cancel").attr('disabled', false); // 취소 버튼
+            $("#RMP_TestRequest").attr('disabled', false); // 시험의뢰
+            $("#RMP_TestRequestCancel").attr('disabled', false); // 시험의뢰 취소
+            $("#receipt_check_Click_P").attr('disabled', false); // 입고 검수서 버튼
+            $("#RMP_packGridEnable_Val").attr('disabled', false);    //재고수정 활성화
+        }
+
+    }
+
+    //재고수정 활성화 여부
+    function RMP_packGridEnable_P_Check(enable) {
+
+        //재고수정활성화        
+        if (enable) {
+            $("#ReceiveMaterial_PSave").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PInput").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PDelete").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PExcel").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiveMaterial_PPrint").dxButton().parent().parent().addClass("display-none");
+
+            $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("option", "disabled", true);
+            $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', true);
+
+            $("#RMP_Cancel").attr('disabled', true);            // 취소 버튼
+            $("#RMP_TestRequest").attr('disabled', true);       // 시험의뢰
+            $("#RMP_TestRequestCancel").attr('disabled', true); // 시험의뢰 취소
+            $("#receipt_check_Click_P").attr('disabled', true); // 입고 검수서 버튼
+
+            $("#RMP_packGridEnable_Val").hide();    //재고수정 활성화
+            $("#RMP_packGridEnableSave").show();    //재고수정 저장
+            $("#RMP_packGridEnableCancel").show();  //재고수정 취소
+        }
+        if (!enable) {
+            $("#RMP_packGridEnable_Val").show();    //재고수정 활성화
+            $("#RMP_packGridEnableSave").hide();    //재고수정 저장
+            $("#RMP_packGridEnableCancel").hide();  //재고수정 취소
+        }
+    }
+
+    // 위 그리드 체인지
+    function ReceiveMaterial_P_Left_changed() {
+
+        if ($("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+    
+            return;
+        }
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiveMaterial_P_LeftGrid', grid.option("focusedRowKey"));
+
+        // 오른쪽 아래 그리드 초기화
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ReceiveMaterial_P_UpRight_form")[0].reset();
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiveMaterial_P_Select',
+            data: {
+                receipt_no: gridData.receipt_no,
+                receipt_id: gridData.receipt_id,
+                Material_Or_PackMaterial: 'C'
+            },
+            success: function (result) {
+
+                if (result[1].length <= 0) {
+                    return;
+                }
+
+                var ArrayCheck = Array.isArray(result);
+
+                if (!ArrayCheck && JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                /* 아래 그리드 데이터 */
+                if (result[0] != "") {
+                    $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                    $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").selectAll();
+                }
+
+                var formData = JSON.parse(result[1]);
+
+                if (formData.length > 0) {
+
+                    $("#ReceiveMaterial_P input[name=receipt_check_no]").val(formData[0].receipt_check_no); // 검수번호
+                    $("#ReceiveMaterial_P input[name=receipt_check_id]").val(formData[0].receipt_check_id); // 검수번호check_id
+                    $("#ReceiveMaterial_P select[name=obtain_status]").val(formData[0].obtain_status); // 조달구분
+                    $("#ReceiveMaterial_P input[name=purchase_no]").val(formData[0].purchase_no); // 발주번호
+                    $("#ReceiveMaterial_P input[name=purchase_id]").val(formData[0].purchase_id); // 발주순번
+                    $("#ReceiveMaterial_P input[name=purchase_date]").val(formData[0].purchase_date); // 입고일자
+                    $("#ReceiveMaterial_P input[name=receipt_time_date]").val(formData[0].receipt_time_date); // 입고일자
+                    $("#ReceiveMaterial_P input[name=receipt_no]").val(formData[0].receipt_no); // 입고번호
+                    $("#ReceiveMaterial_P input[name=receipt_id]").val(formData[0].receipt_id); // 입고id
+                    $("#ReceiveMaterial_P select[name=receipt_status]").val(formData[0].receipt_status); // 입고구분
+                    $("#ReceiveMaterial_P input[name=receipt_qty]").val(formData[0].receipt_qty); // 입고총량
+                    $("#ReceiveMaterial_P input[name=item_unit]").val(formData[0].item_unit); // 단위                    
+                    $("#ReceiveMaterial_P input[name=item_cd]").val(formData[0].item_cd); // 원자재코드
+                    $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val(formData[0].receipt_pack_in_qty); // 포장량
+                    $("#ReceiveMaterial_P input[name=item_nm]").val(formData[0].item_nm); // 자재명
+                    $("#ReceiveMaterial_P input[name=receipt_pack_qty]").val(formData[0].receipt_pack_qty); // 포장수량
+                    $("#ReceiveMaterial_P input[name=receipt_qc_no1]").val(formData[0].receipt_qc_no1); // 의뢰번호
+                    $("#ReceiveMaterial_P input[name=receipt_qc_no3]").val(formData[0].receipt_qc_no3); // 시험번호
+                    $("#ReceiveMaterial_P input[name=receipt_material_maker_cd]").val(formData[0].receipt_material_maker_cd); // 제조원
+                    $("#ReceiveMaterial_P input[name=receipt_lot_cust_nm]").val(formData[0].receipt_lot_cust_nm); // 제조처 명
+                    $("#ReceiveMaterial_P input[name=receipt_lot_no]").val(formData[0].receipt_lot_no); // 제조번호
+                    $("#ReceiveMaterial_P input[name=cust_cd]").val(formData[0].cust_cd); // 공급원 코드
+                    $("#ReceiveMaterial_P input[name=cust_nm]").val(formData[0].cust_nm); // 공급원 명
+                    $("#ReceiveMaterial_P input[name=remark]").val(formData[0].remark); // 비고
+                    $("#ReceiveMaterial_P input[name=receipt_lot_date]").val(formData[0].receipt_lot_date); // 제조일자
+                    $("#ReceiveMaterial_P input[name=valid_period]").val(formData[0].valid_period); // 유통기한
+                    $("#ReceiveMaterial_P input[name=receipt_qc_rate]").val(formData[0].receipt_qc_rate); // (QC)역가
+                    $("#ReceiveMaterial_P input[name=receipt_qc_pollination]").val(formData[0].receipt_qc_pollination); // (QC)함량
+                    $("#ReceiveMaterial_P input[name=receipt_confirm_emp_nm]").val(formData[0].receipt_confirm_emp_nm); // 승인자 명
+                    $("#ReceiveMaterial_P input[name=receipt_confirm_emp_time]").val(formData[0].receipt_confirm_emp_time); // 승인 날짜
+
+                }
+
+            }
+        });
+
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").selectAll();
+    }
+
+    /* CRUD 시작 */
+
+    // 조회
+    function ReceiveMaterial_PSearch() {
+
+        // 초기화
+
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        ReceiveMaterial_P_EditCheck(false);
+
+        // 초기화 끝
+
+        var formData = new FormData($("#S_ReceiveMaterial_P_form")[0]);
+
+        // 선택 된 텝 조회
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiveMaterial_P_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("dataSource", []);
+                    //$("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#ReceiveMaterial_P_UpRight_form")[0].reset();
+                    $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                // 그리드 항목이 하나 일때, 그리드 changed() 를 호출 할 수 있도록 설정
+                //if ($("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("dataSource").length === 1) {
+                    $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                //}
+
+                $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+
+    }
+
+    // 입력
+    function ReceiveMaterial_PInput() {
+
+        // 입력&수정 모드 셋팅
+        ReceiveMaterial_P_EditCheck(true);
+
+        $("#ReceiveMaterial_P_UpRight_form")[0].reset();
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ReceiveMaterial_P_UpRight_form select[name=receipt_status]").val("6");             //입고번호 : '입고검수' 고정
+
+        RMP_Gubun = "I1";
+
+    }
+
+    // 저장
+    async function ReceiveMaterial_PSave() {
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (!(receipt_status === "4" || receipt_status === "5" || receipt_status === "6") && !RMP_packGridEnable) {
+
+            alert("입고검수, PASS, 적합 상태만 입력할 수 있습니다");
+            return;
+
+        } else {
+
+            _Validation = false;
+            RMP_packGridEnable = false;
+            RMP_Validation();
+
+            if (_Validation) {
+
+                //#region 원료master에 등록된 제조처와 동일한지 확인        =>일단 보류.
+                //receiptStatus_SM();
+                //if (!_ReceiveMaterial_SM) {
+                //    alert("등록된 제조처와 입력한 제조처가 다릅니다.");
+                //    return;
+                //}
+                //#endregion
+
+                // product_receipt 체크 값 설정
+                if ($("#ReceiveMaterial_P input:checkbox[name='product_receipt']").prop("checked")) {
+
+                    $("#ReceiveMaterial_P input[name=product_receipt_YN]").val("Y");
+                } else {
+
+                    $("#ReceiveMaterial_P input[name=product_receipt_YN]").val("N");
+                }
+
+                var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+                formData.set("gubun", RMP_Gubun);
+
+                //검수번호 존재하지 않으면
+                if ($("#ReceiveMaterial_P input[name=receipt_check_no]").val() == null || $("#ReceiveMaterial_P input[name=receipt_check_no]").val() == "") {
+                    formData.set("purchase_id", "0");
+                }
+
+                //팩 정보 수정 사항
+                await $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").saveEditData();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/RowMatln/receiptStatus_CRUD',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    async: false,
+                    success: function (result) {
+
+                        if (result.length <= 0) {
+                            return;
+                        }
+
+                        // 신규 입력
+                        if (RMP_Gubun === "I1") {
+
+                            var receiptNo = JSON.parse(result).message;
+
+                            $("#ReceiveMaterial_P input[name=receipt_no]").val(receiptNo);
+
+                            ReceiveMaterial_P_GridSave();
+
+                        } else if (RMP_Gubun === "U1") { // 업데이트
+
+                            RMP_Update_GridDelete();
+                            //RMP_Update_Grid_pack_qty(RMP_pack_remain_qty);
+                        }
+
+                    }
+                });
+
+            }
+
+        }
+
+    }
+
+    //실험필요여부 확인
+    function ReceiveMaterial_ST_P() {
+        var item_cd = $("#ReceiveMaterial_P_UpRight_form input[name=item_cd]").val();
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+        formData.set("item_cd", item_cd);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiveMaterial_ST',
+            async: false,
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                                           
+                if (result.length > 0) {
+                    if (result === "Y") {
+                        _ReceiveMaterial_ST_P = true;
+                    } else if (result === "N") {
+                        _ReceiveMaterial_ST_P = false;
+                    }
+                    
+                } 
+            }
+        });
+    }
+
+    //원료master에 저장된 제조차와 동일한지 확인
+    function receiptStatus_SM() {
+        var item_cd = $("#ReceiveMaterial_P_UpRight_form input[name=item_cd]").val();
+        var cust_cd = $("#ReceiveMaterial_P_UpRight_form input[name=receipt_material_maker_cd]").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_SM',
+            async: false,
+            data: {
+                item_cd: item_cd,
+                cust_cd: cust_cd
+            },
+            success: function (result) {
+                if (result.length != "") {
+                    _ReceiveMaterial_SM = true;
+                } else {
+                    _ReceiveMaterial_SM = false;
+                }
+            }
+        });
+    }
+
+    //입력 - 저장
+    function ReceiveMaterial_P_GridSave() {
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+
+        var datagrid = $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance");
+        var gridData = datagrid.option("dataSource");
+
+        RMP_Gubun = "I2";
+
+        for (var i = 0; i < gridData.length; i++) {
+
+            var data = gridData[i];
+
+            formData.set("receipt_no", $("#ReceiveMaterial_P input[name=receipt_no]").val());
+            formData.set("receipt_id", "1");
+            formData.set("receipt_pack_seq", data.receipt_pack_seq);
+            formData.set("receipt_pack_unit", data.receipt_pack_unit);
+            formData.set("receipt_pack_qty", data.receipt_pack_qty);
+            formData.set("receipt_pack_remark", "");
+            formData.set("receipt_pack_remain_qty", 0);
+            formData.set("old_receipt_pack_remain_qty", 0);
+            formData.set("new_receipt_pack_remain_qty", 0);
+            formData.set("cost_cd", "");
+            formData.set("Material_Or_PackMaterial", "C");
+            formData.set("gubun", RMP_Gubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/receiptStatus_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    if (i == gridData.length - 1) {
+                        alert("저장되었습니다.");
+                        RMP_Gubun = "";
+                        ReceiveMaterial_P_EditCheck(false);
+                        ReceiveMaterial_PSearch();
+                    }
+
+                }
+            }).fail(function (data) {
+                alert("Failed: " + data.response);
+            });
+
+        }
+
+
+    }
+
+    function ReceiveMaterial_P_GridDelete() {
+
+        RMP_Gubun = "AllPackDelete";
+
+        $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', false);
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+        formData.set("gubun", RMP_Gubun);
+
+        $("#ReceiveMaterial_P_UpRight_form :enabled").attr('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_CRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                ReceiveMaterial_P_FormDelete();
+
+            }
+        });
+    }
+
+    // validation 체크
+    function RMP_Validation() {
+
+        if ($("#ReceiveMaterial_P select[name=obtain_status]").val() === null || $("#ReceiveMaterial_P select[name=obtain_status]").val() === "") {
+            alert("조달구분을 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ReceiveMaterial_P input[name=receipt_time_date]").val() === null || $("#ReceiveMaterial_P input[name=receipt_time_date]").val() === "") {
+            alert("입고일자를 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ReceiveMaterial_P input[name=receipt_qty]").val() === null || $("#ReceiveMaterial_P input[name=receipt_qty]").val() === "") {
+            alert("입고총량을 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ReceiveMaterial_P input[name=item_cd]").val() === null || $("#ReceiveMaterial_P input[name=item_cd]").val() === "") {
+            alert("원자재 코드를 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val() === null || $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val() === "") {
+            alert("포장량을 선택해 주세요.");
+            return;
+        }
+
+        if ($("#RMP_receipt_pack_unit").val() === null || $("#RMP_receipt_pack_unit").val() === "") {
+            alert("포장량 단위를 선택해 주세요.");
+            return;
+        }
+
+        if (parseInt($("#ReceiveMaterial_P input[name=receipt_qty]").val()) < parseInt($("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val())) {
+            alert("포장량이 입고 총량 보다 클 수 없습니다.");
+            return;
+        }
+
+        if ($("#ReceiveMaterial_P input[name=receipt_pack_qty]").val() === null || $("#ReceiveMaterial_P input[name=receipt_pack_qty]").val() === "") {
+            alert("포장생성 버튼을 클릭 해 주세요.");
+            return;
+        }
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+        var receipt_qc_no1 = $("#ReceiveMaterial_P_UpRight_form input[name=receipt_qc_no1]").val();     //의뢰번호
+        var receipt_qc_no3 = $("#ReceiveMaterial_P_UpRight_form input[name=receipt_qc_no3]").val();     //시험번호
+
+        //PASS 상태로 입고 될 때, 의뢰번호, 시험번호가 없을 시 입고 X
+        if (receipt_status === "5" && (receipt_qc_no1 === "" || receipt_qc_no1 === null) && (receipt_qc_no3 === "" || receipt_qc_no3 === null)) {
+            ReceiveMaterial_ST_P();
+            if (_ReceiveMaterial_ST_P) {
+                alert("해당 제품은 시험의뢰가 필요한 제품 입니다.\r\nPASS 상태로 입고할 수 없습니다.\r\n\r\n※ 시험이 진행되지 않은 제품은 불출지시를 내릴 수 없습니다.");
+                return;
+            }
+        }
+
+        if (receipt_status === "4") {
+
+            if ($("#ReceiveMaterial_P input[name=receipt_qc_no3]").val() === null || $("#ReceiveMaterial_P input[name=receipt_qc_no3]").val() === "") {
+                alert("시험번호를 선택해 주세요.");
+                return;
+            }
+
+        }
+
+        //if (receipt_status === "4" || receipt_status === "5") {
+
+        //    if ($("#ReceiveMaterial_P input[name=receipt_qc_no3]").val() === null || $("#ReceiveMaterial_P input[name=receipt_qc_no3]").val() === "") {
+        //        alert("시험번호를 선택해 주세요.");
+        //        return;
+        //    }
+
+        //    var _receipt_qc_no3 = $("#ReceiveMaterial_P input[name=receipt_qc_no3]").val();
+
+        //     //!!!!!!!! 기업 별로 EX- 가 다름 (*추후 변경해야함)
+        //    if (_receipt_qc_no3.length != 11) {
+        //        alert("시험번호는 11자리 이며 맨앞에 EX- 를 포함해야 합니다. (EX-12345678)");
+        //        return;
+        //    }
+
+        //    if (_receipt_qc_no3.substring(0, 3) != "EX-") {
+        //        alert("시험번호는 11자리 이며 맨앞에 EX- 를 포함해야 합니다. (EX-12345678)");
+        //        return;
+        //    }
+
+        //    _receipt_qc_no3 = $("#ReceiveMaterial_P input[name=receipt_qc_no3]").val();
+        //    if (receipt_status === "4") {
+        //        $("#ReceiveMaterial_P input[name=receipt_qc_no1]").val(_receipt_qc_no3.substring(3, 11));
+        //    }
+
+        //}
+
+        var downGrid = $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance");
+
+        if (downGrid.option("dataSource") == null || downGrid.option("dataSource").length === 0) {
+            alert("등록 된 팩 정보가 없습니다.");
+            return;
+        }
+
+        _Validation = true;
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+
+        // 입고 제한 여부
+        // GMS 에선 제한 체크, 해섭에선 우선 모두 입고 되도록 설정 (2020/11/11)
+        /*
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_SA',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    _Validation = false;
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json[0].materialmaker_ck !== "Y") {
+
+                    _Validation = true;
+                }
+
+            }
+        });
+        */
+    }
+
+    // 수정
+    function ReceiveMaterial_PEdit() {
+
+        // , 제거용
+        var receipt_qty = $("#ReceiveMaterial_P input[name=receipt_qty]").val().replace(",", ""); // 입고총량
+        var receipt_pack_in_qty = $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val().replace(",", ""); // 포장량
+        $("#ReceiveMaterial_P input[name=receipt_qty]").val(receipt_qty);
+        $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val(receipt_pack_in_qty);
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+
+        if (grid.option("dataSource") == null || grid.option("dataSource").length === 0) {
+            alert("자재를 선택해 주세요.");
+            return;
+        }
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (receipt_status === "4" || receipt_status === "5" || receipt_status === "9") {
+
+            alert("적합/Pass 상태는 수정 할 수 없습니다.");
+            return;
+        }
+
+        if (receipt_status === "1") {
+
+            alert("시험의뢰가 진행되었습니다.\r시험의뢰 취소 후 수정 할 수 있습니다.");
+            return;
+        }
+
+        ReceiveMaterial_P_EditCheck(true);
+        // 구분 값
+        RMP_Gubun = "U1";
+
+
+    }
+
+    // 취소
+    function ReceiveMaterial_PUndo() {
+
+        //초기화 셋팅
+        ReceiveMaterial_P_EditCheck(false);
+        RMP_Gubun = "C";
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: false
+        }
+
+        $("#ReceiveMaterial_P_UpRight_form")[0].reset();
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("option", "editing", editing);
+
+        ReceiveMaterial_PSearch();
+
+    }
+
+    // 삭제
+    function ReceiveMaterial_PDelete() {
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (receipt_status === "1") {
+
+            alert("시험의뢰를 먼저 취소해야 삭제가 가능 합니다.");
+            return;
+        }
+
+        if (receipt_status === "2" || receipt_status === "3" || receipt_status === "4"
+            || receipt_status === "5" || receipt_status == "7" || receipt_status == "9") {
+            alert("적합, 부적합, 반품, Pass, 재시험의뢰 상태의 원자재는 삭제 할 수 없습니다.");
+            return;
+        }
+
+        if (receipt_status == "6") {
+            alert("입고 취소인 상태에서만 삭제가 가능합니다.");
+            return;
+        }
+
+        // 삭제 여부 팝업
+        if (confirm("선택된 입고번호의 모든 데이터가 삭제됩니다. 삭제하시겠습니까?") === true) {
+
+            RMP_Gubun = "AllPackDelete";
+
+            $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', false);
+
+            var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+            formData.set("gubun", RMP_Gubun);
+
+            $("#ReceiveMaterial_P_UpRight_form :enabled").attr('disabled', true);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/receiptStatus_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    ReceiveMaterial_P_FormDelete();
+
+                }
+            });
+
+        }
+
+    }
+
+    function ReceiveMaterial_P_FormDelete() {
+
+        RMP_Gubun = "D1";
+
+        $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', false);
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+        formData.set("gubun", RMP_Gubun);
+
+        $("#ReceiveMaterial_P_UpRight_form :enabled").attr('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_CRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                alert("삭제되었습니다.");
+                RMP_Gubun = "";
+                ReceiveMaterial_P_EditCheck(false);
+                ReceiveMaterial_PSearch();
+
+            }
+        });
+
+    }
+
+    //팩 재고량 수정
+    function RMP_Update_Grid_pack_qty(data) {
+        RMP_Gubun = "U2";
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiveMaterial_batch',
+            data: {
+                receiveMaterial: JSON.stringify(data),
+                gubun: RMP_Gubun
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+                var jsonData = JSON.parse(result);
+
+                if (jsonData.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("저장되었습니다.");
+                RMP_pack_remain_qty = new Array();
+                RMP_packGridEnable_P_Check(false);
+
+                var editing = {
+                    allowUpdating: false
+                }
+
+                $("#ReceiveMaterial_P_DownGrid").dxDataGrid("option", "editing", editing);
+                ReceiveMaterial_PSearch();
+            }
+        });
+    }
+    // 그리드 삭제 (업데이트 용)
+    function RMP_Update_GridDelete() {
+
+        RMP_Gubun = "AllPackDelete";
+
+        $("#ReceiveMaterial_P_UpRight_form :disabled").attr('disabled', false);
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+        formData.set("gubun", RMP_Gubun);
+
+        $("#ReceiveMaterial_P_UpRight_form :enabled").attr('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_CRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                // 팩 정보 생성
+                ReceiveMaterial_P_GridSave();
+
+            }
+        });
+
+    }
+
+    function ReceiveMaterial_PExcel(gridName, ExcelName) {
+        gridExportToExcel("ReceiveMaterial_P_LeftGrid", "자재입고관리");
+    }
+
+    /* CRUD 종료 */
+
+    /* 입고 버튼/기능 */
+
+    // 포장생성 이벤트
+    function RMP_PackCreate() {
+
+        var receipt_qty = $("#ReceiveMaterial_P input[name=receipt_qty]").val().replace(",",""); // 입고총량
+        var receipt_pack_in_qty = $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val().replace(",", ""); // 포장량
+        var receipt_pack_qty = "";
+        var packNum = new Array();
+
+        if (receipt_qty.includes('.') || receipt_pack_in_qty.includes('.')) {
+
+            alert("입고총량 또는 포장량에 소숫점이 들어갈 수 없습니다.");
+
+            return;
+        }
+
+        if (parseInt(receipt_qty) <= 0 || parseInt(receipt_pack_in_qty) <= 0) {
+
+            alert("입고총량 또는 포장량이 0 초과 이어야 합니다.");
+
+            return;
+        }
+
+        if ((!isNaN(receipt_qty) && !isNaN(receipt_pack_in_qty)) && parseInt(receipt_qty) >= parseInt(receipt_pack_in_qty)) {
+
+            receipt_pack_qty = Math.ceil(parseInt(receipt_qty) / parseInt(receipt_pack_in_qty));
+
+            $("#ReceiveMaterial_P input[name=receipt_pack_qty]").val(receipt_pack_qty);
+
+            var remain = parseInt(receipt_qty);
+            var _receipt_pack_qty = parseInt(receipt_pack_in_qty);
+
+            for (var i = 0; i < receipt_pack_qty; i++) {
+
+                if ((receipt_pack_qty - 1) === i)
+                    _receipt_pack_qty = remain;
+
+                packNum[i] = {
+
+                    cost_cd: "",
+                    cost_nm: null,
+                    receipt_id: 0,
+                    receipt_no: "",
+                    receipt_pack_barcode: "",
+                    receipt_pack_check: "Y",
+                    receipt_pack_print_cnt: 0,
+                    receipt_pack_print_gubun: "가능",
+                    receipt_pack_print_max: 1,
+                    receipt_pack_print_yn: "Y",
+                    receipt_pack_qc_no1: null,
+                    receipt_pack_qty: _receipt_pack_qty,
+                    receipt_pack_remain_qty: 0,
+                    receipt_pack_remark: "",
+                    receipt_pack_seq: i + 1,
+                    receipt_pack_unit: $("#ReceiveMaterial_P input[name=item_unit]").val()
+
+                }
+
+                remain = remain - _receipt_pack_qty;
+            }
+
+            $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", packNum);
+        }
+
+    }
+
+    function RMP_receipt_status() {
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (receipt_status === "4" || receipt_status === "5") {
+
+            $("#ReceiveMaterial_P input[name=receipt_qc_no3]").attr('readonly', false);
+
+        } else {
+
+            $("#ReceiveMaterial_P input[name=receipt_qc_no3]").attr('readonly', true);
+        }
+
+    }
+
+    //자재 단위 가져오기
+    function ReceiveMaterial_P_GetItemUnit(item_cd) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/RowMatln/ReceiveMaterial_GetItemUnit',
+            data: {
+                item_cd: item_cd //제조품목
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.length > 0) {
+                        $("#ReceiveMaterial_P input[name=item_unit]").val(json[0].item_unit);
+                    } else {
+                        $("#ReceiveMaterial_P input[name=item_unit]").val("EA");
+                    }
+
+                }
+            }
+        })
+
+    }
+
+    // 취소 버튼 (입고취소 <-> 입고검수)
+    function receiptStatus_P_Cancel() {
+
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val();
+
+        ReceiveMaterial_P_EditCheck(true);
+
+        var formData = new FormData($("#ReceiveMaterial_P_UpRight_form")[0]);
+
+        ReceiveMaterial_P_EditCheck(false);
+
+        // 입고검수 -> 입고취소
+        if (receipt_status === "6") {
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/receiptStatus_C1',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    ReceiveMaterial_P_Left_changed();
+
+                }
+            });
+
+        }
+        // 입고취소 -> 입고검수
+        else if (receipt_status === "8") {
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/receiptStatus_C3',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    ReceiveMaterial_P_Left_changed();
+
+                }
+            });
+
+        }
+
+    }
+
+    // 팩 수량 변경시
+    function RMP_qtyCh() {
+
+        if (RMP_Gubun == "I1") {
+            var downGrid = $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance");
+
+            // 변경사항 없음
+            if (downGrid.option("dataSource") == null || downGrid.option("dataSource").length === 0) {
+
+                return;
+            } else {
+                $("#ReceiveMaterial_P input[name=receipt_pack_qty]").val("");
+                $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+        } else {
+            return;
+        }
+
+    }
+
+    // 재고수정 활성화
+    function RMP_packGridEnable_Click() {
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiveMaterial_P_LeftGrid', grid.option("focusedRowKey"));
+
+        if (grid.option("dataSource") == null || grid.option("dataSource").length === 0) {
+            alert("자재를 선택해 주세요.");
+            return;
+        }
+        if (gridData.receipt_qc_no1 == '' || gridData.receipt_qc_no3 == '') {
+            alert("의뢰번호, 시험번호가 존재하면 재고를 수정하실 수 있습니다.");
+            return;
+        }
+
+        // 구분 값
+        RMP_Gubun = "U1";
+        RMP_packGridEnable = true;
+
+        // , 제거
+        var receipt_qty = $("#ReceiveMaterial_P input[name=receipt_qty]").val().replace(",", ""); // 입고총량
+        var receipt_pack_in_qty = $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val().replace(",", ""); // 포장량
+        $("#ReceiveMaterial_P input[name=receipt_qty]").val(receipt_qty);
+        $("#ReceiveMaterial_P input[name=receipt_pack_in_qty]").val(receipt_pack_in_qty);       
+
+        //팩 정보만 수정 가능.
+        RMP_packGridEnable_P_Check(RMP_packGridEnable);
+
+        // 팩 정보 edit 모드로 옵션 변경
+        var editing = {
+            allowUpdating: true,
+            mode: 'batch'
+        }
+
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 재고수정 활성화 취소
+    function RMP_packGridEnableCancel() {
+
+        ReceiveMaterial_P_EditCheck(false);
+        // 구분 값
+        RMP_Gubun = "";
+        RMP_packGridEnable = false;
+
+        RMP_packGridEnable_P_Check(RMP_packGridEnable);
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: false
+        }
+
+        $("#ReceiveMaterial_P_DownGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 재고수정 활성화 저장
+    async function RMP_packGridSave_Click() {
+
+        //팩 정보 수정 사항
+        await $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance").saveEditData();
+
+        RMP_Update_Grid_pack_qty(RMP_pack_remain_qty);
+
+    }
+
+
+    /* 입고 버튼 종류 종료 */
+
+    /* 팝업 */
+
+    // (검색) 자재 팝업
+    function RMP_SearchItemCD() {
+
+        var popup = $("#RMP_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 자재 더블클릭
+    function RMP_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiveMaterial_P input[name=s_item_cd]").val(data.item_cd);
+        $("#ReceiveMaterial_P input[name=s_item_nm]").val(data.item_nm);
+
+
+        var popup = $("#RMP_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 원자재 자재 팝업
+    function RMP_SearchItemCD2() {
+
+        var popup = $("#RMP_itemCD2Popup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // 원자재 더블클릭
+    function RMP_itemCD2RowDblClick(selectedItems) {
+
+        //form 초기화
+        $("#ReceiveMaterial_P_UpRight_form")[0].reset();
+
+        var data = selectedItems.data;
+
+        $("#ReceiveMaterial_P input[name=item_cd]").val(data.item_cd);
+        $("#ReceiveMaterial_P input[name=item_nm]").val(data.item_nm);
+
+        //#region 실험필요여부 아니면 바로 PASS로 변경
+        ReceiveMaterial_ST_P();
+
+        if (_ReceiveMaterial_ST_P == false) {
+            $("#ReceiveMaterial_P_UpRight_form select[name=receipt_status]").val("5");             //입고번호 : 'PASS' 로 변경
+        } else {
+            $("#ReceiveMaterial_P_UpRight_form select[name=receipt_status]").val("6");             //입고번호 : '입고검수' 로 변경
+        }
+
+        RMP_receipt_status();       //상태 값에 따른 입력 data 확인.
+        //#endregion
+
+        //2021.06.03 박가희 자재 선택시, 자재 해당 단위 보여주기
+        ReceiveMaterial_P_GetItemUnit(data.item_cd);
+
+        var popup = $("#RMP_itemCD2Popup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 제조원 자재 팝업
+    function RMP_SearchManufacture() {
+
+        var popup = $("#RMP_ManufacturePopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 제조원 더블클릭
+    function RMP_ManufactureRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiveMaterial_P input[name=receipt_material_maker_cd]").val(data.vender_cd);
+        $("#ReceiveMaterial_P input[name=receipt_lot_cust_nm]").val(data.vender_nm);
+
+        var popup = $("#RMP_ManufacturePopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 공급원 자재 팝업
+    function RMP_SearchSupply() {
+
+        var popup = $("#RMP_supplyPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 공급원 더블클릭
+    function RMP_supplyRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiveMaterial_P input[name=cust_cd]").val(data.vender_cd);
+        $("#ReceiveMaterial_P input[name=cust_nm]").val(data.vender_nm);
+
+        var popup = $("#RMP_supplyPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 검수번호 팝업
+    function receiptCheckNo_P() {
+
+        var requestData = {
+            option: "2",
+            option2: ""
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/RowMatln/ReceiptCheckView_P',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+
+            var popup = $("#ReceiptCheckView_PPopup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    /* 시험의뢰 */
+
+    // 전자서명 팝업 -1
+    function fn_ReceiveMaterial_PSign() {
+
+        _RequestCancel = true;
+
+        var leftGrid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var downGrid = $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance");
+
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (leftGrid.option("dataSource") == null || leftGrid.option("dataSource").length == 0) {
+            alert("선택한 자재이 없습니다.");
+            return;
+        }
+
+        if (downGrid.option("dataSource") == null || downGrid.option("dataSource").length == 0) {
+            alert("팩을 등록해주세요.");
+            return;
+        }
+
+        if (receipt_status === "8") {
+            alert("입고 취소인 경우 시험의뢰를 할 수 없습니다.");
+            return;
+        }
+
+        if (receipt_status === "4" || receipt_status === "5") {
+            alert("시험이 필요하지 않은 자재입니다.");
+            return;
+        }
+       
+
+        if ($("#ReceiveMaterial_P input[name=receipt_confirm_emp_nm]").val() != "") {
+            alert("이미 시험의뢰되었습니다.");
+            return;
+            //var retest = confirm("이미 시험의뢰되었습니다. 재시험을 의뢰하시겠습니까?");
+            //if (!retest) {
+            //    return;
+            //}
+        }
+
+        var popup = $("#ReceiveMaterial_PSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#ReceiveMaterial_PSignPopupTemplate"));
+        popup.show();
+
+    }
+
+    // 서명 권한 체크(id, pw)
+    function ReceiveMaterial_PSignSubmit() {
+
+        var data = new FormData($('#ReceiveMaterial_PSignForm')[0]);
+
+        _ReceiveMaterial_PSignValid = false;
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                var isOK = true;
+
+                if (!result) {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                    isOK = false;
+                    return;
+                }
+
+                var json = JSON.parse(result)[0];
+
+                $("#ReceiveMaterial_P input[name='dept_nm']").val(json.dept_nm);
+                $("#ReceiveMaterial_P input[name='emp_nm']").val(json.emp_nm);
+
+                _ReceiveMaterial_PSignValid = true;
+
+                if (isOK) {
+
+                    setTimeout(function () {
+                        var popup = $("#ReceiveMaterial_PSignPopup").dxPopup("instance");
+                        popup.hide();
+                    }, 1000);
+
+                    if (_ReceiveMaterial_PSignValid && _RequestCancel) {
+                        //receiveMaterial_PSaveExcute();
+                        RMP_confirmTestNo();        //생성옵션 없이 바로 시험의뢰 번호 자동 채번
+                    } else if (_ReceiveMaterial_PSignValid && !_RequestCancel) {
+                        receiveMaterial_PCancelExcute();
+                    }
+
+                }
+            }
+        });
+
+    }
+
+    //function receiveMaterial_PSaveExcute() {
+
+    //    var today = new Date();
+
+    //    var year = today.getFullYear();
+    //    var month = today.getMonth() + 1;  // 월
+    //    var date = today.getDate();  // 날짜
+
+    //    var todayStr = year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date);
+
+    //    RMP_showTestNumberCreate("1", "C", "N", todayStr);
+    //}
+
+    //// 시험번호 생성
+    //function RMP_showTestNumberCreate(test_type, item_type, dept_type, qcquest_date) {
+
+    //    var popup = $("#ReceiveMaterial_PTestPopup").dxPopup("instance");
+    //    popup.option("contentTemplate", $("#ReceiveMaterial_PTestPopupTemplate"));
+    //    popup.show();
+
+    //    if (test_type === null || test_type === "") {
+    //        $("#ReceiveMaterial_PTestForm select[name=test_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ReceiveMaterial_PTestForm select[name=test_type]").val(test_type);
+    //    }
+
+    //    if (item_type === null || item_type === "") {
+    //        $("#ReceiveMaterial_PTestForm select[name=item_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ReceiveMaterial_PTestForm select[name=item_type]").val(item_type);
+    //    }
+
+    //    if (dept_type === null || dept_type === "") {
+    //        $("#ReceiveMaterial_PTestForm select[name=dept_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ReceiveMaterial_PTestForm select[name=dept_type]").val(dept_type);
+    //    }
+
+    //    if (!qcquest_date) {
+
+    //        let today = new Date();
+
+    //        let year = today.getFullYear();
+    //        let month = today.getMonth() + 1;
+    //        let date = today.getDate();
+
+    //        $("#ReceiveMaterial_PTestForm input[name=qcquest_date]").val(year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date));
+    //    } else {
+    //        $("#ReceiveMaterial_PTestForm input[name=qcquest_date]").val(qcquest_date);
+    //    }
+
+    //    var qcquest_date = $("#ReceiveMaterial_PTestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+    //    $("#ReceiveMaterial_PTestForm input[name=test_no]").val(
+    //        $("#ReceiveMaterial_PTestForm select[name=test_type]").val() +
+    //        $("#ReceiveMaterial_PTestForm select[name=item_type]").val() +
+    //        $("#ReceiveMaterial_PTestForm select[name=dept_type]").val() + "-" +
+    //        qcquest_date.substring(2, qcquest_date.length)
+    //    );
+
+    //}
+
+    //// 시험번호 변경
+    //function RMP_showTestNumberChange() {
+
+    //    var qcquest_date = $("#ReceiveMaterial_PTestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+    //    $("#ReceiveMaterial_PTestForm input[name=test_no]").val(
+    //        $("#ReceiveMaterial_PTestForm select[name=test_type]").val() +
+    //        $("#ReceiveMaterial_PTestForm select[name=item_type]").val() +
+    //        $("#ReceiveMaterial_PTestForm select[name=dept_type]").val() + "-" +
+    //        qcquest_date.substring(2, qcquest_date.length)
+    //    );
+
+    //}
+
+    // 시험의뢰 저장    
+    function RMP_confirmTestNo() {
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ReceiveMaterial_P_LeftGrid", grid.option("focusedRowKey"));
+
+        var data = new FormData($('#S_ReceiveMaterial_P_form')[0]);
+
+        data.set("receipt_no", gridData.receipt_no);
+        data.set("receipt_id", gridData.receipt_id);
+        data.set("request_date", $("#ReceiveMaterial_P_UpRight_form input[name=receipt_time_date]").val());        
+        data.set("Material_Or_PackMaterial", "C");
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_ES',
+            async: false,
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("시험의뢰 및 전자서명되었습니다.");
+
+                ReceiveMaterial_PSearch();
+
+            },
+            error: function (error) {
+                alert("시험의뢰가 정상적으로 처리 되지 않았습니다. 다시의뢰해 주세요!");
+                return;
+            }
+
+        });
+
+    }
+
+    // 시험의뢰 취소
+    function fn_ReceiveMaterial_PSignCancel() {
+
+        _RequestCancel = false;
+
+        //'1' => 시험의뢰, '2' => 부적합, '3' => 반품, '4' => 적합, '5' => Pass, '6' => 입고검수, '7' => 재시험의뢰, '8' => 입고취소, '9' => 적합(조건부)
+        var receipt_status = $("#ReceiveMaterial_P select[name=receipt_status] option:selected").val(); // 입고상태
+
+        if (receipt_status === "6" || receipt_status === "8" || $("#ReceiveMaterial_P input[name=receipt_confirm_emp_nm]").val() === "") {
+
+            alert("서명 정보가 없습니다.");
+            return;
+        }
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ReceiveMaterial_P_LeftGrid", grid.option("focusedRowKey"));
+
+        if (receipt_status === "4" || gridData.receipt_qc_no3_qc != null && receipt_status !== "6") {
+
+            alert("시험의뢰를 취소할 수 없습니다.\r" +
+                "이미 품질관리팀에 시험이 의뢰되었거나 진행중입니다.\r" +
+                "시험의뢰를 취소하시려면 시험진행 취소 후 의뢰를 취소할 수 있습니다.");
+
+            return;
+        }
+
+        var cancel = confirm("시험의뢰를 취소 하시겠습니까?");
+
+        if (!cancel) {
+            return;
+        }
+
+        var popup = $("#ReceiveMaterial_PSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#ReceiveMaterial_PSignPopupTemplate"));
+        popup.show();
+
+    }
+
+    function receiveMaterial_PCancelExcute() {
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ReceiveMaterial_P_LeftGrid", grid.option("focusedRowKey"));
+
+        var data = new FormData($('#S_ReceiveMaterial_P_form')[0]);
+
+        data.set("receipt_no", gridData.receipt_no);
+        data.set("receipt_id", gridData.receipt_id);
+        data.set("receipt_qc_no1", gridData.receipt_qc_no1);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_DE',
+            async: false,
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                receiveMaterial_PCancelExcute2();
+
+            },
+            error: function (error) {
+                alert("시험의뢰가 정상적으로 처리 되지 않았습니다. 다시의뢰해 주세요!");
+                return;
+            }
+
+        });
+    }
+
+    function receiveMaterial_PCancelExcute2() {
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ReceiveMaterial_P_LeftGrid", grid.option("focusedRowKey"));
+
+        var data = new FormData($('#S_ReceiveMaterial_P_form')[0]);
+
+        data.set("receipt_no", gridData.receipt_no);
+        data.set("receipt_id", gridData.receipt_id);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/receiptStatus_C2',
+            async: false,
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ReceiveMaterial_PTestPopup").dxPopup("instance").hide();
+                ReceiveMaterial_PSearch();
+
+            },
+            error: function (error) {
+                alert("시험의뢰가 정상적으로 처리 되지 않았습니다. 다시의뢰해 주세요!");
+                return;
+            }
+
+        });
+
+    }
+
+    /* 시험의뢰 종료 */
+
+    /* 팝업 종료 */
+
+    // 클릭 이벤트 제한
+    function RMP_EditableColumn(cellElement, cellInfo) {
+
+        if (cellElement.column.dataField === 'receipt_pack_seq')
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'receipt_pack_barcode')
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'receipt_pack_unit')
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'receipt_pack_qty')        //팩정보 - 포장량 일단 수정 불가
+            cellElement.element.find('input').prop('readonly', true);
+    }
+
+    //팩 정보 - 팩 재고량 수정
+    function ReceiveMaterial_P_packUpdate(info) {
+        ReceiveMaterial_P_EditCheck(true);
+
+        var data = info.data;
+
+        RMP_pack_remain_qty.push(data);
+    }
+
+    //포맷지정(복사 붙여넣기시 값 인식 제대로 되지않는 이슈로 인해)
+    function ReceiveMaterial_P_EditorPreparing(e) {
+        //팩재고량
+        if (e.parentType == 'dataRow' && e.dataField == 'receipt_pack_remain_qty') {
+            e.editorOptions.format = "#,##0";
+        }
+    }
+
+    //팩 정보 Grid 저장 디스크 버튼 비활성화
+    function ReceiveMaterial_P_HideBtn(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+    // 라벨 프린트
+    async function ReceiveMaterial_PPrint() {        
+
+        var grid = $("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiveMaterial_P_LeftGrid', grid.option("focusedRowKey"));
+        var _ReceiveMaterial_print = gridData.receipt_no;             //좌측 Grid focus 된 입고번호 가져오기.
+        var selectedKeys = grid.getSelectedRowKeys();                 //입고번호 체크된 값
+
+        var grid_pack = $("#ReceiveMaterial_P_DownGrid").dxDataGrid("instance");
+        var selectedpack = grid_pack.getSelectedRowsData();           //팩정보 Grid 체크된 값        
+
+
+        var report = new ReportHelper($(event.target));
+
+        if ($("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        if (selectedKeys.length === 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        if (selectedpack.length <= 0) {
+            alert("출력할 바코드를 선택해주시오.");
+            return;
+        }
+
+        var reportParam = "";
+
+        for (var i = 0; i < selectedpack.length; i++) {
+            reportParam += selectedpack[i].receipt_pack_barcode;
+            if (i !== (selectedpack.length - 1)) {
+                reportParam += ',';
+            }
+        }  
+
+        for (var i = 0; i < selectedKeys.length; i++) {
+            var _ReceiveMaterial_print_yn = (selectedKeys[i] == _ReceiveMaterial_print ? "N" : "Y");
+
+            report.addParam({
+                objFile: { path: "RowMatln", RptFileName: "Receipt_Label", RptSeq: i },
+                objSp: { SpName: "SP_ReceiveMaterial1", GUBUN: "label_print", reportParam: "receipt_no:" + selectedKeys[i] + ";all_print_yn:" + _ReceiveMaterial_print_yn + ";receipt_pack_barcode_value:" + reportParam  },
+                objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 },                
+                objTblNm: { tblName: "Receipt_Label_D" }
+            })
+
+            await report.print();
+            report.removeParam();
+        }       
+
+    }
+
+    // 입고 검수 프린트
+    function fn_receipt_check_Click_P() {
+
+        if ($("#ReceiveMaterial_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var reportParam = "s_receipt_check_no:" + $("#ReceiveMaterial_P input[name=receipt_check_no]").val() + ";option:2";
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "RowMatln", RptFileName: "ReceiptCheckPackR" },
+            objSp: { SpName: "SP_ReceiptCheck2", gubun: "R", reportParam: reportParam },
+            objEtcInfo: { subParam: "material_pack=자재" },
+            objTblNm: { tblName: "ReceiptCheckT,ReceiptCheckSOPT" }
+        });
+
+
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (confirm("인쇄 하시겠습니까? (취소 선택시, 미리보기)") === true) {
+            // 레포트 인쇄
+            report.print();
+        } else {
+            // 레포트 미리보기
+            report.preview();
+        }
+
+    }
+
+</script>
+
+
+<div id="ReceiveMaterial_P" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="RMP_itemCDPopup"></div>
+    <div id="RMP_itemCD2Popup"></div>
+    <div id="RMP_ManufacturePopup"></div>
+    <div id="RMP_supplyPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+        .ID("ReceiptCheckView_PPopup")
+        .Width(1600)
+        .Height(700)
+        .ShowTitle(true)
+        .Title("입고검수 선택")
+        .Visible(false)
+        .DragEnabled(false)
+    )
+    </div>
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("ReceiveMaterial_PSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("ReceiveMaterial_PSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="ReceiveMaterial_PSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <div class="input-group col-8">
+                    <input type="text" class="form-control col-12 required" name="txt_ID" />
+                </div>
+
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-3">비밀번호</label>
+                <div class="input-group col-8">
+                    <input type="password" class="form-control col-12 required" name="txt_Pass" />
+                </div>
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-secondary" onclick="ReceiveMaterial_PSignSubmit()" style="float: right; margin-right: 8%;">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <div class="input-wrapper">
+            <label class="col-3">부서</label>
+            <div class="input-group col-8">
+                <input type="text" class="form-control col-12 required" name="dept_nm" readonly="readonly" />
+            </div>
+
+        </div>
+
+        <div class="input-wrapper">
+            <label class="col-3">성명</label>
+            <div class="input-group col-8">
+                <input type="text" class="form-control col-12 required" name="emp_nm" readonly="readonly" />
+            </div>
+        </div>
+    }
+
+    @* === 전자 서명 팝업 종료 === *@
+
+    @* === 시험번호 생성 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("ReceiveMaterial_PTestPopup")
+            .Width(450)
+            .Height(350)
+            .ShowTitle(true)
+            .Title("시험번호 생성 옵션")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+
+    @using (Html.DevExtreme().NamedTemplate("ReceiveMaterial_PTestPopupTemplate"))
+    {
+        <form id="ReceiveMaterial_PTestForm">
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">시험구분</label>
+                <select class="form-control col-7" name="test_type" onchange="RMP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC602")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">제품구분</label>
+                <select class="form-control col-7" name="item_type" onchange="RMP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC603")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">부서구분</label>
+                <select class="form-control col-7" name="dept_type" onchange="RMP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC604")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">생성일자</label>
+                <input type="text" class="col-7 form-control datepicker" name="qcquest_date" value="@DateTime.Now" />
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">생성번호</label>
+                <input type="text" class="col-7 form-control" name="test_no" readonly="readonly" />
+            </div>
+
+        </form>
+
+        @*<div style="text-align: right; margin-right: 7%;">
+            <button class="btn btn-secondary" onclick="RMP_confirmTestNo(true)">확인</button>
+            <button class="btn btn-secondary" onclick="RMP_confirmTestNo(false)">취소</button>
+        </div>*@
+    }
+
+    @* === 시험번호 생성 팝업 종료 === *@
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="S_ReceiveMaterial_P_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Today.AddDays(-7).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">자재</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_item_nm" >
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="RMP_SearchItemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="s_item_cd">
+                    </div>
+
+                    @*<div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">인쇄횟수</span>
+                        </div>
+                        <input type="number" class="form-control text-center" name="print_num" value="1">
+                    </div>*@
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel;Print");}
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- $Contets Left-->
+        <div class="col-7 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiveMaterial_P_LeftGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))                    
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("receipt_no")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_no").Caption("입고번호").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("receipt_time_date").Caption("입고일자");
+                        c.Add().DataField("item_cd").Caption("자재코드");
+                        c.Add().DataField("item_nm").Caption("자재명");
+                        c.Add().DataField("purchase_price").Caption("단가").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_qty").Caption("입고량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_pack_qty").Caption("포장수").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_qc_no1").Caption("의뢰번호");
+                        c.Add().DataField("receipt_qc_no3").Caption("시험번호");
+                    })
+                    .OnFocusedRowChanged("ReceiveMaterial_P_Left_changed")
+                )
+
+            </div>
+        </div>
+
+        <!-- $Contets Right-->
+        <div class="col-5">
+
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>원자재 입고 정보</p>
+
+                    <button type="button" class="btn btn-outline-dark btn-sm" id="RMP_packGridEnableCancel" onclick="RMP_packGridEnableCancel()" style="float:right; margin-right:2px; margin-top:-5px;">재고수정 취소</button>
+                    <button type="button" class="btn btn-outline-dark btn-sm" id="RMP_packGridEnableSave" onclick="RMP_packGridSave_Click()" style="float:right; margin-right:2px; margin-top:-5px;">재고수정 저장</button>
+                    <button type="button" class="btn btn-outline-dark btn-sm" id="RMP_packGridEnable_Val" onclick="RMP_packGridEnable_Click()" style="float:right; margin-right:2px; margin-top:-5px;">재고수정 활성화</button>
+                </div>
+
+                <form id="ReceiveMaterial_P_UpRight_form">
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">검수번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-10" name="receipt_check_no" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="receiptCheckNo_P()">찾기</button>
+                            </div>
+                            <input type="hidden" name="purchase_date" value="" />
+                        </div>
+
+                        <label class="col-2">조달구분<star>*</star></label>
+                        <select class="col-2 form-control required" name="obtain_status">
+                            <!-- <option value="" selected disabled hidden> </option> -->
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_obtain_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">발주번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="purchase_no" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">입고일자<star>*</star></label>
+                        <input type="text" class="form-control col-2 datepicker required" name="receipt_time_date" value="">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">입고번호<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-6" name="receipt_no" readonly="readonly">
+                            <input type="text" name="receipt_id" hidden="hidden">
+                            <select class="col-5 required form-control" name="receipt_status" onchange="RMP_receipt_status()">
+                                <!-- <option value="" selected disabled hidden> </option> -->
+                                @foreach (DataRow row in ((DataTable)ViewBag.s_receipt_status).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                            <div class="input-group-append">
+                                <button type="button" id="RMP_Cancel" class="btn btn-outline-danger btn-sm" onclick="receiptStatus_P_Cancel()">취소</button>
+                            </div>
+                        </div>
+
+                        <label class="col-2">입고총량<star>*</star></label>
+                        <input type="number" class="form-control col-2 required" name="receipt_qty" onfocus="RMP_qtyCh()">
+                        <input type="text" id="RMP_receipt_qty_unit required" class="form-control col-1" name="item_unit" value="EA" readonly="readonly">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">원자재코드<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-6 required" name="item_cd" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="RMP_SearchItemCD2()">찾기</button>
+                            </div>
+
+                            <input type="checkbox" class="form-check-input col-1 required" name="product_receipt" value="N" style="margin-top: 8px;position: relative;margin-left: 5%;" onclick="checkBox_RMP()" />
+                            <span style="margin-top: 6px;">생산입고</span>
+                        </div>
+
+                        <label class="col-2">포장량<star>*</star></label>
+                        <input type="number" class="form-control col-2 required" name="receipt_pack_in_qty" onfocus="RMP_qtyCh()">
+                        <input type="text" id="RMP_receipt_pack_unit" class="form-control col-1" name="item_unit" value="EA" readonly="readonly">
+
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">자재명</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="item_nm" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">포장수량<star>*</star></label>
+                        <input type="text" class="form-control col-2 required" name="receipt_pack_qty" readonly="readonly">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="RMP_PackCreate()">포장생성</button>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">의뢰번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="receipt_qc_no1" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">시험번호</label>
+                        <input type="text" class="form-control col-3" name="receipt_qc_no3" readonly="readonly">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">제조원</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-4" name="receipt_material_maker_cd" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="RMP_SearchManufacture()">찾기</button>
+                            </div>
+
+                            <input type="text" class="form-control col-7" name="receipt_lot_cust_nm" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">제조번호</label>
+                        <input type="text" class="form-control col-3" name="receipt_lot_no">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">공급원</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-4" name="cust_cd" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="RMP_SearchSupply()">찾기</button>
+                            </div>
+
+                            <input type="text" class="form-control col-7" name="cust_nm" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">비고</label>
+                        <input type="text" class="form-control col-3" name="remark">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">제조일자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12 datepicker" name="receipt_lot_date">
+                        </div>
+
+                        <label class="col-2">유통기한</label>
+                        <input type="text" class="form-control col-3 datepicker" name="valid_period" value="">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">역가/함량</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="receipt_qc_rate">
+                        </div>
+
+                        <label class="col-2">(QC)함량</label>
+                        <input type="text" class="form-control col-3" name="receipt_qc_pollination">
+
+                    </div>
+
+                    <div class="input-wrapper" style="margin-left: 1%;">
+
+                        <div class="input-group-append">
+                            <button type="button" id="receipt_check_Click_P" class="btn btn-outline-success btn-sm" onclick="fn_receipt_check_Click_P()">입고 검수서</button>
+                            <button type="button" id="RMP_TestRequest" class="btn btn-outline-success btn-sm" onclick="fn_ReceiveMaterial_PSign()">시험의뢰</button>
+                        </div>
+
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control col-12" name="receipt_confirm_emp_nm">
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="receipt_confirm_emp_time">
+                        </div>
+
+                        <div class="input-group-append">
+                            <button type="button" id="RMP_TestRequestCancel" class="btn btn-outline-success btn-sm" onclick="fn_ReceiveMaterial_PSignCancel()">의뢰취소</button>
+                        </div>
+
+                    </div>
+
+                    <input type="hidden" name="purchase_id" value="" />
+                    <input type="hidden" name="receipt_check_id" />
+                    <input type="hidden" name="receipt_time_date" />
+                    <input type="hidden" name="product_receipt_YN" />
+
+                </form>
+
+                <div class="divName">
+                    <p>팩 정보</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiveMaterial_P_DownGrid")
+                    .ShowBorders(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))                    
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Batch);
+                        editing.AllowUpdating(false);
+                    })
+                    .OnRowUpdated("ReceiveMaterial_P_packUpdate")
+                    .OnEditorPreparing("ReceiveMaterial_P_EditorPreparing")
+                    .OnToolbarPreparing("ReceiveMaterial_P_HideBtn")
+                    .KeyExpr("receipt_pack_barcode")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_pack_seq").Caption("포장");
+                        c.Add().DataField("receipt_pack_barcode").Caption("바코드");
+                        c.Add().DataField("receipt_pack_unit").Caption("포장단위");
+                        c.Add().DataField("receipt_pack_qty").Caption("포장량").Format("#,##0");
+                        c.Add().DataField("receipt_pack_remain_qty").Caption("팩재고량").DataType(GridColumnDataType.Number).Format("#,##0");
+                    })
+                    .OnCellPrepared("RMP_EditableColumn")
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 포장 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("receipt_pack_seq")
+                                .ShowInColumn("receipt_pack_seq")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Count)
+                                .DisplayFormat("[{0}]");
+
+                        /* 포장량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("receipt_pack_qty")
+                                .ShowInColumn("receipt_pack_qty")
+                                .ValueFormat("#,##0.00")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+
+                        /* 팩재고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("receipt_pack_remain_qty")
+                                .ShowInColumn("receipt_pack_remain_qty")
+                                .ValueFormat("#,##0.00")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+
+                    }))
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

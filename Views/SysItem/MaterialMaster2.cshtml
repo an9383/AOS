@@ -1,0 +1,1693 @@
+﻿@using System.Data
+@model HACCP.Models.SysItem.Material
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@using System.Web.Script.Serialization
+
+@{
+    Layout = null;
+    ViewData["Title"] = "MaterialMaster2";
+
+    var venderPopupData = @Html.Raw(Json.Encode(ViewBag.venderPopupData.Data));
+    var countryPopupData = @Html.Raw(Json.Encode(ViewBag.countryCodes.Data));
+    var suppliersData = @Html.Raw(Json.Encode(ViewBag.suppliersPopupData.Data));
+
+    JavaScriptSerializer serializer = new JavaScriptSerializer();
+    serializer.MaxJsonLength = Int32.MaxValue;
+
+    var materialJson = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.materials)));
+
+    //var standardCodeJson = @Html.Raw(Json.Encode(ViewBag.standardCodes.Data));
+    var standardCodeJson = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.standardCodes)));
+    //var vendorCodeJson = @Html.Raw(Json.Serialize(@ViewBag.vendorCodes));
+}
+
+@*원료 관리*@
+
+<script id="MaterialMaster2Js">
+
+    var _materialMaster2MakerCellClickEvent;
+    var _materialMaster2MakerEditData = new Array();
+    var _materialMaster2ContentEditData = new Array();
+    var _materialMaster2ImageSeq;
+    var _materialMaster2ImageCnt;
+
+    var MaterialMaster2_dataGrid;
+
+    var MaterialMaster2_selectedItemCd;
+
+    //var MaterialMaster2_duplicatedCheck = false;
+
+    $(function () {
+
+        @*var ds2 = '@standardCodeJson';
+        var ds3 = '@countryCodeJson';
+        var ds4 = '@vendorCodeJson';*@
+
+        if ((@materialJson).length > 0) {
+            $("#MaterialMaster2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@materialJson));
+            $("#MaterialMaster2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#MaterialMaster2Grid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        var columns = [
+            { dataField: "item_cd", caption: "원료코드" },
+            { dataField: "item_nm", caption: "원료명" }
+        ];
+
+        createPopup("MaterialMaster2Material", "원료조회", @materialJson, columns, "item_cd");
+        createPopup("MaterialMaster2Standard", "원료 표준코드", @standardCodeJson, columns, "item_cd");
+        //createPopup("MaterialMaster2Country", "원료 국가코드", ds3, columns);
+        //createPopup("MaterialMaster2Vendor", "거래처 코드", ds4, columns);
+
+        var columns2 = [
+            { dataField: "vender_cd", caption: "구입업체코드" },
+            { dataField: "vender_nm", caption: "구입업체명" }
+        ];
+
+        createPopup("MaterialMaster2Maker", "구입업체 조회", @venderPopupData, columns2, "vender_cd");
+
+        var columns3 = [
+            { dataField: "country_cd", caption: "국가코드" },
+            { dataField: "country_nm", caption: "국가명" },
+            //{ dataField: "en_nm", caption: "영문명" }
+        ];
+
+        createPopup("MaterialMaster2Country", "국가코드 조회", @countryPopupData, columns3, "country_cd");
+
+        var columns4 = [
+            { dataField: "vender_cd", caption: "코드" },
+            { dataField: "vender_nm", caption: "공급사" }
+        ];
+
+        createPopup("MaterialMaster2Suppliers", "공급사 조회", @suppliersData, columns4, "vender_cd");
+
+
+        MaterialMaster2_EditCheck(false);
+        MaterialMaster2_dataGrid = $("#MaterialMaster2Grid").dxDataGrid("instance");
+        //$('#MaterialMaster2RightForm').validate();
+
+        $($("#MaterialMaster2UploadBtn1")).click(function (event) {
+            var fileUploader = $('#MaterialMaster2UpperImageUploader').dxFileUploader('instance');
+
+            _materialMaster2ImageSeq = 1;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#MaterialMaster2UploadBtn2")).click(function (event) {
+            var fileUploader = $('#MaterialMaster2MiddleImageUploader').dxFileUploader('instance');
+
+            _materialMaster2ImageSeq = 2;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#MaterialMaster2UploadBtn3")).click(function (event) {
+            var fileUploader = $('#MaterialMaster2LowerImageUploader').dxFileUploader('instance');
+
+            _materialMaster2ImageSeq = 3;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#MaterialMaster2DeleteBtn1")).click(function (event) {
+            MaterialMaster2DeleteImage(1);
+        });
+
+        $($("#MaterialMaster2DeleteBtn2")).click(function (event) {
+            MaterialMaster2DeleteImage(2);
+        });
+
+        $($("#MaterialMaster2DeleteBtn3")).click(function (event) {
+            MaterialMaster2DeleteImage(3);
+        });
+
+    });
+
+    // 포커스되어있는 row의 데이터 가져오는 함수
+    function getData() {
+
+        var grid = $("#MaterialMaster2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('MaterialMaster2Grid', grid.option("focusedRowKey"));
+            fillData(data);
+        }
+    }
+
+    // 수정중인지 체크
+    function MaterialMaster2_EditCheck(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#MaterialMaster2Save").dxButton().parent().parent().removeClass("display-none");
+            $("#MaterialMaster2Undo").dxButton().parent().parent().removeClass("display-none");
+            $("#MaterialMaster2Search").dxButton().parent().parent().addClass("display-none");
+            $("#MaterialMaster2Input").dxButton().parent().parent().addClass("display-none");
+            $("#MaterialMaster2Edit").dxButton().parent().parent().addClass("display-none");
+            $("#MaterialMaster2Delete").dxButton().parent().parent().addClass("display-none");
+
+            $("#MaterialMaster2RightForm :disabled").attr('disabled', false);
+            $("#MaterialMaster2Grid").dxDataGrid("option", "disabled", true);
+
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            $("#MaterialMaster2MakerGrid").dxDataGrid("option", "editing", editing);
+            $("#MaterialMaster2ContentGrid").dxDataGrid("option", "editing", editing);
+
+        }
+        if (!nowEdit) {
+
+            $("#MaterialMaster2Save").dxButton().parent().parent().addClass("display-none");
+            $("#MaterialMaster2Undo").dxButton().parent().parent().addClass("display-none");
+            $("#MaterialMaster2Search").dxButton().parent().parent().removeClass("display-none");
+            $("#MaterialMaster2Input").dxButton().parent().parent().removeClass("display-none");
+            $("#MaterialMaster2Edit").dxButton().parent().parent().removeClass("display-none");
+            $("#MaterialMaster2Delete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#MaterialMaster2RightForm :enabled").attr('disabled', true);
+            $("#MaterialMaster2Grid").dxDataGrid("option", "disabled", false);
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+
+            $("#MaterialMaster2MakerGrid").dxDataGrid("option", "editing", editing);
+            $("#MaterialMaster2ContentGrid").dxDataGrid("option", "editing", editing);
+
+        }
+
+    }
+
+    // 원료 팝업 생성
+    function searchMaterial() {
+
+        var popup = $("#MaterialMaster2MaterialPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // 원료 팝업 선택
+    function MaterialMaster2MaterialRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#MaterialMaster2Material_cd").val(data.item_cd);
+        $("#MaterialMaster2Material").val(data.item_nm);
+
+        var popup = $("#MaterialMaster2MaterialPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    function searchSupplier_Material() {
+
+        var popup = $("#MaterialMaster2SuppliersPopup").dxPopup("instance");
+
+        popup.show();
+
+
+    }
+
+    // 공급사 팝업 선택
+    function MaterialMaster2SuppliersRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $('#MaterialMaster2 input[name="trade_cd"]').val(data.vender_cd);
+        $('#MaterialMaster2 input[name="trade_nm"]').val(data.vender_nm);
+
+        var popup = $("#MaterialMaster2SuppliersPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    // 죄측 그리드 선택 변경시 실행
+    function MaterialMaster2Focus_changed(e) {
+        if (!e.row || !e.row.data) return;
+        var data = e.row.data;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysItem/MaterialMaster2SelectMaker',
+            data: {
+                material_cd: data.item_cd
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#MaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#MaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+        UtilView.setGridFocus("G", "MaterialMaster2MakerGrid", true);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysItem/MaterialMaster2SelectContent',
+            data: {
+                material_cd: data.item_cd
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#MaterialMaster2ContentGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#MaterialMaster2ContentGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+        UtilView.setGridFocus("G", "MaterialMaster2ContentGrid", true);
+
+
+
+        fillData(data);
+        MaterialMaster2SelectImage();
+    }
+
+    // 제제 이미지 조회
+    function MaterialMaster2SelectImage() {
+
+        $.ajax({
+            type: 'GET',
+            url: '/SysItem/SelectMaterialImage',
+            data: {
+                item_cd: $("#MaterialMaster2RightForm input[name=item_cd]").val()
+            },
+            success: function (result) {
+
+                try {
+
+                    var jsonData = JSON.parse(result);
+
+                    _materialMaster2ImageCnt = jsonData.length;
+
+                    $("#MaterialMaster2UpperImage").attr('src', jsonData[0].upper_image);
+
+                    $("#MaterialMaster2MiddleImage").attr('src', jsonData[0].middle_image);
+
+                    $("#MaterialMaster2LowerImage").attr('src', jsonData[0].lower_image);
+
+                } catch (e) {
+
+                    _materialMaster2ImageCnt = 0;
+
+                    $("#MaterialMaster2UpperImage").attr('src', '/Content/image/defaultSign.png');
+                    $("#MaterialMaster2MiddleImage").attr('src', '/Content/image/defaultSign.png');
+                    $("#MaterialMaster2LowerImage").attr('src', '/Content/image/defaultSign.png');
+                }
+            }
+        });
+    }
+
+        // 좌측 그리드 내용 삽입
+    function fillData(data) {
+
+        $("#MaterialMaster2RightForm")[0].reset();
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#MaterialMaster2_checkResText").text("");
+        }
+
+        // === 기본정보 ===
+        $('#MaterialMaster2RightForm input[name="item_cd"]').val(data.item_cd);
+        $('#MaterialMaster2RightForm input[name="item_nm"]').val(data.item_nm);
+        $('#MaterialMaster2RightForm input[name="item_nm_registry"]').val(data.item_nm_registry);
+        $('#MaterialMaster2 input[name="abbreviation_cd"]').val(data.abbreviation_cd);
+        $('#MaterialMaster2 input[name="item_s_nm"]').val(data.item_s_nm);
+        $('#MaterialMaster2 input[name="item_enm"]').val(data.item_enm);
+        $('#MaterialMaster2 input[name="item_jnm"]').val(data.item_jnm);
+        if (data.prod_end == "Y") {
+            $('#MaterialMaster2 input[name="prod_end"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="prod_end"]').attr("checked", false);
+        }
+        $('#MaterialMaster2 input[name="standard_cd"]').val(data.standard_cd);
+        $('#MaterialMaster2 input[name="standard_nm"]').val(data.standard_nm);
+        $('#MaterialMaster2 input[name="country_cd"]').val(data.country_cd);
+        $('#MaterialMaster2 input[name="country_nm"]').val(data.country_nm);
+
+        //$('input[name="break_type"]').val(data.break_type);
+
+
+        // === 분류정보 ===
+        if (data.outer_process != "") {
+            $('#MaterialMaster2 input[name="outer_process"][value=' + data.outer_process + ']').prop("checked", true);
+        }
+        if (data.in_out_ck != "") {
+            $('#MaterialMaster2 input[name="in_out_ck"][value=' + data.in_out_ck + ']').prop("checked", true);
+        }
+        if (data.abc_gubun != "") {
+            $('#MaterialMaster2 select[name="abc_gubun"]').val(data.abc_gubun).prop("selected", true);
+        }
+        if (data.plant_cd != "") {
+            $('#MaterialMaster2 select[name="plant_cd"]').val(data.plant_cd);
+        }
+        if (data.item_type1 != "") {
+            $('#MaterialMaster2 select[name="form_item_type1"]').val(data.item_type1).prop("selected", true);
+        }
+        if (data.item_type2 != "") {
+            $('#MaterialMaster2 select[name="form_item_type2"]').val(data.item_type2).prop("selected", true);
+        }
+
+
+        // === 주요정보 ===
+        if (data.item_type3 != "") {
+            $('#MaterialMaster2 select[name="item_type3"]').val(data.item_type3).prop("selected", true);
+        }
+        if (data.item_unit_cd != "") {
+            $('#MaterialMaster2 select[name="item_unit_cd"]').val(data.item_unit_cd).prop("selected", true);
+        }
+        $('#MaterialMaster2 input[name="item_validity_period"]').val(data.item_validity_period);
+        if (data.item_validity_period_unit != "") {
+            $('#MaterialMaster2 select[name="item_validity_period_unit"]').val(data.item_validity_period_unit).prop("selected", true);
+        }
+        $('#MaterialMaster2 input[name="kepping_term"]').val(data.kepping_term);
+        if (data.kepping_term_unit != "") {
+            $('#MaterialMaster2 select[name="kepping_term_unit"]').val(data.kepping_term_unit).prop("selected", true);
+        }
+        if (data.item_keep_condition != "") {
+            $('#MaterialMaster2 select[name="item_keep_condition"]').val(data.item_keep_condition).prop("selected", true);
+        }
+        if (data.item_keep_temperature != "") {
+            $('#MaterialMaster2 select[name="item_keep_temperature"]').val(data.item_keep_temperature).prop("selected", true);
+        }
+        if (data.keeping_warehouse != "") {
+            $('#MaterialMaster2 select[name="keeping_warehouse"]').val(data.keeping_warehouse).prop("selected", true);
+        }
+        if (data.test_standard) {
+            $('#MaterialMaster2 select[name="test_standard"]').val(data.test_standard.trim()).prop("selected", true);
+        }
+        if (data.manufacture_qty_yn == "Y") {
+            $('#MaterialMaster2 input[name="manufacture_qty_yn"]').attr("checked", true);
+        }
+        else {
+            $('#MaterialMaster2 input[name="manufacture_qty_yn"]').attr("checked", false);
+        }
+
+
+        // === 시험정보 ===
+        if (data.item_exam_yn == "Y") {
+            $('#MaterialMaster2 input[name="item_exam_yn"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="item_exam_yn"]').attr("checked", false);
+        }
+        if (data.asepsis_item_ck == "Y") {
+            $('#MaterialMaster2 input[name="asepsis_item_ck"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="asepsis_item_ck"]').attr("checked", false);
+        }
+        if (data.pack_sampling_ck == "Y") {
+            $('#MaterialMaster2 input[name="pack_sampling_ck"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="pack_sampling_ck"]').attr("checked", false);
+        }
+        if (data.sampling_calc != "") {
+            $('#MaterialMaster2 select[name="sampling_calc"]').val(data.sampling_calc).prop("selected", true);
+        }
+        if (data.gmo_material_yn == "Y") {
+            $('#MaterialMaster2 input[name="gmo_material_yn"]').attr("checked", true);
+        } else {
+            $('i#MaterialMaster2 nput[name="gmo_material_yn"]').attr("checked", false);
+        }
+        if (data.retest_yn == "Y") {
+            $('#MaterialMaster2 input[name="retest_yn"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="retest_yn"]').attr("checked", false);
+        }
+
+
+        // === 구매정보 ===
+        $('#MaterialMaster2 input[name="basic_purchase_qty"]').val(data.basic_purchase_qty);
+        if (data.basic_purchase_unit != "") {
+            $('#MaterialMaster2 select[name="basic_purchase_unit"]').val(data.basic_purchase_unit).prop("selected", true);
+        }
+        $('#MaterialMaster2 input[name="delivery_period"]').val(data.delivery_period);
+        $('#MaterialMaster2 input[name="test_period"]').val(data.test_period);
+        $('#MaterialMaster2 input[name="item_safety_day"]').val(data.item_safety_day);
+
+        if (data.materialmaker_ck == "Y") {
+            $('#MaterialMaster2 input[name="materialmaker_ck"]').attr("checked", true);
+        } else {
+            $('#MaterialMaster2 input[name="materialmaker_ck"]').attr("checked", false);
+        }
+
+        if (data.trade_cd != "") {
+            $('#MaterialMaster2 input[name="trade_cd"]').val(data.trade_cd);
+            $('#MaterialMaster2 input[name="trade_nm"]').val(data.trade_nm);
+
+
+            @*var supplier = JSON.parse(@suppliersData);
+
+            for (i = 1; i < supplier.length; i++) {
+                if (data.trade_cd == supplier[i]["vender_cd"]) {
+                    $('#MaterialMaster2 input[name="trade_nm"]').val(supplier[i]["vender_nm"]);
+                    break;
+                }
+            }*@
+        }
+
+        $('#MaterialMaster2 input[name="unit_price"]').val(data.unit_price);
+
+        if (data.taxfree_yn == "Y") {
+            $('#MaterialMaster2 input[name="taxfree_yn"]').attr("checked", true);
+        }
+        else {
+            $('#MaterialMaster2 input[name="taxfree_yn"]').attr("checked", false);
+        }
+    }
+
+    // 조회
+    function MaterialMaster2Search() {
+
+        $("#pGubun").val("S");
+
+        //event.preventDefault();
+        var form = $('#MaterialMaster2Form')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            //enctype: 'multipart/form-data',
+            url: '/SysItem/SelectMaterials',
+            data: data,
+            async: false,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#MaterialMaster2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#MaterialMaster2Grid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+        UtilView.setGridFocus("G", "MaterialMaster2Grid");
+    }
+
+    // 입력
+    function MaterialMaster2Input() {
+
+        var grid = $("#MaterialMaster2Grid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('MaterialMaster2Grid', grid.option("focusedRowKey"));
+            MaterialMaster2_selectedItemCd = data.item_cd;
+        }
+
+        $("#MaterialMaster2RightForm")[0].reset();
+
+        $("#MaterialMaster2MakerGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#MaterialMaster2MakerGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $("#MaterialMaster2ContentGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#MaterialMaster2ContentGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+
+        $("#MaterialMaster2UpperImage").attr('src', '/Content/image/defaultSign.png');
+        $("#MaterialMaster2MiddleImage").attr('src', '/Content/image/defaultSign.png');
+        $("#MaterialMaster2LowerImage").attr('src', '/Content/image/defaultSign.png');
+
+        $('#MaterialMaster2 input[name="item_exam_yn"]').attr("checked", true);
+        $('#MaterialMaster2 select[name="plant_cd"]').val("PC001").prop("selected", true);
+        $("#MaterialMaster2 input:radio[name='in_out_ck']:radio[value='Y']").prop('checked', true);
+        $("#MaterialMaster2 input:radio[name='outer_process']:radio[value='1']").prop('checked', true);
+
+        $("#pGubun").val("I");
+        MaterialMaster2_EditCheck(true);
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#MaterialMaster2_checkResText").text("");
+            MaterialMaster2_duplicatedCheck = false;
+            $("#MaterialMaster2RightForm input[name=item_cd]").prop("readonly", false);
+        }
+        //$("#pGubun").focus();
+    }
+
+    // 수정
+    function MaterialMaster2Edit() {
+
+        var grid = $("#MaterialMaster2Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('MaterialMaster2Grid', grid.option("focusedRowKey"));
+            MaterialMaster2_selectedItemCd = data.item_cd;
+        }
+
+        $("#pGubun").val("U");
+        MaterialMaster2_EditCheck(true);
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#MaterialMaster2RightForm input[name=item_cd]").prop("readonly", true);
+        }
+    }
+
+    // 저장
+    async function MaterialMaster2Save() {
+
+        if (!UtilView.checkValidForm("MaterialMaster2RightForm")) {
+            return;
+        }
+
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            validationCheck();
+
+            if (!MaterialMaster2_duplicatedCheck) {
+                alert("원료 코드 중복체크를 확인해주세요.");
+                return;
+            }
+        }
+
+        //event.preventDefault();
+        var form = $('#MaterialMaster2RightForm')[0];
+        var data = new FormData(form);
+        // checkbox 값 제어
+        data.set("prod_end", $('#MaterialMaster2RightForm input:checkbox[name=prod_end]').is(':checked') ? 'Y' : 'N');
+
+        //저장시에 공급사 필드(trade_nm) 빈 값일때, trade_cd도 빈값으로 설정해주어야 공급사가 사라짐. 
+        if (UtilView.isEmpty(data.get("trade_nm"))) {
+            data.set("trade_cd", "");
+        }
+
+        await $("#MaterialMaster2MakerGrid").dxDataGrid("instance").saveEditData();
+        await $("#MaterialMaster2ContentGrid").dxDataGrid("instance").saveEditData();
+
+        $.ajax({
+            type: 'POST',
+            //enctype: 'multipart/form-data',
+            url: '/SysItem/MaterialCRUD',
+            data: data,
+            processData: false,
+            contentType: false,
+            async: false,
+            success: function (result) {
+
+                if (result) {
+
+                    //1) 구매처 그리드 데이터 입력
+                    if (_materialMaster2MakerEditData.length > 0) {
+
+                        //원료입력일땐, item_cd가 만들어지지 않은 상태이므로, db에서 받아온 item_cd를 그리드 데이터에 넣어주어야함
+                        if ($("#MaterialMaster2RightMain #pGubun").val() == "I") {
+                            $.map(_materialMaster2MakerEditData, function (value, index) {
+                                value.item_cd = result;//db 리턴 item_cd
+                            });
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/SysItem/MaterialMakerCRUD',
+                            data: {
+                                materials: JSON.stringify(_materialMaster2MakerEditData)
+                            },
+                            dataType: 'json',
+                            async: false,
+                            success: function (result) {
+
+                            }
+                        });
+                    }
+
+                    //2) 성분 및 배합비율 그리드 데이터 입력
+                    if (_materialMaster2ContentEditData.length > 0) {
+
+                        //원료입력일땐, item_cd가 만들어지지 않은 상태이므로, db에서 받아온 item_cd를 그리드 데이터에 넣어주어야함
+                        if ($("#MaterialMaster2RightMain #pGubun").val() == "I") {
+                            $.map(_materialMaster2ContentEditData, function (value, index) {
+                                value.item_cd = result;//db 리턴 item_cd
+                            });
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/SysItem/MaterialContentCRUD',
+                            data: {
+                                materials: JSON.stringify(_materialMaster2ContentEditData)
+                            },
+                            dataType: 'json',
+                            async: false,
+                            success: function (result) {
+
+                            }
+                        });
+                    }
+
+                    alert("저장되었습니다.");
+
+                    if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                        MaterialMaster2_duplicatedCheck = false;
+                        $("#MaterialMaster2_checkResText").text("");
+                    }
+                    MaterialMaster2_EditCheck(false);
+                    MaterialMaster2Search();
+
+                    complete('MaterialMaster2');
+
+                    @*if (result.length > 0 || result == "1") {
+                        alert("저장되었습니다.");
+
+                        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                            MaterialMaster2_duplicatedCheck = false;
+                            $("#MaterialMaster2_checkResText").text("");
+                        }
+                        MaterialMaster2_EditCheck(false);
+                        MaterialMaster2Search();
+                        complete('MaterialMaster2');
+                    } else {
+                        alert("실패하였습니다.");
+                    }*@
+
+                } else {
+                    alert("실패하였습니다.");
+                }
+            }
+        });
+
+    }
+
+    // 취소
+    function MaterialMaster2Undo() {
+
+        validationCheck();
+
+        getData();
+        MaterialMaster2SelectImage();
+
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            MaterialMaster2_duplicatedCheck = false;
+        }
+
+        MaterialMaster2_EditCheck(false);
+        $("#pGubun").val("S");
+        complete('MaterialMaster2');
+    }
+
+    // 삭제
+    function MaterialMaster2Delete() {
+
+        var isOK = confirm("선택된 원료를 삭제하시겠습니까?");
+
+        if (!isOK) {
+            return;
+        }
+
+        CRUDstate = "delete";
+
+        var grid = $("#MaterialMaster2Grid").dxDataGrid("instance");
+        var item_cd = "";
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey('MaterialMaster2Grid', grid.option("focusedRowKey"));
+            item_cd = data.item_cd;
+
+            $.ajax({
+                type: 'POST',
+                url: "/SysItem/MaterialDelete",
+                data: { item_cd: item_cd },
+                success: function (result) {
+
+                    MaterialMaster2Search();
+                }
+            });
+        }
+
+    }
+
+    function validationCheck() {
+        $("#valdationChk").addClass("display-none");
+    }
+
+    // 우측 하단 탭 이동(주요정보, 시험정보, 구매정보, 제조처정보)
+    function menutab(tabId, divId, tabNum) {
+        $("#" + divId + " > div").addClass("display-none");
+        $("#" + tabId + " a").removeClass("active");
+
+        $("#" + divId + "_" + tabNum).removeClass("display-none");
+        $("#" + tabId + " li:nth-child(" + tabNum + ")").children('a').addClass("active");
+    }
+
+    // 원료 코드 중복 체크
+    function duplicateCheck() {
+
+        var data = '{ "pItemCd":"' + $('#MaterialMaster2RightForm input[name="item_cd"]').val() + '", '
+            + '"pGubun": "' + $('#pGubun').val() + '", '
+            + '"pSelectedItemCd": "' + MaterialMaster2_selectedItemCd + '"'
+            + '}';
+
+        if (!$('#MaterialMaster2RightForm input[name="item_cd"]').val()) {
+
+            MaterialMaster2_duplicatedCheck = false;
+
+            $("#MaterialMaster2_checkResText").text("빈 문자열 입니다.");
+            $("#MaterialMaster2_checkResText").css("color", "red");
+
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/SysItem/ItemCdDuplicateCheck',
+            datatype: 'json',
+            contentType: 'application/json; charset=utf-8',
+            data: JSON.parse(data),
+            success: function (result) {
+
+                $("#MaterialMaster2_checkResText").text(result[1]);
+
+                if (result[0] == "0") {
+                    MaterialMaster2_duplicatedCheck = false;
+                    $("#MaterialMaster2_checkResText").css("color", "red");
+                }
+                else if (result[0] == "1") {
+                    MaterialMaster2_duplicatedCheck = true;
+                    $("#MaterialMaster2_checkResText").css("color", "green");
+                }
+            }
+        });
+    }
+
+    // 원료 코드 수정했을시
+    function rewriteItemCd() {
+        MaterialMaster2_duplicatedCheck = false;
+        $("#MaterialMaster2_checkResText").text("");
+    }
+
+    // 제조처 그리드 팝업 이벤트
+    function MaterialMaster2MakerGridPopup(e) {
+        _materialMaster2MakerCellClickEvent = e;
+
+        //if (e.columnIndex == 0 && e.row.isEditing) {
+        if (e.hasOwnProperty("row") && e.row.hasOwnProperty("isEditing") && e.row.isEditing) {
+            if (e.columnIndex == 0) {
+                $("#MaterialMaster2MakerPopup").dxPopup("instance").show();
+            }
+        }
+    }
+
+    // 제조처 그리드 팝업 로우 더블클릭
+    function MaterialMaster2MakerRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        var dataGrid = $("#MaterialMaster2MakerGrid").dxDataGrid("instance");
+        dataGrid.cellValue(_materialMaster2MakerCellClickEvent.rowIndex, "material_maker_cd", data.vender_cd);
+        dataGrid.cellValue(_materialMaster2MakerCellClickEvent.rowIndex, "material_maker_nm", data.vender_nm);
+
+        $("#MaterialMaster2MakerPopup").dxPopup("instance").hide();
+    }
+
+    // 제조처 그리드 입력
+    function MaterialMaster2MakerInsert(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "I2";
+
+        _materialMaster2MakerEditData.push(data);
+    }
+
+    // 제조처 그리드 수정
+    function MaterialMaster2MakerUpdate(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "U2";
+
+        _materialMaster2MakerEditData.push(data);
+    }
+
+    // 제조처 그리드 삭제
+    function MaterialMaster2MakerDelete(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "D2";
+
+        _materialMaster2MakerEditData.push(data);
+    }
+
+    // 제조처 그리드 직접 입력 방지
+    function MaterialMaster2MakerEditableColumn(cellElement, cellInfo) {
+
+        if (cellElement.rowType != "data" || !cellElement.isEditing)
+            return;
+        if (cellElement.column.dataField === 'material_maker_cd' && !cellElement.row.inserted)
+            cellElement.element.find('input').prop('disabled', true);
+        if (cellElement.column.dataField === 'material_maker_nm' && !cellElement.row.inserted)
+            cellElement.element.find('input').prop('disabled', true);
+    }
+
+    // 제제 이미지 업로드
+    function MaterialMaster2UploadImage(e) {
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "item_cd", $("#MaterialMaster2RightForm input[name=item_cd]").val());
+        url = updateQueryStringParameter(url, "gubun", _materialMaster2ImageSeq);
+        url = updateQueryStringParameter(url, "imageCnt", _materialMaster2ImageCnt);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 제제 이미지 삭제
+    function MaterialMaster2DeleteImage(num) {
+
+        if (!conform("선택된 이미지를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/MaterialMaster2DeleteImage',
+            dataType: "json",
+            data: {
+                item_cd: $("#MaterialMaster2RightForm input[name=item_cd]").val(),
+                gubun: num
+            },
+            success: function (result) {
+
+                MaterialMaster2SelectImage();
+            }
+        });
+    }
+
+    //성분 및 배합비율 그리드 입력
+    function MaterialMaster2ContentInsert(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "I3";
+
+        _materialMaster2ContentEditData.push(data);
+    }
+
+    //성분 및 배합비율 그리드 수정
+    function MaterialMaster2ContentUpdate(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "U3";
+
+        _materialMaster2ContentEditData.push(data);
+    }
+
+    //성분 및 배합비율 그리드 삭제
+    function MaterialMaster2ContentDelete(info) {
+        var data = info.data;
+
+        data.item_cd = $("#MaterialMaster2RightMain input[name=item_cd]").val();
+        data.pGubun = "D3";
+
+        _materialMaster2ContentEditData.push(data);
+    }
+
+    function MaterialMaster2Excel() {
+        gridExportToExcel("MaterialMaster2Grid", "MaterialData");
+    }
+
+    function MaterialMaster2SelectStandardCode() {
+
+        var popup = $("#MaterialMaster2StandardPopup").dxPopup("instance");
+
+        popup.show();      
+    }
+
+    function MaterialMaster2StandardRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#MaterialMaster2RightForm input[name=standard_cd]").val(data.item_cd);
+        $("#MaterialMaster2RightForm input[name=standard_nm]").val(data.item_nm);
+
+        $("#MaterialMaster2StandardPopup").dxPopup("instance").hide();
+    }
+
+    function MaterialMaster2SelectCountryCode() {
+
+        var popup = $("#MaterialMaster2CountryPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    function MaterialMaster2CountryRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#MaterialMaster2RightForm input[name=country_cd]").val(data.country_cd);
+        $("#MaterialMaster2RightForm input[name=country_nm]").val(data.country_nm);
+
+        $("#MaterialMaster2CountryPopup").dxPopup("instance").hide();
+    }
+
+</script>
+
+<div id="MaterialMaster2" autoresize="Y">
+
+    @* === 그리드 상단 검색조건 === *@
+    <div id="MaterialMaster2Top" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="MaterialMaster2Form">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">원료</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm" id="MaterialMaster2Material">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchMaterial()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <input type="text" id="MaterialMaster2Material_cd" class="col-3 form-control" hidden="hidden" name="item_cd">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">생산동 구분</span>
+                        </div>
+                        <select class="form-control" name="item_type1">
+                            @foreach (DataRow row in ((DataTable)ViewBag.productionBuildingGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용 구분</span>
+                        </div>
+                        <select class="form-control" name="prod_end">
+                            @foreach (DataRow row in ((DataTable)ViewBag.usedGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">팀 구분</span>
+                        </div>
+                        <select class="form-control" name="item_type2" id="MaterialMaster2ItemType2">
+                            @foreach (DataRow row in ((DataTable)ViewBag.teamGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-7 pr-1">
+
+            <div id="MaterialMaster2MaterialPopup"></div>
+            <div id="MaterialMaster2StandardPopup"></div>
+            <div id="MaterialMaster2CountryPopup"></div>
+            <div id="MaterialMaster2VendorPopup"></div>
+            <div id="MaterialMaster2MakerPopup"></div>
+            <div id="MaterialMaster2SuppliersPopup"></div>
+
+            @* === 메인 그리드 === *@
+
+            <fieldset id="MaterialMaster2LeftMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MaterialMaster2Grid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .KeyExpr("item_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface");
+                        c.Add().DataField("item_cd").Caption("원료코드");
+                        c.Add().DataField("item_nm").Caption("원료명");
+                        c.Add().DataField("item_nm_registry").Caption("원료허가명");
+                        c.Add().DataField("prod_end").Caption("사용여부")
+                            .CalculateCellValue(@"function(rowData) { return rowData.prod_end == ""Y""; }");
+                    })
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .OnFocusedRowChanged("MaterialMaster2Focus_changed")
+                    )
+
+            </fieldset>
+
+        </div>
+
+        @* === 그리드 우측 DIV === *@
+        <div id="MaterialMaster2RightMain" class="col-5 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>원료 정보</p>
+                    <span id="valdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <form id="MaterialMaster2RightForm">
+
+                    @* === CRUD 구분 정보 === *@
+                    <input type="text" name="pGubun" id="pGubun" hidden="hidden" />
+
+                    @* === 기본정보 === *@
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active">기본정보</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-2">코드 <star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control required" name="item_cd" onchange="rewriteItemCd()">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" id ="MaterialMaster2_duplicate_check" type="button" onclick="duplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>
+                                    <div class="input-group col-6">
+                                        <span id="MaterialMaster2_checkResText"></span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-2">코드</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="item_cd" readonly="readonly" @*onchange="rewriteItemCd()"*@>
+                                    @*<div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="duplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>*@
+                                </div>
+                                @*<div class="input-group col-5">
+                                    <span id="checkResText"></span>
+                                </div>*@
+                            }
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">원료명 <star>*</star></label>
+                            <div class="input-group col-9">
+                                <input type="text" class="form-control col-12 required" name="item_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">원료허가명</label>
+                            <div class="input-group col-9">
+                                <input type="text" class="form-control col-12" name="item_nm_registry">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">약식코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="abbreviation_cd">
+                            </div>
+                            <label class="col-2">약식품명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_s_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">영문명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="item_enm">
+                            </div>
+                            <label class="col-2">일문명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_jnm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">원료 표준코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="standard_cd" readonly="readonly" />
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="MaterialMaster2SelectStandardCode()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <label class="col-2">원료 표준명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="standard_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">원료 국가코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="country_cd" readonly="readonly" />
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="MaterialMaster2SelectCountryCode()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-5">
+                                <input type="text" class="form-control col-12" name="country_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사용여부</label>
+                            <div class="input-group col-4">
+                                <input type="checkbox" name="prod_end" id="prod_end" value="Y" />
+                            </div>
+                            <label class="col-2">사용중지사유</label>
+                            <div class="input-group col-3">
+                                <select class="col-12 form-control" name="break_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.retiredReason).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    @* === 분류정보 === *@
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active">분류정보</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">외주구분</label>
+                            <div class="input-group col-4">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="outer_process" value="1" />구매 </label>
+                                    <label><input type="radio" name="outer_process" value="2" />수탁 </label>
+                                    <label><input type="radio" name="outer_process" value="3" />위탁 </label>
+                                </div>
+                            </div>
+                            <label class="col-2">국내외구분</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="in_out_ck" value="Y" />국내 </label>
+                                    <label><input type="radio" name="in_out_ck" value="N" />국외 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">ABC 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="abc_gubun">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.abcGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">사업장</label>
+                            <div class="input-group col-3">
+                                <select class="form-control col-12" name="plant_cd">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.workplaceGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">생산동/팀</label>
+                            <div class="input-group col-2">
+                                <select class="form-control col-12" name="form_item_type1">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.productionBuildingGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="input-group col-7">
+                                <select class="form-control col-12" name="form_item_type2">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.teamGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    @* === 주요정보, 시험정보, 구매정보, 제조처정보 탭 === *@
+                    <ul class="nav nav-tabs" id="MaterialMaster2MenuTab">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv', 1)">주요정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv', 2)">시험정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv' , 3)">구매정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv' , 4)">제조처정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv' , 5)">제제모양</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('MaterialMaster2MenuTab', 'MaterialMaster2MenuDiv' , 6)">성분 및 배합비율</a>
+                        </li>
+                    </ul>
+
+
+                    <div id="MaterialMaster2MenuDiv">
+
+                        @* === 주요정보 === *@
+                        <div class="menuDiv" id="MaterialMaster2MenuDiv_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">원료구분 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <select class="form-control col-12 required" name="item_type3">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.materialGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">원료 관리단위 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12 required" name="item_unit_cd">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">유효기간 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="col-4 form-control required" name="item_validity_period" />
+                                    <select class="form-control col-8 required" name="item_validity_period_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">보관기간</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="col-4 form-control" name="kepping_term" />
+                                    <select class="form-control col-8" name="kepping_term_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관조건</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control col-12" name="item_keep_condition">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageConditions).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">보관온도</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="item_keep_temperature">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageTemperatures).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관창고</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control col-12" name="keeping_warehouse">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageWarehouses).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">시험규격</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="test_standard">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.testStandards).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-2">허가량합계 제외</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" value="Y" name="manufacture_qty_yn" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @* === 시험정보 === *@
+                        <div class="menuDiv display-none" id="MaterialMaster2MenuDiv_2">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">실험필요여부</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" name="item_exam_yn" value="Y" />
+                                </div>
+                                <label class="col-2">무균원료여부</label>
+                                <div class="input-group col-3">
+                                    <input type="checkbox" name="asepsis_item_ck" value="Y" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">통별 샘플링 대상</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" name="pack_sampling_ck" value="Y" />
+                                </div>
+                                <label class="col-2">샘플링방법</label>
+                                <div class="input-group col-3">
+                                    <select class="col-12 form-control" name="sampling_calc">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.samplingGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">GMO 원료</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" name="gmo_material_yn" value="Y" />
+                                </div>
+                                <label class="col-2">재실험대상</label>
+                                <div class="input-group col-3">
+                                    <input type="checkbox" name="retest_yn" value="Y" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @* === 구매정보 === *@
+                        <div class="menuDiv display-none" id="MaterialMaster2MenuDiv_3">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">발주단위</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="col-8 form-control" name="basic_purchase_qty" />
+                                    <select class="form-control col-4 required" name="basic_purchase_unit">
+                                        <option value="" selected disabled hidden> </option>
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">입고기간</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="col-11 form-control" name="delivery_period" />
+                                    <div class=" col-1">
+                                        일
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">시험기간</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-11 form-control" name="test_period" />
+                                    <div class=" col-1">
+                                        일
+                                    </div>
+                                </div>
+                                <label class="col-2">안전재고일</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="item_safety_day" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">공급사</label>
+                                <div class="input-group col-4">
+                                    <input type="hidden" class="form-control" name="trade_cd">
+                                    <input type="text" class="form-control" name="trade_nm">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="searchSupplier_Material()">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <label class="col-2">단가</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-12 form-control" name="unit_price" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">면세대상</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" value="Y" name="taxfree_yn" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @* === 제조처정보 === *@
+                        <div class="menuDiv display-none" id="MaterialMaster2MenuDiv_4">
+                            <div class="input-wrapper">
+                                <label class="col-2">제조처 체크</label>
+                                <div class="col-2" style="display:inline-block">
+                                    <input type="checkbox" name="materialmaker_ck" value="Y" />
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("MaterialMaster2MakerGrid")
+                                .ShowBorders(true)
+                                .Height(250)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .KeyExpr("material_maker_cd")
+                                .HoverStateEnabled(true)
+                                .FocusedRowEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .OnCellClick("MaterialMaster2MakerGridPopup")
+                                .OnRowInserted("MaterialMaster2MakerInsert")
+                                .OnRowUpdated("MaterialMaster2MakerUpdate")
+                                .OnRowRemoved("MaterialMaster2MakerDelete")
+                                .OnToolbarPreparing("HideToolbarButton")
+                                .OnCellPrepared("MaterialMaster2MakerEditableColumn")
+                                .ShowColumnLines(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("material_maker_cd").Caption("제조처코드")
+                                        .CellTemplate(new JS("cellWithButton"))
+                                        .ValidationRules(vr =>
+                                        {
+                                            vr.AddRequired()
+                                                .Message("제조처코드가 비어있습니다.");
+                                        });
+
+                                    c.Add().DataField("material_maker_nm").Caption("제조처명")
+                                        .ValidationRules(vr =>
+                                        {
+                                            vr.AddRequired()
+                                                .Message("제조처명이 비어있습니다.");
+                                        });
+                                })
+                            )
+
+                        </div>
+
+                        @* === 제제 이미지 === *@
+                        <div id="MaterialMaster2MenuDiv_5" class="menuDiv display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(상)</label>
+                                <div class="input-group col-6">
+                                    <img id="MaterialMaster2UpperImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="MaterialMaster2UploadBtn1" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="MaterialMaster2DeleteBtn1" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("MaterialMaster2UpperImageUploader")
+                                .Name("upper_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("MaterialMaster2UploadImage")
+                            .OnUploaded("MaterialMaster2SelectImage")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(중)</label>
+                                <div class="input-group col-6">
+                                    <img id="MaterialMaster2MiddleImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="MaterialMaster2UploadBtn2" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="MaterialMaster2DeleteBtn2" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("MaterialMaster2MiddleImageUploader")
+                                .Name("middle_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("MaterialMaster2UploadImage")
+                            .OnUploaded("MaterialMaster2SelectImage")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(하)</label>
+                                <div class="input-group col-6">
+                                    <img id="MaterialMaster2LowerImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="MaterialMaster2UploadBtn3" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="MaterialMaster2DeleteBtn3" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("MaterialMaster2LowerImageUploader")
+                                .Name("lower_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("MaterialMaster2UploadImage")
+                            .OnUploaded("MaterialMaster2SelectImage")
+                            )
+
+                        </div>
+
+                        @* === 성분 및 배합비율 === *@
+                        <div class="menuDiv display-none" id="MaterialMaster2MenuDiv_6">
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("MaterialMaster2ContentGrid")
+                                .ShowBorders(true)
+                                .Height(250)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .KeyExpr("material_content_nm")
+                                .HoverStateEnabled(true)
+                                .FocusedRowEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .OnRowInserted("MaterialMaster2ContentInsert")
+                                .OnRowUpdated("MaterialMaster2ContentUpdate")
+                                .OnRowRemoved("MaterialMaster2ContentDelete")
+                                .OnToolbarPreparing("HideToolbarButton")
+                               // .OnCellPrepared("MaterialMaster2ContentEditableColumn")
+                                .ShowColumnLines(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("material_content_nm").Caption("원재료명");
+                                    c.Add().DataField("material_content_percent").DataType(GridColumnDataType.Number).Caption("성분배합비율(%)");
+                                })
+                            )
+
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

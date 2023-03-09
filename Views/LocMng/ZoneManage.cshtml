@@ -1,0 +1,533 @@
+﻿@model HACCP.Models.LocMng.ZoneManage
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ZoneManage";
+    string sData = ViewData["data"] as String;
+}
+@{     
+    var ZoneManageData = @Html.Raw(Json.Encode(ViewBag.ZoneManage.Data));
+    var ZoneManageAuth = @Html.Raw(Json.Encode(ViewBag.ZoneManageAuth.Data));
+
+    var WorkRoomPopupJson = @Html.Raw(Json.Encode(ViewBag.WorkRoomPopupData.Data));
+}
+
+
+    <script id="ZoneManageJs" type="text/javascript">
+    //SP 구문, gubun 변수
+    var zoneGubun = "";
+    var _ZoneManageAuth;
+    var ZoneManageData = @ZoneManageData;
+
+
+        $(function () {
+            if (ZoneManageData.length <= 0) {
+                $("#ZoneManageGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#ZoneManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ZoneManageData));
+                $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //수정중 체크
+            Zone_EditCheck(false);
+
+            //사용자 권한
+            _ZoneManageAuth = JSON.parse(@ZoneManageAuth)[0];
+
+            if (_ZoneManageAuth.form_query != "Y") {
+                $("#ZoneManageSearch").remove();
+            }
+            if (_ZoneManageAuth.form_insert != "Y") {
+                $("#ZoneManageInput").remove();
+            }
+            if (_ZoneManageAuth.form_edit != "Y") {
+                $("#ZoneManageEdit").remove();
+            }
+            if (_ZoneManageAuth.form_delete != "Y") {
+                $("#ZoneManageDelete").remove();
+            }
+
+            var ds = JSON.parse(@WorkRoomPopupJson);
+
+            $("#ZM_workroomDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: ds, key: "workroom_cd" }));
+
+        });
+
+
+        //수정중인지 체크
+        function Zone_EditCheck(nowEdit) {
+            $("#ZM_workroomDropBox").dxDropDownBox("option", "disabled", true);
+
+            if (nowEdit) {
+                $("#ZoneManageSave").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageSearch").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageInput").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageEdit").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageDelete").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageExcel").dxButton().parent().parent().addClass("display-none");
+
+                $("#ZoneManageRightForm :disabled").attr('disabled', false);
+                $("#ZoneManageGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+                $("#ZoneManageSave").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageUndo").dxButton().parent().parent().addClass("display-none");
+                $("#ZoneManageSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageInput").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageDelete").dxButton().parent().parent().removeClass("display-none");
+                $("#ZoneManageExcel").dxButton().parent().parent().removeClass("display-none");
+
+                $("#ZoneManageRightForm :enabled").attr('disabled', true);
+                $("#ZoneManageGrid").dxDataGrid("option", "disabled", false);
+            }
+        }
+
+        //좌측 그리드 선택 변경 시, 이벤트 처리
+        function ZoneManageFocus_changed(e) {
+            if (!e.row.data) {
+                return;
+            }
+            ZM_fillData(e.row.data);
+        }
+
+
+        //우측 폼 데이터 채우기
+        function ZM_fillData(data) {
+
+            $("#ZM_workroomDropBox").dxDropDownBox("instance").option("value", data.workroom_nm);
+
+            $("input[name=zone_fix_cd]").val(data.zone_fix_cd);
+            $("input[name=zone_middle_cd]").val(data.zone_middle_cd);
+            $("input[name=zone_cd]").val(data.zone_cd);
+
+            $("#ZoneManageRightForm input[name=zone_nm]").val(data.zone_nm);
+            $("#ZoneManageRightForm select[name=zone_type]").val(data.zone_type);
+            $("#ZoneManageRightForm input[name=zone_priority]").val(data.zone_priority);
+            $("#ZoneManageRightForm select[name=zone_status]").val(data.zone_status);
+            $("#ZoneManageRightForm input[name=zone_temperature_min]").val(data.zone_temperature_min);
+            $("#ZoneManageRightForm input[name=zone_temperature_max]").val(data.zone_temperature_max);
+            $("#ZoneManageRightForm input[name=zone_humidity_min]").val(data.zone_humidity_min);
+            $("#ZoneManageRightForm input[name=zone_humidity_max]").val(data.zone_humidity_max);
+            $("#ZoneManageRightForm textarea[name=zone_remark]").val(data.zone_remark);
+
+        }
+
+        //조회
+        function ZoneManageSearch() {
+            zoneGubun = "Select";
+
+            $.ajax({
+                type: 'POST',
+                url: '/LocMng/ZoneManageSelect',
+                data: {
+                    workroom_cd: ""
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#ZoneManageGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                        $("#ZoneManageRightForm")[0].reset();
+                        return;
+                    }
+
+                    $("#ZoneManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));                    
+                    $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#ZoneManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+            })
+        }
+
+        //입력버튼
+        function ZoneManageInput() {
+            // 버튼 상태값 체크 및 셋팅
+            Zone_EditCheck(true);
+
+            $("#ZoneManageRightForm")[0].reset();
+
+            $("#ZoneManageRightForm input[name=zone_fix_cd]").val("Z");
+
+            $("#ZM_workroomDropBox").dxDropDownBox("option", "disabled", false);
+
+            $("#ZoneManageRightForm input[name=zone_fix_cd]").attr("readonly", true);
+            $("#ZoneManageRightForm input[name=zone_middle_cd]").attr("readonly", true);
+            $("#ZoneManageRightForm input[name=zone_cd]").attr("readonly", false);
+
+            // 구분 값
+            zoneGubun = "Insert";
+
+        }        
+
+        //수정버튼
+        function ZoneManageEdit() {
+            // 버튼 상태값 체크 및 셋팅
+            Zone_EditCheck(true);
+
+            var grid = $("#ZoneManageGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() <= 0) {
+                alert("수정할 항목이 존재하지 않습니다.");
+                ZoneManageUndo();
+                return;
+            }
+
+            $("#ZoneManageRightForm input[name=workroom_nm]").attr("readonly", true);
+            $("#ZoneManageRightForm input[name=zone_fix_cd]").attr("readonly", true);
+            $("#ZoneManageRightForm input[name=zone_middle_cd]").attr("readonly", true);
+            $("#ZoneManageRightForm input[name=zone_cd]").attr("readonly", true);
+
+            // 구분 값
+            zoneGubun = "Update";
+
+        }
+
+        //저장버튼
+        function ZoneManageSave() {
+            var formData = new FormData($("#ZoneManageRightForm")[0]);
+
+            formData.set("zone_cd",
+                $("#ZoneManageRightForm input[name=zone_fix_cd").val()
+                + $("#ZoneManageRightForm input[name=zone_middle_cd").val()
+                + $("#ZoneManageRightForm input[name=zone_cd").val());
+            //formData.set("workroom_cd", "W" + $("#ZoneManageRightForm input[name=zone_middle_cd").val());
+            formData.set("workroom_cd", $("#ZoneManageRightForm input[name=zone_middle_cd").val());
+
+            formData.set("gubun", zoneGubun);
+
+            var formID = "ZoneManageRightForm";
+            var cols = [
+                { name: "workroom_cd", text: "창고", type: "select" },
+                { name: "zone_cd", text: "구역코드", type: "input" }
+            ];
+            var isValid = validationCk(formID, cols);
+
+            if (!isValid) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/LocMng/ZoneManageCRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    //alert(json.messege);
+                    alert(json.messege + "건 저장되었습니다.");
+
+                    Zone_EditCheck(false);
+                    zoneGubun = "";
+
+                    ZoneManageSearch();
+                }
+            })
+        }
+
+        //취소버튼
+        function ZoneManageUndo() {
+            // 버튼 상태값 체크 및 셋팅
+            Zone_EditCheck(false);
+            zoneGubun = "";
+
+            ZoneManageSearch();
+
+        }
+
+        //삭제버튼
+        function ZoneManageDelete() {
+            // 삭제 여부 팝업
+            if (confirm("정말 삭제하시겠습니까??") === true) {
+
+                // 그리드 객체 가져오기
+                var grid = $("#ZoneManageGrid").dxDataGrid("instance");
+                // 포커스 된 row의 키를 통해서 해당 데이터를 가져온다.
+                var data = getGridRowByKey('ZoneManageGrid', grid.option("focusedRowKey"));
+
+                zoneGubun = "Delete";
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LocMng/ZoneManageCRUD',
+                    data: {
+                        workroom_cd: data.workroom_cd,
+                        zone_cd: data.zone_fix_cd + data.zone_middle_cd + data.zone_cd,
+                        gubun: zoneGubun
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        //alert(json.messege);
+                        alert(json.messege + "건 삭제되었습니다.");
+
+                        Zone_EditCheck(false);
+                        zoneGubun = "";
+
+                        ZoneManageSearch();
+
+                    }
+                })
+
+            } else {   //취소
+
+                return;
+
+            }
+        }
+
+        //엑셀
+        function ZoneManageExcel() {
+            gridExportToExcel("ZoneManageGrid", "ZoneManageData");
+        }
+
+        function ZM_gridBox_valueChanged(e) {
+
+            if (e.value === null || e.value.length <= 0) {
+                return;
+            }
+            if (e.value !== null || e.value.length > 0) {
+                $("#ZM_workroomDropBox").dxDropDownBox("instance").close();
+            }            
+
+            //$("#ZoneManageRightForm input[name=zone_middle_cd]").val((e.value[0]).substr(1, 4));      //hanpoong 작업실코드 기준
+            $("#ZoneManageRightForm input[name=zone_middle_cd]").val(e.value[0]);        //AOS 작업실 코드 기준
+
+        }
+
+        function ZM_gridBox_displayExpr(item) {                       
+
+            return item.workroom_nm;
+        }
+
+    </script>
+
+
+    <div id="ZoneManage" autoresize="Y">
+
+        <div id="ZM_WorkRoomPopup"></div>
+
+        @*<h4 class="divTitle">구역(Zone) 등록</h4>*@
+
+        <div class="mainTop row">
+
+            <div class="CRUD-btn col-12">
+                @{ Html.SetToolbar(0, true, "Input;Edit;Delete;Save;Undo;Excel");}
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 좌측 그리드 -->
+            <div class="col-8 pr-0">
+                <div id="ZoneManageLeftMain" class="box mb-0">
+
+                    @(Html.DevExtreme().DataGrid()
+                    .ID("ZoneManageGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("zone_all_cd")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("zone_all_cd").Caption("구역코드");
+                        c.Add().DataField("zone_nm").Caption("구역명");
+                        c.Add().DataField("workroom_nm").Caption("창고");
+                    })
+                    .OnFocusedRowChanged("ZoneManageFocus_changed")
+                    )
+
+                </div>
+
+            </div>
+
+            <!-- 우측 그리드 -->
+            <div id="ZoneManageRightMain" class="col-4 pl-1">
+
+                <div class="box mb-0">
+
+                    <form id="ZoneManageRightForm">
+
+                        <div class="divName margin-bottom">
+                            <p>구역 정보</p>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <input type="hidden" name="zone_all_cd" value="" />
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">창고<star>*</star></label>
+                            <div class="input-group col-6">
+                                <div class="required" style="display:inline-block;">
+                                    @(Html.DevExtreme().DropDownBox()
+                                        .ID("ZM_workroomDropBox")
+                                        .Name("workroom_cd")
+                                        .ValueExpr("workroom_cd")
+                                        //.DisplayExpr(new JS("ZM_gridBox_displayExpr"))
+                                        .DisplayExpr("workroom_nm")
+                                        .Placeholder("창고를 선택하시오")
+                                        //.ShowClearButton(true)
+                                        .Width(250)
+                                        .OnValueChanged("ZM_gridBox_valueChanged")
+                                        .OnClosed("DropDownBoxReload")
+                                        .ContentTemplate(new TemplateName("ZM_WorkroomDropboxTemplate"))
+                                )
+
+                                    @using (Html.DevExtreme().NamedTemplate("ZM_WorkroomDropboxTemplate"))
+                                    {
+                                        @(Html.DevExtreme().DataGrid()
+                                            .ID("ZM_workroomDropdownGrid")
+                                            .DataSource(new JS(@"component.getDataSource()"))
+                                            .Columns(columns => {
+                                                columns.Add().DataField("workroom_cd").Caption("창고코드");
+                                                columns.Add().DataField("workroom_nm").Caption("창고명");
+                                            })
+                                            .HoverStateEnabled(true)
+                                            .SearchPanel(searchPanel =>
+                                            {
+                                                searchPanel.Visible(true);
+                                                searchPanel.Width(130);
+                                            })
+                                        .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                        .Width(210)
+                                        .Height(500)
+                                        .Selection(s => s.Mode(SelectionMode.Single))
+                                        .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                        .OnSelectionChanged(@<text>
+                                                    function(selectedItems) {
+                                                        var keys = selectedItems.selectedRowKeys;
+                                                        component.option("value", keys);
+                                                    }
+                                                    </text>)
+                                        )
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">구역코드<star>*</star></label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" name="zone_fix_cd" />
+                            </div>
+                            <div class="input-group col-2">
+                                <input type="text" class="form-control" name="zone_middle_cd" />
+                            </div>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control required" name="zone_cd" />
+                            </div>
+                                <label class="col-4">Z:기본, AA:창고, BB:구역</label>                            
+                        </div>
+                            <hr />
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역명</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="zone_nm" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역타입</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control" name="zone_type">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.zone_type).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역우선순위</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="form-control" name="zone_priority" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역상태</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control" name="zone_status">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.zone_status).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역온도</label>
+                                <span class="form-group-sm">
+                                    <label for="zone_temperature_min">최소</label>
+                                </span>
+                                <div class="input-group col-1">
+                                    <input type="number" class="form-control" name="zone_temperature_min" />
+                                </div>
+
+                                <span class="form-group-sm">
+                                    <label for="zone_temperature_max">최대</label>
+                                </span>
+                                <div class="input-group col-1">
+                                    <input type="number" class="form-control" name="zone_temperature_max" />
+                                </div>
+
+                                <span class="form-group-sm">
+                                    <label for="">(단위:°C)</label>
+                                </span>
+
+                            </div>                            
+
+                            <div class="input-wrapper">
+                                <label class="col-3">구역습도</label>
+                                <span class="form-group-sm">
+                                    <label for="zone_humidity_min">최소</label>
+                                </span>
+                                <div class="input-group col-1">
+                                    <input type="number" class="form-control" name="zone_humidity_min" />
+                                </div>
+
+                                <span class="form-group-sm">
+                                    <label for="zone_humidity_max">최대</label>
+                                </span>
+                                <div class="input-group col-1">
+                                    <input type="number" class="form-control" name="zone_humidity_max" />
+                                </div>
+
+                                <span class="form-group-sm">
+                                    <label for="">(단위:%)</label>
+                                </span>
+
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">설명</label>
+                                <div class="input-group col-6">
+                                    <textarea rows="3" class="form-control" name="zone_remark"></textarea>
+                                </div>
+                            </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+
+
+
+    </div>

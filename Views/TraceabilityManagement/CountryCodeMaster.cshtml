@@ -1,0 +1,442 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@* 표준코드 관리 *@
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var CountryCodeMaster_dbState = "";
+    var CountryCodeMaster_FocusedRowData = null;
+
+    $(function () {
+
+        // 수정중인지 체크
+        CountryCodeMaster_EditCheck(false);
+        // 그리드 데이터 조회
+        CountryCodeMasterSearch();
+    })
+
+    // 수정중인지 체크
+    function CountryCodeMaster_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#CountryCodeMasterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#CountryCodeMasterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#CountryCodeMasterSearch").dxButton().parent().parent().addClass("display-none");
+            //$("#CountryCodeMasterInput").dxButton().parent().parent().addClass("display-none");
+            $("#CountryCodeMasterEdit").dxButton().parent().parent().addClass("display-none");
+            //$("#CountryCodeMasterDelete").dxButton().parent().parent().addClass("display-none");
+            $("#CountryCodeMasterExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#CountryCodeMasterForm :disabled").attr('disabled', false);
+            $("#CountryCodeMasterGrid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+            $("#CountryCodeMasterSave").dxButton().parent().parent().addClass("display-none");
+            $("#CountryCodeMasterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#CountryCodeMasterSearch").dxButton().parent().parent().removeClass("display-none");
+            //$("#CountryCodeMasterInput").dxButton().parent().parent().removeClass("display-none");
+            $("#CountryCodeMasterEdit").dxButton().parent().parent().removeClass("display-none");
+            //$("#CountryCodeMasterDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#CountryCodeMasterExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#CountryCodeMasterForm :enabled").attr('disabled', true);
+            $("#CountryCodeMasterGrid").dxDataGrid("option", "disabled", false);
+
+            CountryCodeMaster_dbState = "";
+
+        }
+    }
+
+   //국가코드 조회
+    function CountryCodeMaster_SearchCountry() {
+
+        CreatePopupWithFilter('@CodeHelpType.material_country_cd', '국가코드 조회', 'country_cd', $("#CountryCodeMasterSearchForm input[name=country_cd]").val(),
+            function (selectedItems) {
+                //입력폼 데이터로 설정
+                $("#CountryCodeMasterSearchForm input[name=country_cd]").val(selectedItems.country_cd);
+                $("#CountryCodeMasterSearchForm input[name=country_nm]").val(selectedItems.country_nm);
+            }
+        );
+    }
+
+    function CountryCodeMasterSearch() {
+        var country_cd = $("#CountryCodeMasterSearchForm input[name='country_cd']").val();
+        var use_ck = $("#CountryCodeMasterSearchForm input:radio[name='use_ck']:checked").val();
+
+        $.ajax({
+            type: 'POST',
+            async:false,
+            url: '/TraceabilityManagement/CountryCodeMasterSearch',
+            data: {
+                country_cd: country_cd,
+                use_ck : use_ck
+            },
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var json = JSON.parse(result);
+
+                    $("#CountryCodeMasterGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#CountryCodeMasterGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    CountryCodeMaster_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "CountryCodeMasterGrid");
+    }
+
+    function CountryCodeMaster_SetDetail() {
+        if (CountryCodeMaster_FocusedRowData != null) {
+            var data = CountryCodeMaster_FocusedRowData;
+            $("#CountryCodeMasterForm input[name=country_cd]").val(data.country_cd);//국가코드
+            $("#CountryCodeMasterForm input[name=country_nm]").val(data.country_nm);//국가명
+
+            if (data.use_ck == "Y") {
+                $("#CountryCodeMasterForm input:radio[name='use_ck']:radio[value='Y']").prop('checked', true);
+            } else {
+                $("#CountryCodeMasterForm input:radio[name='use_ck']:radio[value='N']").prop('checked', true);
+            }
+
+        } else {
+            $("#CountryCodeMasterForm")[0].reset();
+            $("#CountryCodeMasterForm input:radio[name='use_ck']:radio[value='N']").prop('checked', true);
+        }
+
+        CountryCodeMaster_SearchItem();
+    }
+
+    function CountryCodeMaster_SearchItem() {
+
+        var country_cd = $("#CountryCodeMasterForm input[name='country_cd']").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/TraceabilityManagement/CountryCodeMasterSearchItem',
+            data: {
+                country_cd: country_cd
+            },
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var json = JSON.parse(result);
+
+                    $("#CountryCodeMasterDetailGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#CountryCodeMasterDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                }
+            }
+        })
+    }
+
+    function CountryCodeMasterEdit() {
+
+        CountryCodeMaster_dbState = "U";
+        CountryCodeMaster_EditCheck(true);
+
+    }
+
+    function CountryCodeMasterUndo() {
+        CountryCodeMaster_EditCheck(false);
+    }
+
+    function CountryCodeMasterSave() {
+
+        if (confirm("국가코드 사용여부를 수정하시겠습니까?")) {
+
+            var country_cd = $("#CountryCodeMasterForm input[name='country_cd']").val();
+            var use_ck = $("#CountryCodeMasterForm input:radio[name='use_ck']:checked").val();
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/TraceabilityManagement/CountryCodeMasterSave',
+                data: {
+                    country_cd: country_cd,
+                    use_ck: use_ck
+                },
+                success: function (result) {
+                    CountryCodeMaster_EditCheck(false);
+                    CountryCodeMasterSearch();
+                }
+            })
+        }
+
+    }
+
+    function CountryCodeMasterExcel() {
+        gridExportToExcel("CountryCodeMasterGrid", "CountryCodeMasterData");
+    }
+
+    //엑셀 업로드
+    function CountryCodeMaster_Upload() {
+        $("#CountryCodeMaster_excel_upload").click();
+    }
+
+    document.querySelector("#CountryCodeMaster_excel_upload").addEventListener("change", function (event) {
+
+        var input = event.target;
+        var fileName = input.files[0].name;
+        var fileType = fileName.substring(fileName.lastIndexOf(".")).toUpperCase();
+
+        // 엑셀 확장자가 아니면 return;
+        if (!(fileType == ".XLSX" || fileType == ".XLS")) {
+            alert("확장자가 .xls, .xlsx인 파일만 입력할 수 있습니다.");
+
+            event.target.value = "";
+            return;
+        }
+
+        // FileReader를 선언한 후, 해당 FileReader에 input type[file]로 입력 받은 파일은 입력(readAsBinaryString)
+        var reader = new FileReader();
+        reader.readAsBinaryString(input.files[0]);
+
+        // FileReader에 파일이 제대로 입력되면 실행할 function
+        reader.onload = function () {
+            var fileData = reader.result;
+            var wb = XLSX.read(fileData, { type: 'binary' });
+
+            wb.SheetNames.forEach(function (sheetName) {
+                var rowObj = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+
+                CountryCodeMaster_excelDataInsertToGrid(rowObj);
+            })
+        };
+
+    })
+
+    // input type[file]을 통해 입력받은 파일을 DataGrid에 입력
+    function CountryCodeMaster_excelDataInsertToGrid(data) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/TraceabilityManagement/InsertExcelData_CountryTemp',
+            async: false,
+            //dataType: 'json',
+            data: {
+                countryData: JSON.stringify(data)
+            },
+            success: function (result) {
+                alert(result);
+            }
+        });
+
+        $("#CountryCodeMaster_excel_upload").val("");
+    }
+
+
+    function CountryCodeMasterGrid_FocusedRowChanged(e) {
+
+        if (!e.row || !e.row.data) {
+            CountryCodeMaster_FocusedRowData = null;
+        } else {
+            CountryCodeMaster_FocusedRowData = e.row.data;
+            CountryCodeMaster_SetDetail();
+        }
+    }
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <div class="display-none">
+        <input type="file" id="CountryCodeMaster_excel_upload" accept=".xls, .xlsx" />  @*Microsoft의 스프레드시트 확장자 .xls, xlsx 만 입력할 수 있도록 설정*@
+    </div>
+
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">국가코드 검색</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="country_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="CountryCodeMaster_SearchCountry()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="country_nm">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="use_ck_%" name="use_ck" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_%">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" id="use_ck_Y" name="use_ck" />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_Y">사용</label></span>
+
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" id="use_ck_N" name="use_ck" />
+                        </div>
+                        <span class="form-control-sm"><label for="use_ck_N">미사용</label></span>
+                    </div>
+
+                    @*<div class="input-group input-group-sm col-2">
+                        @(Html.DevExtreme().Toolbar()
+                        .Items(items =>
+                            {
+                                items.Add()
+                                    .Widget(w =>
+                                        w.Button()
+                                        .Type(ButtonType.Default)
+                                        .StylingMode(ButtonStylingMode.Contained)
+                                        .ID("CountryCodeMaster_Upload")
+                                        .Icon("upload")
+                                        .Text("국가코드 엑셀 업로드")
+                                        .Width(180)
+                                        .OnClick("CountryCodeMaster_Upload")
+                                    )
+                                    .Location(ToolbarItemLocation.Before);
+                            }
+                        )
+                    )
+                    </div>*@
+
+                </div>
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel;");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-0">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("CountryCodeMasterGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("country_cd")
+                    .Height(850)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("country_cd").Caption("국가코드");
+                        c.Add().DataField("country_nm").Caption("국가명");
+                        c.Add().DataField("use_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.use_ck == ""Y"" || rowData.use_ck == true); }")
+                        .Caption("사용여부");
+                    })
+                    .OnFocusedRowChanged("CountryCodeMasterGrid_FocusedRowChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+                <form id="CountryCodeMasterForm">
+                    <div class="divName margin-bottom">
+                        <p>국가 상세</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">국가코드</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="country_cd" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">국가명</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="country_nm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">사용여부</label>
+                        <div class="input-group col-4">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="s_use_ck_Y" name="use_ck" />
+                            </div>
+                            <span class="form-control-sm"><label for="s_use_ck_Y">사용</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="s_use_ck_N" name="use_ck" />
+                            </div>
+                            <span class="form-control-sm"><label for="s_use_ck_N">미사용</label></span>
+                        </div>
+
+                    </div>
+                </form>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("CountryCodeMasterDetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Height(500)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("원료코드");
+                        c.Add().DataField("item_nm").Caption("원료명");
+
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+</div>

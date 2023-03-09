@@ -1,0 +1,927 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+
+    Layout = null;
+    ViewData["Title"] = "ClaimRequest";
+
+    var claimItem = @Html.Raw(Json.Encode(ViewBag.claimItem.Data));
+    var custItem = @Html.Raw(Json.Encode(ViewBag.custItem.Data));
+    var empItem = @Html.Raw(Json.Encode(ViewBag.empItem.Data));
+    var deptItem = @Html.Raw(Json.Encode(ViewBag.deptItem.Data));
+}
+
+<style>
+    #ClaimRequest textarea {
+        width: 90%;
+        margin-left: 17px;
+        height: 35px;
+    }
+</style>
+<script id="ClaimRequestJs">
+
+    var ClaimRequest_dbState = "init";
+    var ClaimRequest_focusedRow = null;
+    var ClaimRequest_isEditing = false;
+
+    //불만번호 체크 변수
+    var ClaimRequest_checkNum = true;
+
+    $(function () {
+        $("#ClaimRequest input[name=select_S][value='0']").prop("checked", true);
+
+        setDatePicker("#ClaimRequest .datepicker");
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+
+        var columns2= [
+            { dataField: "cust_cd", caption: "거래처" },
+            { dataField: "cust_nm", caption: "거래처명" }
+        ];
+
+        var columns3 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var columns4 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("ClaimRequestClaimItem", "품목 조회", @claimItem, columns1, "item_cd"); //품목 팝업(입력 폼)
+        createPopup("ClaimRequestCustItem", "거래처 조회", @custItem, columns2, "cust_cd"); //거래처 팝업(입력 폼)
+        createPopup("ClaimRequestEmpItem", "사원 조회", @empItem, columns3, "emp_cd", 700, 800); //의뢰자 팝업(입력 폼)
+        createPopup("ClaimRequestDeptItem", "부서 조회", @deptItem, columns4, "dept_cd"); //관련부서 팝업(입력 폼)
+
+        ClaimRequestEditCheck(false);
+        ClaimRequestSearch();
+    })
+
+    // 수정중인지 체크
+    function ClaimRequestEditCheck(nowEdit) {
+        ClaimRequest_isEditing = nowEdit;
+
+        if (nowEdit) {
+
+            $("#ClaimRequestSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimRequestUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimRequestSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimRequestInput").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimRequestEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimRequestDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ClaimRequestForm_Right :disabled").attr('disabled', false);
+            $("#ClaimRequest_Grid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+
+            $("#ClaimRequestSave").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimRequestUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimRequestSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimRequestInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimRequestEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimRequestDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ClaimRequestForm_Right :enabled").attr('disabled', true);
+            $("#ClaimRequest_Grid").dxDataGrid("option", "disabled", false);
+
+        }
+    }
+
+    //라디오버튼 변경시 재조회
+    function ClaimRequestByRadio() {
+        ClaimRequestSearch();
+    }
+
+    //조회
+    function ClaimRequestSearch() {
+        var form = $('#ClaimRequestForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/Cp/ClaimRequest_GridSelect',
+            data: data,
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    if (json.length > 0) {
+                        $("#ClaimRequest_Grid").dxDataGrid("option", "dataSource", json);
+                        $("#ClaimRequest_Grid").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#ClaimRequest_Grid").dxDataGrid("option", "focusedRowIndex", 0);
+                    } else {
+                        $("#ClaimRequestForm_Right")[0].reset();
+                        $("#ClaimRequest_Grid").dxDataGrid("option", "dataSource", []);
+                        $("#ClaimRequest_Grid").dxDataGrid("option", "focusedRowIndex", -1);
+                    }
+                } else {
+                    $("#ClaimRequest_Grid").dxDataGrid("option", "dataSource", []);
+                    $("#ClaimRequest_Grid").dxDataGrid("option", "focusedRowIndex", -1);
+                }
+
+                ClaimRequest_dbState = "search";
+            }
+        })
+    }
+
+    //입력
+    function ClaimRequestInput() {
+        ClaimRequestEditCheck(true);
+
+        ClaimRequest_dbState = "insert";
+
+        //초기 셋팅
+        $("#ClaimRequestForm_Right")[0].reset();
+
+        $("#ClaimRequestForm_Right input[name='claim_date']").val('@DateTime.Today.ToShortDateString()');//발생일자
+        $("#ClaimRequestForm_Right input[name='inform_date']").val('@DateTime.Today.ToShortDateString()');//의뢰일자
+        $("#ClaimRequestForm_Right input[name='time_limit']").val('@DateTime.Today.ToShortDateString()');//요 회답기한
+        $('#ClaimRequestForm_Right input[name="attach_yn"][value="Y"]').prop("checked", true);//불만현품첨부
+        $("#ClaimRequestForm_Right input[name='item_cd']").focus();
+    }
+
+    //수정
+    function ClaimRequestEdit() {
+        if (ClaimRequest_focusedRow != null) {
+
+            if (ClaimRequest_focusedRow.data.claim_status != "1") {
+                alert("의뢰상태인 경우에만 수정이 가능합니다."); return;
+            }
+
+            ClaimRequestEditCheck(true);
+
+            ClaimRequest_dbState = "edit";
+        } else {
+            return;
+        }
+
+    }
+
+    //삭제
+    function ClaimRequestDelete() {
+        if (ClaimRequest_focusedRow != null) {
+
+            if (ClaimRequest_focusedRow.data.claim_status != "1") {
+                alert("의뢰상태인 경우에만 삭제가 가능합니다."); return;
+            }
+
+            var ok = confirm("삭제하시겠습니까?");
+            if (ok) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Cp/ClaimRequest_GridDelete',
+                    async: false,
+                    data: {
+                        claim_id: ClaimRequest_focusedRow.data.claim_id
+                    },
+                    success: function (result) {
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            check = true;
+                            alert("삭제되었습니다.");
+
+                            $("#ClaimRequestForm_Right")[0].reset();
+                            ClaimRequestSearch();
+                        }
+                    }
+                });
+
+            }
+
+        } else {
+            return;
+        }
+    }
+
+    //저장
+    function ClaimRequestSave() {
+        var gubun = "";
+
+        if (ClaimRequest_dbState == "insert") {
+            gubun = "I";
+        } else if (ClaimRequest_dbState == "edit") {
+            gubun = "U";
+        }
+
+        if (UtilView.checkValidForm("ClaimRequestForm_Right")) {
+
+            var form = $('#ClaimRequestForm_Right')[0];
+            var data = new FormData(form);
+            if(gubun == "U") data.set("claim_id", ClaimRequest_focusedRow.data.claim_id);
+
+            var url = (gubun == "I") ? "ClaimRequest_GridInsert" : "ClaimRequest_GridUpdate";
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                contentType: false,
+                processData: false,
+                url: '/Cp/' + url,
+                data: data,
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (ClaimRequest_dbState == "insert")
+                            $("#ClaimRequestForm_Right input[name='claim_status']").val("의뢰");
+
+                        ClaimRequest_dbState = "search";
+
+                    }
+                }
+            })
+            ClaimRequestSearch();
+            ClaimRequestEditCheck(false);
+        }
+    }
+
+    //취소
+    function ClaimRequestUndo() {
+        ClaimRequestEditCheck(false);
+
+        ClaimRequest_dbState = "search";
+
+        ClaimRequestSearch();
+    }
+
+    //프린트
+    function ClaimRequestPrint() {
+
+        if (ClaimRequest_focusedRow != null) {
+            var btnType;
+            btnType = $(event.target).closest('.dx-button').attr('id');
+
+            //var data = getGridRowByKey('ClaimRequest_Grid', grid.option("focusedRowKey"));
+
+            var report = new ReportHelper();
+
+            report.addParam({
+                objFile: { path: "Cp", RptFileName: "ClaimReportCR2" },
+                objSp: { SpName: "SP_ClaimRequest", gubun: "SR", reportParam: "claim_id:" + ClaimRequest_focusedRow.data.claim_id },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "" }
+            });
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+        } else {
+            alert("불만사항을 선택하세요");
+        }
+
+    }
+
+    //엑셀
+    function ClaimRequestExcel() {
+        gridExportToExcel("ClaimRequest_Grid", "ClaimRequestData");
+    }
+
+    //포커스 로우 우측 폼에 매핑
+    function ClaimRequest_DataSetting() {
+
+        if (ClaimRequest_focusedRow != null) {
+            var data = ClaimRequest_focusedRow.data;
+
+            $("#ClaimRequestForm_Right")[0].reset();
+            $("#ClaimRequestForm_Right input[name='claim_no']").val(data.claim_no);//불만번호
+            $("#ClaimRequestForm_Right input[name='item_cd']").val(data.item_cd);//품목(코드)
+            $("#ClaimRequestForm_Right input[name='item_nm']").val(data.item_nm);//품목(이름)
+            $("#ClaimRequestForm_Right input[name='lot_no']").val(data.lot_no);//제조번호
+            $("#ClaimRequestForm_Right input[name='serial_no']").val(data.serial_no);//시리얼번호
+            $("#ClaimRequestForm_Right input[name='circulation_period']").val(data.circulation_period);//유통기한
+            $("#ClaimRequestForm_Right input[name='product_line']").val(data.product_line);//제조라인
+            $("#ClaimRequestForm_Right input[name='product_time']").val(data.product_time);//시간
+            $("#ClaimRequestForm_Right input[name='cust_cd']").val(data.cust_cd);//거래처(코드)
+            $("#ClaimRequestForm_Right input[name='cust_nm']").val(data.cust_nm);//거래처(이름)
+            $("#ClaimRequestForm_Right input[name='relation_dept_cd']").val(data.relation_dept_cd);//관련부서(코드)
+            $("#ClaimRequestForm_Right input[name='relation_dept_nm']").val(data.relation_dept_nm);//관련부서(이름)
+            $("#ClaimRequestForm_Right input[name='etc_qty']").val(data.etc_qty);//납입수량
+            $("#ClaimRequestForm_Right input[name='claim_date']").val(data.claim_date);//발생일자
+            $("#ClaimRequestForm_Right input[name='spot_recall_date']").val(data.spot_recall_date);//현장회수일
+            $("#ClaimRequestForm_Right select[name='recall_quantity']").val(data.recall_quantity);//회수량
+            $("#ClaimRequestForm_Right input[name='company_recall_date']").val(data.company_recall_date);//본사회수일
+            $("#ClaimRequestForm_Right select[name='open_or_not']").val(data.open_or_not);//개봉여부
+            $("#ClaimRequestForm_Right input[name='first_form']").val(data.first_form);//이물형태 최초
+            $("#ClaimRequestForm_Right input[name='recall_form']").val(data.recall_form);//이물형태 회수 후
+
+            $("#ClaimRequestForm_Right input[name='claim_nm']").val(data.claim_nm);//제기자
+            $("#ClaimRequestForm_Right input[name='claim_phone_no']").val(data.claim_phone_no);//전화번호
+            $("#ClaimRequestForm_Right input[name='claim_address']").val(data.claim_address);//주소
+            $("#ClaimRequestForm_Right input[name='etc_remark']").val(data.etc_remark);//납입경로
+            $("#ClaimRequestForm_Right input[name='inform_date']").val(data.inform_date);//의뢰일자
+            $("#ClaimRequestForm_Right input[name='claim_emp_cd']").val(data.claim_emp_cd);//의뢰자(코드)
+            $("#ClaimRequestForm_Right input[name='claim_emp_nm']").val(data.claim_emp_nm);//의뢰자(이름)
+            $("#ClaimRequestForm_Right input[name='time_limit']").val(data.time_limit);//요 회답기한
+            $('#ClaimRequestForm_Right input[name="attach_yn"][value=' + data.attach_yn + ']').prop("checked", true);//불만현품첨부
+            $("#ClaimRequestForm_Right select[name='claim_item']").val(data.claim_item);//불만항목
+            $("#ClaimRequestForm_Right input[name='claim_status']").val(data.claim_status_nm);//진행상태
+
+            $("#ClaimRequestForm_Right select[name='substance_kind']").val(data.substance_kind);//이물종류
+            $("#ClaimRequestForm_Right input[name='substance_form']").val(data.substance_form);//이물형태
+            $("#ClaimRequestForm_Right input[name='substance_discovery']").val(data.substance_discovery);//이물발견 경위
+            $("#ClaimRequestForm_Right input[name='substance_keeping_environment']").val(data.substance_keeping_environment);//이물발견제품 보관환경
+            $("#ClaimRequestForm_Right textarea[name='claim_content']").val(data.claim_content);//고객불만 및 요구사항
+            $("#ClaimRequestForm_Right textarea[name='claim_information']").val(data.claim_information);//조치사항
+            $("#ClaimRequestForm_Right textarea[name='claim_response']").val(data.claim_response);//요청사항
+            $("#ClaimRequestForm_Right textarea[name='claim_hope']").val(data.claim_hope);//기타
+
+        } else {
+            $("#ClaimRequestForm_Right")[0].reset();
+        }
+    }
+
+    //그리드 이벤트
+    function ClaimRequest_OnFocusedRowChanged(e) {
+        if (!e.row || !e.row.data) {
+            ClaimRequest_focusedRow = null;
+        } else {
+            ClaimRequest_focusedRow = e.row;
+            ClaimRequest_DataSetting();
+        }
+    }
+
+    //팝업
+    //품목 팝업
+    function ClaimRequestClaimItem_Search() {
+        var popup = $("#ClaimRequestClaimItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //거래처 팝업
+    function ClaimRequestCustItem_Search() {
+        var popup = $("#ClaimRequestCustItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //관련부서 팝업
+    function ClaimRequestDeptItem_Search() {
+        var popup = $("#ClaimRequestDeptItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //의뢰자 팝업
+    function ClaimRequestEmpItem_Search() {
+        var popup = $("#ClaimRequestEmpItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //팝업 로우 더블클릭
+    //품목 팝업 > 품목 더블클릭
+    function ClaimRequestClaimItemRowDblClick(selectedItems) {
+        $("#ClaimRequestForm_Right input[name=item_cd]").val(selectedItems.data.item_cd);
+        $("#ClaimRequestForm_Right input[name=item_nm]").val(selectedItems.data.item_nm);
+
+        var popup = $("#ClaimRequestClaimItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //거래처 팝업 > 거래처 더블클릭
+    function ClaimRequestCustItemRowDblClick(selectedItems) {
+        $("#ClaimRequestForm_Right input[name=cust_cd]").val(selectedItems.data.cust_cd);
+        $("#ClaimRequestForm_Right input[name=cust_nm]").val(selectedItems.data.cust_nm);
+
+        var popup = $("#ClaimRequestCustItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //관련부서 팝업 > 부서 더블클릭
+    function ClaimRequestDeptItemRowDblClick(selectedItems) {
+        $("#ClaimRequestForm_Right input[name=relation_dept_cd]").val(selectedItems.data.dept_cd);
+        $("#ClaimRequestForm_Right input[name=relation_dept_nm]").val(selectedItems.data.dept_nm);
+
+        var popup = $("#ClaimRequestDeptItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //의뢰자 팝업 -> 사원 더블클릭
+    function ClaimRequestEmpItemRowDblClick(selectedItems) {
+        $("#ClaimRequestForm_Right input[name=claim_emp_cd]").val(selectedItems.data.emp_cd);
+        $("#ClaimRequestForm_Right input[name=claim_emp_nm]").val(selectedItems.data.emp_nm);
+
+        var popup = $("#ClaimRequestEmpItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+
+</script>
+
+<div id="ClaimRequest" autoresize="Y">
+    @*<h4 class="divTitle">불만사항 등록</h4>*@
+
+    <div id="ClaimRequestClaimItemPopup"></div><!-- 품목 팝업 -->
+    <div id="ClaimRequestCustItemPopup"></div><!-- 거래처 팝업 -->
+    <div id="ClaimRequestEmpItemPopup"></div><!-- 의뢰자 팝업 -->
+    <div id="ClaimRequestDeptItemPopup"></div><!-- 관련부서 팝업 -->
+
+    <div id="ClaimRequestTop" class="mainTop row">
+        <div class="col-8">
+            <form id="ClaimRequestForm">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="0" id="select_S0" name="select_S" onchange="ClaimRequestByRadio()" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S0">발생일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="select_S1" name="select_S" onchange="ClaimRequestByRadio()" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S1">접수일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center" name="Sdate_S" value="@DateTime.Today.AddYears(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Edate_S" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검색구분</span>
+                        </div>
+                        <select class="form-control" name="select_gubun_S">
+                            <option value="0">품목</option>
+                            <option value="1">제조번호</option>
+                            <option value="2">거래처</option>
+                            <option value="3">보고자</option>
+                            <option value="4">불만종류</option>
+                        </select>
+                        <input class="form-control" type="text" name="searchtext_S" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="claim_status_S">
+                            @foreach (DataRow row in ((DataTable)ViewBag.claim_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "*"); }
+            @*@(Html.DevExtreme().Toolbar()
+                    .ID("ClaimRequest_Toolbar")
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                                  .Button()
+                                  .Type(ButtonType.Default)
+                                  .StylingMode(ButtonStylingMode.Contained)
+                                  .ID("ClaimRequestSearch")
+                                  .Icon("search")
+                                  .Text("조회")
+                                  .OnClick("ClaimRequestSearch")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimRequestInput")
+                              .Icon("plus")
+                              .Text("입력")
+                              .OnClick("ClaimRequestInput")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimRequestEdit")
+                              .Icon("edit")
+                              .Text("수정")
+                              .OnClick("ClaimRequestEdit")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimRequestDelete")
+                              .Icon("trash")
+                              .Text("삭제")
+                              .OnClick("ClaimRequestDelete")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimRequestSave")
+                              .Icon("save")
+                              .Text("저장")
+                              .OnClick("ClaimRequestSave")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimRequestUndo")
+                              .Icon("undo")
+                              .Text("취소")
+                              .OnClick("ClaimRequestUndo")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+            )*@
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ClaimRequest_Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    //.DataSource(new JS("SetClaimRequestData"))
+                    .KeyExpr("claim_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("claim_no").Caption("불만번호");
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("cust_nm").Caption("거래처");
+                        c.Add().DataField("claim_date").Caption("발생일자");
+                        c.Add().DataField("claim_status_nm").Caption("진행상태");
+
+                    })
+                    .OnFocusedRowChanged("ClaimRequest_OnFocusedRowChanged")
+                    .OnToolbarPreparing("HideToolbarButton")
+                )
+            </div>
+        </div>
+
+        <div class="col-4">
+            <div class="box">
+                @*<ul class="nav nav-tabs" id="ClaimRequest_menutab">
+                        <li class="nav-item item1">
+                            <a class="nav-link active" onclick="menutab('ClaimRequest_menutab', 'ClaimRequestRightDiv', 1); ">불만사항의뢰</a>
+                        </li>
+                        <li class="nav-item item2">
+                            <a class="nav-link" onclick="menutab('ClaimRequest_menutab', 'ClaimRequestRightDiv', 2); ">의뢰상세</a>
+                        </li>
+                    </ul>*@
+
+                <form id="ClaimRequestForm_Right">
+                    <div class="divName">
+                        <p>불만사항의뢰</p>
+                    </div>
+
+                    <div id="ClaimRequestRightDiv">
+                        <!-- 기본항목-->
+                        <div id="ClaimRequestRightDiv_1">
+                            <div class="input-wrapper">
+                                <label class="col-3">불만번호</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="claim_no" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">품목</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control required" name="item_cd" readonly>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="ClaimRequestClaimItem_Search()"><i class="fa fa-search"></i></button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <input type="text" class="form-control" name="item_nm" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">제조번호</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="lot_no" />
+                                </div>
+                                <label class="col-2">시리얼번호</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="serial_no" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">유통기한</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker" name="circulation_period" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">제조라인</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="product_line" />
+                                </div>
+                                <label class="col-2">시간</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="product_time" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">거래처</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control required" name="cust_cd" readonly>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="ClaimRequestCustItem_Search()"><i class="fa fa-search"></i></button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <input type="text" class="form-control required" name="cust_nm" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">관련부서</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="relation_dept_cd" readonly>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="ClaimRequestDeptItem_Search()"><i class="fa fa-search"></i></button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <input type="text" class="form-control" name="relation_dept_nm" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">납입수량</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="form-control" name="etc_qty" />
+                                </div>
+                                <label class="col-2">발생일자</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker required" name="claim_date" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">현장회수일</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker" name="spot_recall_date" />
+                                </div>
+                                <label class="col-2">회수량</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control" name="recall_quantity">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.recall_quantity).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">본사회수일</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker" name="company_recall_date" />
+                                </div>
+                                <label class="col-2">개봉여부</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control" name="open_or_not">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.open_or_not).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">이물형태 최초</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="first_form" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">이물형태 회수 후</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="recall_form" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">제기자</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="claim_nm" />
+                                </div>
+                                <label class="col-2">전화번호</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="claim_phone_no" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">주소</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="claim_address" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">납입경로</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="etc_remark" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">의뢰일자</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker required" name="inform_date" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">의뢰자</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control required" name="claim_emp_cd" readonly>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="ClaimRequestEmpItem_Search()"><i class="fa fa-search"></i></button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <input type="text" class="form-control" name="claim_emp_nm" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">요 회답기한</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control datepicker" name="time_limit" />
+                                </div>
+                                <label class="col-3">불만현품첨부</label>
+                                <div class="input-group col-2">
+                                    <div class="radioDiv form-control">
+                                        <label><input type="radio" class="required" name="attach_yn" value="Y" />유 </label>
+                                        <label><input type="radio" class="required" name="attach_yn" value="N" />무 </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">불만항목</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control required" name="claim_item">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.claim_item).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <label class="col-2">진행상태</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="claim_status" readonly />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 불만상세-->
+                        <div id="ClaimRequestRightDiv_2">
+                            <div class="input-wrapper">
+                                <label class="col-3">이물종류</label>
+                                <div class="input-group col-8">
+                                    <select class="form-control" name="substance_kind">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.substance_kind).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">이물형태</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="substance_form" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">이물발견 경위</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control" name="substance_discovery" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">이물발견제품 보관환경</label>
+                                <div class="input-group col-7">
+                                    <input type="text" class="form-control" name="substance_keeping_environment" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">고객불만 및 요구사항</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <textarea class="form-control" name="claim_content"></textarea>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">조치사항</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <textarea class="form-control" name="claim_information"></textarea>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">요청사항</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <textarea class="form-control" name="claim_response"></textarea>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">기타</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <textarea class="form-control" name="claim_hope"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

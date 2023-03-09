@@ -1,0 +1,560 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewBag.Title = "ReceiptCheck2_P";
+}
+
+@{
+    var ReceiptCheck2_PData = @Html.Raw(Json.Encode(ViewBag.ReceiptCheck2_PData.Data));
+    var ReceiptCheck2_PAuth = @Html.Raw(Json.Encode(ViewBag.ReceiptCheck2_PAuth.Data));
+
+    var RCP_itemCDJson = @Html.Raw(Json.Encode(ViewBag.RCP_itemCD.Data));
+}
+
+@{
+    string[] gridKey = { "purchase_no", "purchase_seq" };
+}
+
+<script type="text/javascript" id="ReceiptCheck2_PJs">
+
+    // SP 구문, gubun 변수
+    var curdGubun = "";
+
+    // 메뉴 권한
+    var _ReceiptCheck2_PAuth;
+
+    $(function () {        
+
+        if (!(@ReceiptCheck2_PData === "")) {
+            // 좌측 그리드 객체 생성
+            $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ReceiptCheck2_PData));
+            $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 사용자 권한
+        _ReceiptCheck2_PAuth = JSON.parse(@ReceiptCheck2_PAuth)[0];
+
+        if (_ReceiptCheck2_PAuth.form_query != "Y") {
+            $("#ReceiptCheck2_PSearch").remove();
+        }
+
+        // 체크박스 초기값
+        $("#ReceiptCheck2_P input[name=purchase_status_Y]").val("N");
+
+        setDatePicker("#ReceiptCheck2_P .datepicker");
+
+         // 팝업 셋팅
+        /* (검색) 자재 팝업 */
+        var RCP_itemCDPopup_Data = @RCP_itemCDJson;
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "자재코드" },
+            { dataField: "item_nm", caption: "자재명" }
+        ];
+
+        createPopup("RCP_itemCD", "원료 조회", RCP_itemCDPopup_Data, columns1, "item_cd");
+    });
+
+    function ReceiptCheck2_P_Left_changed() {
+
+        // 초기화
+        $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("dataSource", []);
+
+        /*
+         * 이슈 : 1. (그리드 키 복수일때) 데이터가 없는 검색 조회 이후, 다시 데이터가 있는 조회 조건으로 검색 시, 그리드 체인지에서 오류 발생
+         *    (해당 이슈는 조회할 때 첫 번째 포커스 이동 구현에서 발견 된 이슈로 데이터가 없는 조건으로 조회시 이전 키값을 가지고 있어서 생기는 이슈이며,
+         *     첫 번째 포커스 상태에서 위와 같은 조건으로 이동하면 focusedRowIndex 0 인 상태이므로 그리드 changed 를 호출하지 않는 문제가 있습니다.
+         *    )
+         * 해결방안 : 조회할 때, focusedRowIndex -1 로 셋팅, -1인 경우 그리드 changed 함수에서 방어 로직 구현
+         */
+        if ($("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            
+            return;
+        }
+
+        var grid = $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiptCheck2_P_LeftGrid', grid.option("focusedRowKey"));
+
+        $("#ReceiptCheck2_P input[name=purchase_no]").val(gridData.purchase_no);
+        $("#ReceiptCheck2_P input[name=purchase_seq]").val(gridData.purchase_seq);
+        $("#ReceiptCheck2_P input[name=purchase_item_cd]").val(gridData.purchase_item_cd);
+        $("#ReceiptCheck2_P input[name=item_nm]").val(gridData.item_nm);
+        $("#ReceiptCheck2_P input[name=supply_cd]").val(gridData.supply_cd);
+        $("#ReceiptCheck2_P input[name=supply_nm]").val(gridData.supply_nm);
+        $("#ReceiptCheck2_P input[name=manufacture_cd]").val(gridData.manufacture_cd);
+        $("#ReceiptCheck2_P input[name=manufacture_nm]").val(gridData.manufacture_nm);
+        $("#ReceiptCheck2_P input[name=purchase_unit]").val(gridData.purchase_unit);
+        $("#ReceiptCheck2_P input[name=purchase_price]").val(gridData.purchase_price);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheck2_Select',
+            data: {
+                purchase_no: gridData.purchase_no,
+                purchase_seq: gridData.purchase_seq
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                /* 아래 그리드 데이터 */
+                $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+    // 조회
+    function ReceiptCheck2_PSearch() {
+
+        // 초기화
+        $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("dataSource", []);
+
+        var formData = new FormData($("#S_PurchaseManage2_P_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheck2_P_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ReceiptCheck2_P_form")[0].reset();
+
+                    $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    return;
+                }
+                //index 초기화 작업
+                $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                ReceiptCheck2_P_Left_changed();
+            }
+        });
+    }
+
+    function ReceiptCheck2_PExcel(gridName, ExcelName) {
+        gridExportToExcel("ReceiptCheck2_P_LeftGrid", "자재검수관리");
+    }
+
+    function checkBoxCH_P() {
+
+        if ($("#ReceiptCheck2_P input:checkbox[name='purchase_status_Y']").prop("checked")) {
+
+            $("#ReceiptCheck2_P input[name=purchase_status_Y]").val("Y");
+        } else {
+
+            $("#ReceiptCheck2_P input[name=purchase_status_Y]").val("N");
+        }
+
+    }
+
+    /* 팝업 */
+
+    // (검색) 자재 팝업
+    function RCP_SearchItemCD() {
+
+        var popup = $("#RCP_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 자재 더블클릭
+    function RCP_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiptCheck2_P input[name=item_cd_S]").val(data.item_cd);
+        $("#ReceiptCheck2_P input[name=item_nm_S]").val(data.item_nm);
+
+
+        var popup = $("#RCP_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    /* 입고 확인 버튼 이벤트 */
+    function ReceiptCheckMaterial2_P() {
+
+        var grid = $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("검수항목이 존재하지 않습니다.");
+            return;
+        }
+
+        var gridData = getGridRowByKey('ReceiptCheck2_P_LeftGrid', grid.option("focusedRowKey"));
+
+        //if (gridData.not_receipt_qty <= 0) {
+        //    alert("미납량이 존재하지 않습니다.");
+        //    return;
+        //}
+
+        if (gridData.purchase_status === "Y") {
+
+            alert("완료된 데이터 입니다.");
+            return;
+        }
+
+        var requestData = {
+            purchase_order_no: gridData.purchase_no,
+            purchase_order_seq: gridData.purchase_seq,
+            option: "2"
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/RowMatln/ReceiptCheckMaterial2_P',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+            var popup = $("#ReceiptCheckMaterial2_PPopup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    //포장내역 row 더블클릭 => 수정 및 삭제
+    function ReceiptCheckMaterial2_P_ED() {
+        var grid = $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiptCheck2_P_DownRightGrid', grid.option("focusedRowKey"));
+
+        var requestData = {
+            receipt_check_no: gridData.receipt_check_rpt_no,
+            receipt_check_rpt_id: gridData.receipt_check_rpt_id,
+            option: "2",        //자재 : 2 / 원료 : 3 / 상품 : 4
+            option2: ""
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/RowMatln/ReceiptCheckMaterial2_P_ED',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+            var popup = $("#ReceiptCheckMaterial2_PPopup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    // 셀 가운데 정렬
+    function RCP_Style(container, cellInfo) {
+
+        $("<div style='text-align: center;'>").html(cellInfo.value)
+            .appendTo(container);
+    }
+
+    // 프린트
+    function ReceiptCheck2_PPrint() {
+
+        if ($("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        if ($("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var grid = $("#ReceiptCheck2_P_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ReceiptCheck2_P_LeftGrid', grid.option("focusedRowKey"));
+
+        if (gridData.purchase_status === "" || gridData.purchase_status === "N") {
+            alert("검수완료 된 항목만 미리보기 또는 인쇄가 가능합니다.");
+            return;
+        }
+
+        // 오른쪽 아래 그리드
+        grid = $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance");
+        gridData = getGridRowByKey('ReceiptCheck2_P_DownRightGrid', grid.option("focusedRowKey"));
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var reportParam = "";
+        reportParam += "s_receipt_check_no:" + gridData.receipt_check_rpt_no + ";option:2";
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "RowMatln", RptFileName: "ReceiptCheckPackR" },
+            objSp: { SpName: "SP_ReceiptCheck2", gubun: "R", reportParam: reportParam },
+            objEtcInfo: { subParam: "material_pack=자재" },
+            objTblNm: { tblName: "ReceiptCheckT,ReceiptCheckSOPT" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+
+    }
+
+
+</script>
+
+<div id="ReceiptCheck2_P" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="RCP_itemCDPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+        .ID("ReceiptCheckMaterial2_PPopup")
+        .Width(1600)
+        .Height(900)
+        .ShowTitle(true)
+        .Title("자재 입고내용확인")
+        .Visible(false)
+        .DragEnabled(false)
+    //.ContentTemplate(new TemplateName("popup-template"))
+    )
+    </div>
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="S_PurchaseManage2_P_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <select class="form-control" name="check">
+                            <option value="0" selected>발주일자</option>
+                            <option value="1">입고 일자</option>
+                            <option value="2">입고 예정일</option>
+                        </select>
+
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">자재</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm_S">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="RCP_SearchItemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="item_cd_S">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검수완료포함</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <input type="checkbox" class="input-group-append text-center" name="purchase_status_Y" value="N" onclick="checkBoxCH_P()" />
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Print;Preview");}
+        </div>
+
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+
+        <!-- $Contets Left-->
+        <div class="col-7 pr-0">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiptCheck2_P_LeftGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr(gridKey)
+                    .Height(900)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("purchase_no").Caption("발주번호").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("item_nm").Caption("자재명");
+                        c.Add().DataField("purchase_unit").Caption("단위");
+                        c.Add().DataField("purchase_require_date").Caption("입고예정일").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd");
+                        c.Add().DataField("purchase_qty").Caption("발주량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_waiting_qty").Caption("입고대기량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_ye_qty").Caption("입고예정량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("receipt_qty").Caption("입고량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("not_receipt_qty").Caption("미납량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("purchase_status").Caption("검수완료").CellTemplate(new JS("RCP_Style"));
+                    })
+                    .OnFocusedRowChanged("ReceiptCheck2_P_Left_changed")
+                )
+
+            </div>
+
+        </div>
+
+
+        <!-- $Contets Right-->
+        <div class="col-5">
+
+            <div class="box mb-0">
+
+                <form id="ReceiptCheck2_P_form">
+
+                    <div class="divName margin-bottom">
+                        <p>발주 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">발주번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-10" name="purchase_no" readonly="readonly" />
+                            <input type="text" class="form-control col-2" name="purchase_seq" readonly="readonly" />
+                        </div>
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-dark btn-sm" onclick="ReceiptCheckMaterial2_P()">입고확인</button>
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">자재정보</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="purchase_item_cd" readonly="readonly" />
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="item_nm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">공급처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="supply_cd" readonly="readonly" />
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="supply_nm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제조처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="manufacture_cd" readonly="readonly" />
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="manufacture_nm" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">입고단위/입고단가</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="purchase_unit" readonly="readonly" />
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="purchase_price" readonly="readonly" />
+                        </div>
+                    </div>
+
+                </form>
+
+                <div class="divName">
+                    <p>포장내역</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiptCheck2_P_DownRightGrid")
+                    .ShowBorders(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("receipt_check_rpt_no")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_check_rpt_no").Caption("입고검수번호");
+                        c.Add().DataField("receipt_check_rpt_qty").Caption("검수수량").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("pack_form").Caption("포장내역").DataType(GridColumnDataType.Number).Format("#,##0");
+
+                    })
+                    .OnCellDblClick("ReceiptCheckMaterial2_P_ED")
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

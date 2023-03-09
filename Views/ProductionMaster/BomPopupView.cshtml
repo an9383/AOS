@@ -1,0 +1,1070 @@
+﻿@using System.Data
+@using HACCP.Libs
+
+@{
+    Layout = null;
+    ViewBag.Title = "BomPopupView";
+
+    var process = Html.Raw(Json.Encode(ViewBag.process.Data));
+    var packingitem = Html.Raw(Json.Encode(ViewBag.packingitem.Data));
+    var material = Html.Raw(Json.Encode(ViewBag.material.Data));
+
+    var bomData = Html.Raw(Json.Encode(ViewBag.bomData.Data));
+    var bomDetailData = Html.Raw(Json.Encode(ViewBag.bomDetailData.Data));
+
+    var itemUnit = Html.Raw(Json.Encode(ViewBag.itemUnit.Data));
+}
+
+<script id="BomPopupViewJs">
+
+        var _bomCellClickEvent;
+        var _bomIsEditing;
+        var _bomNo;
+        var _bomDataGridSeq = 0;    // 행 추가 시 순서 자동입력을 위한 변수
+
+        $(function () {
+
+            var bomData = JSON.parse(@bomData)[0];
+
+            _bomNo = bomData.item_bom_no;
+
+            $("#BomSearchForm input[name=item_cd]").val(bomData.item_cd);
+            $("#BomSearchForm input[name=item_nm]").val(bomData.item_nm);
+
+            if ((@bomDetailData).length > 0) {
+                $("#BomDataGrid").dxDataGrid("option", "dataSource", JSON.parse(@bomDetailData));
+                _bomDataGridSeq = JSON.parse(@bomDetailData).length;
+            }
+
+
+            var popupColumns = {
+                "process": [{ dataField: "process_cd", caption: "공정코드" }, { dataField: "fieldname", caption: "공정명" }]
+                , "packingItem": [{ dataField: "item_cd", caption: "제품코드" }, { dataField: "item_nm", caption: "제품명" }]
+                , "material": [{ dataField: "item_cd", caption: "품목코드" }, { dataField: "item_nm", caption: "품목명" }]
+            };
+
+
+            var processData = JSON.parse(@process);
+            var tmp = "[";
+            $.each(processData, function (idx, row) {
+                if (processData[idx].level == 2) {
+                    tmp += JSON.stringify(processData[idx]);
+                    tmp += ",";
+                }
+            })
+            tmp = tmp.slice(0, -1);
+            tmp += "]";
+
+            createPopup("BomProcess1", "공정 조회", tmp, popupColumns.process);
+            createPopup("BomProcess2", "공정 조회", tmp, popupColumns.process);
+            createPopup("BomPackingItem", "제품 조회", @packingitem, popupColumns.packingItem);
+            createPopup("BomPackingMaterial", "자재 조회", @material, popupColumns.material);
+
+            BomEditCheck(false);
+
+        });
+
+        function setBomData() {
+
+        }
+
+        // 수정중인지 체크
+        function BomEditCheck(nowEdit) {
+
+            _bomIsEditing = nowEdit;
+
+            if (nowEdit) {
+                // 툴바 활성/비활성
+                $('#BomSave, #BomUndo, #BomUpload').dxButton().parent().parent().removeClass("display-none");
+                $('#BomSearch,#BomEdit,#BomDelete, #BomExcel').dxButton().parent().parent().addClass("display-none");
+
+                var editing = {
+                    allowAdding: true,
+                    allowUpdating: true,
+                    allowDeleting: true,
+                    mode: 'batch'
+                }
+                $("#BomDataGrid").dxDataGrid("option", "editing", editing);
+            }
+            else {
+                // 툴바 활성/비활성
+                $('#BomSave, #BomUndo, #BomUpload').dxButton().parent().parent().addClass("display-none");
+                $('#BomSearch, #BomEdit, #BomDelete, #BomExcel').dxButton().parent().parent().removeClass("display-none");
+
+                var editing = {
+                    allowAdding: false,
+                    allowUpdating: false,
+                    allowDeleting: false
+                }
+                $("#BomDataGrid").dxDataGrid("option", "editing", editing);
+            }
+        }
+
+        // 그리드내 검색 버튼
+        function BomCellWithButton(container, cellInfo) {
+            if (_bomIsEditing == false) {
+                $("<div>").html(cellInfo.value)
+                    .appendTo(container);
+                return;
+            }
+
+            $("<div>").html("<div style='float:left; line-height: 2;'>" + (cellInfo.value ? cellInfo.value : "") + "</div><div style='float:right;' class='icon-plus'></div>")
+                .appendTo(container);
+
+            $(".icon-plus").dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                }
+            });
+        }
+
+        // 그리드 저장 취소 버튼 숨김
+        function BomHideSaveButton(e) {
+
+            var toolbarItems = e.toolbarOptions.items;
+            $.each(toolbarItems, function (_, item) {
+                if (item.name == "saveButton" || item.name == "revertButton") {
+                    item.visible = false;
+                }
+            });
+
+        }
+
+        // 공정조회1 팝업
+        function BomSearchProcess() {
+            $("#BomProcess1Popup").dxPopup("instance").show();
+        }
+
+        // 제품조회 팝업
+        function BomSearchPackingItem() {
+            $("#BomPackingItemPopup").dxPopup("instance").show();
+        }
+
+        // 공정조회1 팝업 선택
+        function BomProcess1RowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#BomTopDiv input[name=process_cd]").val(data.process_cd);
+            $("#BomTopDiv input[name=process_nm]").val(data.fieldname);
+
+            $("#BomProcess1Popup").dxPopup("instance").hide();
+        }
+
+        // 제품조회 팝업 선택
+        function BomPackingItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#BomTopDiv input[name=item_cd]").val(data.item_cd);
+            $("#BomTopDiv input[name=item_nm]").val(data.item_nm);
+
+            $.ajax({
+                type: 'POST',
+                url: '/Comm/GetSelectBoxOption',
+                async: false,
+                data: {
+                    pGb: "포장개정번호",
+                    pDiv: "S",
+                    pItemCd: data.item_cd,
+                    pTableName: "ItemGuideRevisionNo"
+                },
+                success: function (result) {
+
+                    $("#BomTopDiv select[name=revision_no]").empty();
+                    $("#BomTopDiv select[name=revision_no]").append(result);
+
+                    if ($("#BomTopDiv select[name=revision_no] option").length > 1) {
+
+                        if (data.revision_no) {
+                            $("#BomTopDiv select[name=revision_no]").val(data.revision_no).prop("selected", true);
+                        } else {
+                            $("#BomTopDiv select[name=revision_no] option:eq(1)").prop("selected", true);
+                        }
+
+                    } else {
+                        $("#BomTopDiv select[name=revision_no] option:eq(0)").prop("selected", true);
+                    }
+                }
+            });
+
+            $("#BomPackingItemPopup").dxPopup("instance").hide();
+        }
+
+        // 그리드 셀 클릭 이벤트 (팝업)
+        function BomGridPopup(e) {
+
+            if (!_bomIsEditing) {
+                return;
+            }
+
+            _bomCellClickEvent = e;
+
+            if (e.columnIndex == 2) {
+                $("#BomProcess2Popup").dxPopup("instance").show();
+            }
+            else if (e.columnIndex == 4) {
+                $("#BomPackingMaterialPopup").dxPopup("instance").show();
+            }
+        }
+
+        // 공정조회2 팝업 선택
+        function BomProcess2RowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            var dataGrid = $("#BomDataGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_bomCellClickEvent.rowIndex, "process_cd", data.process_cd);
+            dataGrid.cellValue(_bomCellClickEvent.rowIndex, "process_nm", data.fieldname);
+
+            var popup = $("#BomProcess2Popup").dxPopup("instance");
+
+            popup.hide();
+
+        }
+
+        // 자재조회 팝업 선택
+        function BomPackingMaterialRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            var dataGrid = $("#BomDataGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_bomCellClickEvent.rowIndex, "item_bom_child_cd", data.item_cd);
+            dataGrid.cellValue(_bomCellClickEvent.rowIndex, "item_bom_child_nm", data.item_nm);
+
+            var popup = $("#BomPackingMaterialPopup").dxPopup("instance");
+
+            popup.hide();
+
+        }
+
+        // 수정가능한 컬럼 지정
+        function BomGridEditableColumn(cellElement, cellInfo) {
+
+            if (cellElement.columnIndex === 1)
+                cellElement.element.find('input').prop('disabled', true);
+
+        }
+
+        // 조회
+        function BomSearch() {
+            var bomData = JSON.parse(@bomData)[0];
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionMaster/BomSearch',
+                data: {
+                    item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                    item_bom_no: bomData.item_bom_no,
+                    gubun: "SD"
+                },
+                async: false,
+                success: function (result) {
+
+
+                    if (result) {
+                        $("#BomDataGrid").dxDataGrid("option", "dataSource", JSON.parse(result));
+                    } else {
+                        $("#BomDataGrid").dxDataGrid("option", "dataSource", []);
+                    }
+
+                }
+            });
+
+        }
+
+        // 수정
+        function BomEdit() {
+
+            if (@ViewBag.sign_cnt > 0) {
+                alert("승인이 시작된 자료는 수정할 수 없습니다.");
+                return;
+            }
+
+            BomEditCheck(true);
+
+        }
+
+        // 저장
+        async function BomSave() {
+
+            await $("#BomDataGrid").dxDataGrid("instance").saveEditData();
+
+            BomSearch();
+
+            BomEditCheck(false);
+        }
+
+
+        // 처방전 엑셀 추출
+        function BomExcel() {
+            gridExportToExcel("BomDataGrid", "포장표준서_마스터_관리_" + '@DateTime.Now.ToShortDateString()');
+    }
+
+        // 취소
+        function BomUndo() {
+
+            BomSearch();
+            BomEditCheck(false);
+        }
+
+
+
+        // 처방전 엑셀 입력
+        function BomUpload() {
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                alert("기존 데이터를 삭제한 후 시도해주세요.");
+
+                return;
+            }
+
+            // 임시로 만들어둔 input type[file]을 클릭
+            $("#BomPopupView #excel_upload").click();
+        }
+
+        // input type[file]의 데이터가 변경되었을 경우 실행
+        document.querySelector("#BomPopupView #excel_upload").addEventListener("change", function (event) {
+
+            var input = event.target;
+            var fileName = input.files[0].name;
+            var fileType = fileName.substring(fileName.lastIndexOf(".")).toUpperCase();
+
+            // 엑셀 확장자가 아니면 return;
+            if (!(fileType == ".XLSX" || fileType == ".XLS")) {
+                alert("확장자가 .xls, .xlsx인 파일만 입력할 수 있습니다.");
+
+                event.target.value = "";
+                return;
+            }
+
+
+            // FileReader를 선언한 후, 해당 FileReader에 input type[file]로 입력 받은 파일은 입력(readAsBinaryString)
+            var reader = new FileReader();
+            reader.readAsBinaryString(input.files[0]);
+
+            // FileReader에 파일이 제대로 입력되면 실행할 function
+            reader.onload = function () {
+                var fileData = reader.result;
+                var wb = XLSX.read(fileData, { type: 'binary' });
+
+                wb.SheetNames.forEach(function (sheetName) {
+                    var rowObj = BomPopupView_xlsxToArry(wb.Sheets[sheetName]);
+
+
+                    // input type[file]을 통해 입력받은 파일을 DataGrid에 입력
+                    BomPopupView_excelDataInsertToGrid(rowObj);
+                })
+            };
+
+        })
+
+
+        function BomPopupView_xlsxToArry(sheet) {
+            var range = XLSX.utils.decode_range(sheet['!ref']);
+            var arry = [];
+
+            for (var i = 0; i <= range.e.r; i++) {
+
+                if (i == 0 || i == 1) continue;
+
+                var arry2 = [];
+
+                for (var j = 0; j <= range.e.c; j++) {
+                    cell = sheet[XLSX.utils.encode_cell({ c: j, r: i })];
+
+                    var hdr = "";
+
+                    if (cell && cell.t) hdr = XLSX.utils.format_cell(cell);
+
+                    arry2.push(hdr);
+                }
+
+                arry.push(arry2);
+            }
+
+            return arry;
+        }
+
+
+
+
+
+        function BomPopupView_arryFindElement(text, arry) {
+
+            if (typeof arry.find(i => i.displayfield == text) == "undefined") {
+                return "";
+            } else {
+                return arry.find(i => i.displayfield == text).keyfield;
+            }
+        }
+
+
+
+        // input type[file]을 통해 입력받은 파일을 DataGrid에 입력
+        async function BomPopupView_excelDataInsertToGrid(data) {
+
+            var dataArry = new Array();
+            var count = 0;
+
+            for (var i = 0; i < data.length; i++) {
+             
+                var unitArry = JSON.parse(@itemUnit);
+
+                var excelDataArry = data[i];
+
+                var _data = {
+                    row_check: excelDataArry[0],
+                    item_bom_seq: excelDataArry[1],
+                    process_cd: excelDataArry[2],
+                    process_nm: excelDataArry[3],
+                    item_bom_child_cd: excelDataArry[4],
+                    item_bom_child_nm: excelDataArry[5],
+                    item_bom_standard_qty: excelDataArry[6],
+                    item_bom_batch_unit: BomPopupView_arryFindElement(excelDataArry[7].toString(), unitArry),
+                    remark: excelDataArry[8],
+                    item_bom_use_rate: excelDataArry[9],
+
+                    item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                    item_bom_no: _bomNo,
+                    item_bom_id: ""
+                }
+
+
+                if (i == 0) {
+                    _data.pGubun = "UID"
+                } else {
+                    _data.pGubun = "ID"
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/ProductionMaster/BomTRX',
+                    data: {
+                        bomData: JSON.stringify(_data)
+                    },
+                    async: false,
+                    success: function (result) {
+
+                    }
+                });
+
+
+                dataArry[count] = _data;
+                count++;
+            }
+
+            if (dataArry.length > 0) {
+                await $("#BomDataGrid").dxDataGrid("option", "dataSource", dataArry);
+            } else {
+                $("#BomDataGrid").dxDataGrid("option", "dataSource", []);
+
+            }
+
+            $("#BomPopupView #excel_upload").val("");
+
+            $('#BomSave, #BomUndo, #BomUpload').dxButton().parent().parent().addClass("display-none");
+            $('#BomSearch, #BomEdit, #BomDelete, #BomExcel').dxButton().parent().parent().removeClass("display-none");
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+            _bomIsEditing = false;
+
+            $("#BomDataGrid").dxDataGrid("option", "editing", editing);
+        }
+
+
+        // 복사 버튼
+        function BomCopyBom() {
+
+            if (!_bomIsEditing) {
+                alert("수정중일때만 복사가능합니다.");
+                return;
+            }
+
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+
+            if (grid.getVisibleRows().length > 0) {
+                alert("기존 데이터를 삭제해주세요.");
+                return;
+            }
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionMaster/BomSearch',
+                data: {
+                    item_cd: $("#BomTopDiv input[name=item_cd]").val(),
+                    item_bom_no: $("#BomTopDiv select[name=revision_no]").val(),
+                    gubun: "SD2"
+                },
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        return;
+                    }
+
+                    var copyData = JSON.parse(result);
+                    _bomDataGridSeq = JSON.parse(result).length;
+
+                    for (var i = 0; i < copyData.length; i++) {
+
+                        grid.addRow();
+
+                        grid.cellValue(0, "item_bom_seq", copyData[i].item_bom_seq);
+                        grid.cellValue(0, "process_cd", copyData[i].process_cd);
+                        grid.cellValue(0, "process_nm", copyData[i].process_nm);
+                        grid.cellValue(0, "item_bom_child_cd", copyData[i].item_bom_child_cd);
+                        grid.cellValue(0, "item_bom_child_nm", copyData[i].item_bom_child_nm);
+                        grid.cellValue(0, "item_bom_standard_qty", copyData[i].item_bom_standard_qty);
+                        grid.cellValue(0, "item_bom_batch_unit", copyData[i].item_bom_batch_unit);
+                        grid.cellValue(0, "remark", copyData[i].remark);
+
+                    }
+
+                }
+            });
+
+        }
+
+        // bom 로우 입력
+        function BomGridInsert(info) {
+
+            var data = info.data;
+
+            var pData = {
+                pGubun: "ID",
+                item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                item_bom_no: _bomNo,
+                item_bom_seq: data.item_bom_seq,
+                process_cd: data.process_cd,
+                item_bom_child_cd: data.item_bom_child_cd,
+                item_bom_batch_qty: data.item_bom_standard_qty,
+                item_bom_standard_qty: data.item_bom_standard_qty,
+                item_bom_batch_unit: data.item_bom_batch_unit,
+                item_bom_use_rate: data.item_bom_use_rate,
+                remark: data.remark
+
+            };
+
+            BomTRX(pData);
+        }
+
+        // bom 로우 수정
+        function BomGridUpdate(info) {
+
+            var data = info.data;
+
+
+            var pData = {
+                pGubun: "UD",
+                item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                item_bom_no: _bomNo,
+                item_bom_id: data.item_bom_id,
+                item_bom_seq: data.item_bom_seq,
+                process_cd: data.process_cd,
+                item_bom_child_cd: data.item_bom_child_cd,
+                item_bom_tea_qty: data.item_bom_tea_qty,
+                item_bom_tea_unit: data.item_bom_tea_unit,
+                item_bom_batch_qty: data.item_bom_batch_qty,
+                item_bom_standard_qty: data.item_bom_standard_qty,
+                item_bom_batch_unit: data.item_bom_batch_unit,
+                item_bom_use_rate: data.item_bom_use_rate,
+                remark: data.remark
+            };
+
+            BomTRX(pData);
+        }
+
+        // bom 로우 삭제
+        function BomGridRemove(info) {
+
+            var data = info.data;
+
+            var pData = {
+                pGubun: "DD",
+                item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                item_bom_no: _bomNo,
+                item_bom_id: data.item_bom_id
+            };
+
+            BomTRX(pData);
+        }
+
+        // bom TRX 실행
+        function BomTRX(data) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/ProductionMaster/BomTRX',
+                data: {
+                    bomData: JSON.stringify(data)
+                },
+                async: false,
+                success: function (result) {
+
+                }
+            });
+        }
+
+
+        function BomPopupViewChangeProcess() {
+            if (!_bomIsEditing) {
+                alert("수정상태일때에 변경 가능합니다.");
+                return;
+            }
+
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+            //2021.05.25 데이터 적용은 체크박스가 체크되어있을때 적용이 되므로 focus 활성화는 필요없음
+            //grid.option("focusedRowEnabled", true); 
+            var gridData = grid.getVisibleRows();
+
+            for (var i = 0; i < gridData.length; i++) {
+                if (grid.cellValue(i, "row_check")) {
+                    grid.cellValue(i, "process_cd", $("#BomTopDiv input[name='process_cd']").val());
+                    grid.cellValue(i, "process_nm", $("#BomTopDiv input[name='process_nm']").val());
+
+                }
+            }
+        }
+
+
+        function BomPopupViewChangeUnit() {
+            if (!_bomIsEditing) {
+                alert("수정상태일때에 변경 가능합니다.");
+                return;
+            }
+
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+            //2021.05.25 데이터 적용은 체크박스가 체크되어있을때 적용이 되므로 focus 활성화는 필요없음
+            //grid.option("focusedRowEnabled", true);
+            var gridData = grid.getVisibleRows();
+
+            for (var i = 0; i < gridData.length; i++) {
+                if (grid.cellValue(i, "row_check")) {
+                    grid.cellValue(i, "item_bom_batch_unit", $("#BomTopDiv select[name='bom_batch_unit']").val());
+                }
+            }
+        }
+
+
+        // 행 추가 시 순서 자동 입력
+        function BomGridSeq(e) {
+            var ds = $("#BomDataGrid").dxDataGrid("option", "dataSource");
+            _bomDataGridSeq = _bomDataGridSeq == 0 ? 1 : _bomDataGridSeq + 1;
+
+            e.data.item_bom_seq = (_bomDataGridSeq);
+        }
+
+
+        function BomPopupView_AllRowSelect() {
+
+            if (!_bomIsEditing) {
+                alert("수정상태일때에 사용 가능합니다.");
+                return;
+            }
+
+
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+            //2021.05.25 데이터 적용은 체크박스가 체크되어있을때 적용이 되므로 focus 활성화는 필요없음
+            //grid.option("focusedRowEnabled", true);
+            var gridData = grid.getVisibleRows();
+
+            var button_state = $("button#bomPopupView_AllRowSelect_Btn").attr("state");
+            if (button_state == "select") {
+                for (var i = 0; i < gridData.length; i++) {
+                    grid.cellValue(i, "row_check", true);
+                }
+
+                $("button#bomPopupView_AllRowSelect_Btn").attr("state", "cancel");
+                $("button#bomPopupView_AllRowSelect_Btn").text("선택 해제");
+            } else {
+                for (var i = 0; i < gridData.length; i++) {
+                    grid.cellValue(i, "row_check", false);
+                }
+
+                $("button#bomPopupView_AllRowSelect_Btn").attr("state", "select");
+                $("button#bomPopupView_AllRowSelect_Btn").text("전체 선택");
+            }
+
+        }
+
+
+
+        // 처방전 전체삭제
+        function BomPopupView_DeleteCheckedPrescription() {
+
+            if (!_bomIsEditing) {
+                alert("수정상태일때에 삭제 가능합니다.");
+                return;
+            }
+
+
+            if (!confirm("선택된 처방전을 모두 삭제하시겠습니까?")) {
+                return;
+            }
+
+            var grid = $("#BomDataGrid").dxDataGrid("instance");
+            //2021.05.25 데이터 적용은 체크박스가 체크되어있을때 적용이 되므로 focus 활성화는 필요없음
+            //grid.option("focusedRowEnabled", true);
+            var gridData = grid.getVisibleRows();
+            var count = 0;
+
+            for (var i = 0; i < gridData.length; i++) {
+                if (grid.cellValue(i, "row_check")) {
+                    count++;
+                }
+            }
+
+            if (count <= 0) {
+                alert("선택된 처방전이 없습니다.");
+                return;
+            }
+
+            var cnt = 0;
+            for (var i = 0; i < gridData.length; i++) {
+                if (grid.cellValue(i, "row_check")) {
+                    var data = getGridRowByKey("BomDataGrid", grid.getKeyByRowIndex(i));
+
+                    var pData = {
+                        pGubun: "DD",
+                        item_cd: $("#BomSearchForm input[name=item_cd]").val(),
+                        item_bom_no: _bomNo,
+                        item_bom_id: data.item_bom_id
+                    };
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/ProductionMaster/BomTRX',
+                        data: {
+                            bomData: JSON.stringify(pData)
+                        },
+                        async: false,
+                        success: function (result) {
+
+                            cnt++;
+                        }
+                    });
+                }
+            }
+
+
+            if (cnt > 0) {
+
+
+                BomSearch();
+            }
+
+        }
+</script>
+
+    <div id="BomPopupView">
+
+        <div id="BomProcess1Popup"></div>
+        <div id="BomProcess2Popup"></div>
+        <div id="BomPackingItemPopup"></div>
+        <div id="BomPackingMaterialPopup"></div>
+
+
+        @*처방전 입력 시 엑셀파일 업로드를 위한 input type[file]*@
+        <div class="display-none">
+            <input type="file" id="excel_upload" accept=".xls, .xlsx" />  @*Microsoft의 스프레드시트 확장자 .xls, xlsx 만 입력할 수 있도록 설정*@
+        </div>
+
+        <form id="BomSearchForm">
+
+            <div class="row">
+
+                <div class="col-10">
+                    <div class="input-wrapper">
+
+                        <label class="col-1">제품코드</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="col-2 form-control" name="item_cd" readonly="readonly">
+                            <input type="text" class="col-2 form-control" name="item_nm" readonly="readonly">
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="col-2">
+                    @* === 처방전 팝업 CRUD 버튼 === *@
+                    @(Html.DevExtreme().Toolbar()
+                    .ID("BomToolbar")
+                    .Items(items =>
+                        {
+                            items.Add()
+                                .Template(new TemplateName("BomTopToolbarContent"))
+                                .Location(ToolbarItemLocation.Before);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomSearch")
+                                .Icon("search")
+                                .Text("조회")
+                                .OnClick("BomSearch")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomEdit")
+                                .Icon("edit")
+                                .Text("수정")
+                                .OnClick("BomEdit")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomSave")
+                                .Icon("save")
+                                .Text("저장")
+                                .OnClick("BomSave")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomUndo")
+                                .Icon("undo")
+                                .Text("취소")
+                                .OnClick("BomUndo")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomExcel")
+                                .Icon("xlsxfile")
+                                .Text("엑셀")
+                                .OnClick("BomExcel")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                .Button()
+                                .Type(ButtonType.Default)
+                                .StylingMode(ButtonStylingMode.Contained)
+                                .ID("BomUpload")
+                                .Icon("upload")
+                                .Text("엑셀 업로드")
+                                .OnClick("BomUpload")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+
+                        })
+                    )
+                </div>
+
+            </div>
+
+        </form>
+
+        <hr />
+
+
+        <div id="BomTopDiv">
+
+            <div class="display-flex margin-10 row">
+
+                <fieldset class="border prescriptionFieldSet col-3">
+                    <legend class="prescriptionLegend">공정 일괄 적용</legend>
+                    <div class="input-group col-3">
+                        <input type="text" class="form-control" name="process_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="BomSearchProcess()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control col-5" name="process_nm" />
+
+                    <input type="button" value="공정적용" class="btn btn-secondary" onclick="BomPopupViewChangeProcess()" />
+                    <br />
+                </fieldset>
+
+                <fieldset class="border prescriptionFieldSet col-2">
+                    <legend class="prescriptionLegend">단위 일괄 적용</legend>
+
+                    <select class="form-control col-6" name="bom_batch_unit">
+                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM012")).Rows)
+                        {
+                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                        }
+                    </select>
+
+                    <input type="button" onclick="BomPopupViewChangeUnit()" value="단위 적용" class="btn btn-secondary" />
+
+                </fieldset>
+
+                <fieldset class="border prescriptionFieldSet col-5">
+
+                    <legend class="prescriptionLegend">처방전 복사</legend>
+
+                    <div class="input-group col-2">
+                        <input type="text" class="form-control" name="item_cd" readonly="readonly">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="BomSearchPackingItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <input type="text" class="form-control col-4" name="item_nm" readonly="readonly">
+
+                    <select class="form-control col-3" name="revision_no">
+                    </select>
+
+                    <input type="button" onclick="BomCopyBom()" value="복사" class="btn btn-secondary" />
+
+                </fieldset>
+
+            </div>
+        </div>
+
+        <button class="btn btn-secondary" onclick="BomPopupView_AllRowSelect()" id="bomPopupView_AllRowSelect_Btn" state="select">전체 선택</button>
+        <button class="btn btn-secondary" onclick="BomPopupView_DeleteCheckedPrescription()">선택 삭제</button>
+
+        <div>
+            @(Html.DevExtreme().DataGrid()
+            .ID("BomDataGrid")
+            .KeyExpr("item_bom_id")
+            .DataSource(new JS("setBomData"))
+            .ShowBorders(true)
+            .ColumnAutoWidth(true)
+            .ShowColumnLines(true)
+            .SearchPanel(searchPanel => searchPanel.Visible(true))
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .Height(670)
+            .AllowColumnResizing(true)
+            //.Selection(s => s.Mode(SelectionMode.Multiple)
+            //    .ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+            .Columns(columns =>
+            {
+                columns.Add()
+                .DataField("row_check")
+                .DataType(GridColumnDataType.Boolean)
+                .CalculateCellValue(@"function(rowData) { return (rowData.row_check == ""Y"" || rowData.row_check == true); }")
+                .Caption("선택")
+                .Width("50")
+                .Fixed(true);
+
+                columns.Add()
+                .Caption("사용자재")
+                .Fixed(true)
+                .Columns(a =>
+                {
+                    a.Add()
+                        .DataField("item_bom_seq")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("순서")
+                        .Width("50");
+                    a.Add()
+                        .DataField("process_cd")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("공정코드")
+                        .CellTemplate(new JS("BomCellWithButton"));
+
+                    a.Add()
+                        .DataField("process_nm")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("공정");
+
+                    a.Add()
+                        .DataField("item_bom_child_cd")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("자재코드")
+                        .CellTemplate(new JS("BomCellWithButton"));
+
+                    a.Add()
+                        .DataField("item_bom_child_nm")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("자재")
+                        .Width("500");
+
+                });
+
+                columns.Add()
+                .Caption("사용량")
+                .Fixed(true)
+                .Columns(a =>
+                {
+
+                    a.Add()
+                    .DataField("item_bom_standard_qty")
+                    .DataType(GridColumnDataType.Number)
+                    .Caption("사용량")
+                    .Width("80")
+                    .Format("#,##0.000");
+                    a.Add()
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadMethod("GET")
+                        .LoadParams(new
+                        {
+                            pGubun = "공통코드"
+                            , pDiv = "D"
+                            , pStrWhere = "CM012"
+                            , pTableName = "2"
+                        }).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("item_bom_batch_unit")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("단위");
+
+                    a.Add()
+                        .DataField("remark")
+                        .DataType(GridColumnDataType.String)
+                        .Caption("계산식");
+
+                });
+
+                columns.Add()
+                .Caption("계산방법")
+                .Fixed(true)
+                .Columns(a =>
+                {
+                    a.Add()
+                    .DataField("item_bom_use_rate")
+                    .DataType(GridColumnDataType.Number)
+                    .Format("#,##0.000")
+                    .Caption("OverAge(단위)");
+                });
+
+            })
+
+            .OnToolbarPreparing("BomHideSaveButton")
+            .OnCellClick("BomGridPopup")
+            //.OnCellPrepared("BomGridEditableColumn")
+            .OnRowInserted("BomGridInsert")
+            .OnRowUpdated("BomGridUpdate")
+            .OnRowRemoved("BomGridRemove")
+            .OnInitNewRow("BomGridSeq")
+        )
+        </div>
+
+    </div>

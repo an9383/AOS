@@ -1,0 +1,1407 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    //var venderBuy = @Html.Raw(Json.Encode(ViewBag.venderBuy.Data));
+    //var itemMaker = @Html.Raw(Json.Encode(ViewBag.itemMaker.Data));
+
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+    var workRoomPopupData = @Html.Raw(Json.Encode(ViewBag.workRoomPopupData.Data));
+
+}
+
+@*검체 채취 입력*@
+
+<script id="@(pagePrefix)Js">
+
+    var _pickingCompleteESignCnt = 0;
+    var _pickingCompleteECRUDSataus;
+    var _pickingCompleteESignGubun = "";
+    var _pickingCompleteESignData = "";
+    var _pickingCompleteELabelAuthEmp = "";
+    var _pickingCompleteESignGubun2 = "";
+
+    var _pickingCompleteEPackSamplingChanges = new Array();
+
+    $(function () {
+        var PickingCompleteEPopupColumns = {
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }],
+            "workRoom": [{ dataField: "workroom_cd", caption: "작업실코드" }
+                , { dataField: "workroom_nm", caption: "작업실명" }, { dataField: "common_part_nm", caption: "팀구분" }]
+        };
+
+        //createPopup("PickingCompleteEItem", "시험품목 조회", [], PickingCompleteEPopupColumns.testItem);
+        createPopup("PickingCompleteEEmployee", "사원 조회", @empPopupData, PickingCompleteEPopupColumns.employee);
+        createPopup("PickingCompleteEWorkRoom", "작업실 조회", @workRoomPopupData, PickingCompleteEPopupColumns.workRoom);
+
+        // 소모품 셀렉트 박스 값에 따라 품목 팝업 그리드 데이터 변경
+        $("#PickingCompleteEItemPopup").dxPopup({
+            onShown: function (e) {
+
+                var test_type = $("#PickingCompleteEWriteForm select[name=test_type]").val();
+
+                $.ajax({
+                    type: 'GET',
+                    url: '/QualityControl/PickingCompleteESelectTestItemPopup',
+                    data: {
+                        test_type: test_type
+                    },
+                    dataType: "json",
+                    async: false,
+                    success: function (result) {
+
+                        try {
+                            var jsonData = JSON.parse(result);
+                            $("#PickingCompleteEItem_gridContainer").dxDataGrid("option", "dataSource", jsonData);
+                        }
+                        catch (e) {
+                            $("#PickingCompleteEItem_gridContainer").dxDataGrid("option", "dataSource", []);
+                        }
+
+                    }
+                })
+            }
+        });
+
+        $('input[name=picking_emp_cd]+div>button, input[name=picking_workroom_cd]+div>button', $('#' + "PickingCompleteEWriteForm")).click(function (event) {
+            PickingCompleteEPopUpSearch(event);
+        });
+
+        menutab('PickingCompleteETab', 'PickingCompleteETabContent', 1);
+
+        $('#PickingCompleteE .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            autoclose: true,
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko",	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+            enableOnReadonly: true
+        });
+
+        TestItemmethodEditCheck(false, 'N');
+
+        $("#PickingCompleteESearchForm input[name=de_Sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+        $("#PickingCompleteESearchForm input[name=de_Edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        PickingCompleteESearch();
+
+    });
+
+    // 수정중인지 체크
+    function TestItemmethodEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "PickingCompleteEToolbar"
+            , "PickingCompleteEGrid"
+            , "PickingCompleteEWriteForm"
+            , ""
+        );
+
+        $("#PickingCompleteEWriteForm button").prop("disabled", false);
+
+        $("#PickingCompleteEWriteForm input[name=gubun]").val(status);
+
+        _pickingCompleteECRUDSataus = status;
+    }
+
+    function PickingCompleteEFocusChanged() {
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        if (!gridData.key) {
+            UtilView.setDataGridFormBind("PickingCompleteEGrid", "PickingCompleteEWriteForm");
+
+            //console.log(gridData.microorganism_yn);
+
+            if (gridData.microorganism_yn === "Y") {
+                $("#PickingCompleteEWriteForm input[name=microorganism]").prop("checked", true);
+            } else {
+                $("#PickingCompleteEWriteForm input[name=microorganism]").prop("checked", false);
+            }
+           
+        } else {
+            $("#PickingCompleteEWriteForm")[0].reset();
+            $("#PickingCompleteESignTable").dxDataGrid("option", "dataSource", []);
+            $("#PickingCompleteEFileGrid").dxDataGrid("option", "dataSource", []);
+            return;
+        }
+
+        //if (gridData.gmo_yn === "Y") {
+        //    $("#PickingCompleteEWriteForm input[name=gmo_yn][value='Y']").prop("checked", true);
+        //} else {
+        //    $("#PickingCompleteEWriteForm input[name=gmo_yn][value='N']").prop("checked", true);
+        //}
+
+        _pickingCompleteESignCnt = 0;
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/PickingCompleteESelectDetail',
+            dataType: "json",
+            data: {
+                testcontrol_id: gridData.testcontrol_id,
+                test_type: gridData.test_type,
+                process_kind: '2'
+            },
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result[0]);
+                    $("#PickingCompleteESignTable").dxDataGrid("option", "dataSource", jsonData);
+
+                    for (var i = 0; i < jsonData.length; i++) {
+                        _pickingCompleteESignCnt += parseInt(jsonData[i].sign_yn);
+                    }
+
+                }
+                catch (e) {
+                    $("#PickingCompleteESignTable").dxDataGrid("option", "dataSource", []);
+                }
+
+                try {
+                    var jsonData = JSON.parse(result[1]);
+                    $("#PickingCompleteEFileGrid").dxDataGrid("option", "dataSource", jsonData);
+                }
+                catch (e) {
+                    $("#PickingCompleteEFileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+
+    //#region 팝업 관련
+    var PickingCompleteEHelpPopUpCurInputName = "";
+
+    function PickingCompleteEPopUpSearch(e) {
+        PickingCompleteEHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+        switch (PickingCompleteEHelpPopUpCurInputName) {
+            case "picking_emp_cd":
+                popupId = "PickingCompleteEEmployee";
+                break;
+            case "picking_workroom_cd":
+                popupId = "PickingCompleteEWorkRoom";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    function PickingCompleteEEmployeeRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=" + PickingCompleteEHelpPopUpCurInputName + "]", $('#' + "PickingCompleteEWriteForm")).val(data.emp_cd);
+        $("input[name=picking_emp_nm]", $('#' + "PickingCompleteEWriteForm")).val(data.emp_nm);
+        //$("select[name=process_cd]", $('#' + "PickingCompleteEWriteForm")).val(data.process_cd);
+
+        $("#PickingCompleteEEmployeePopup").dxPopup("instance").hide();
+    }
+
+    function PickingCompleteEWorkRoomRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=" + PickingCompleteEHelpPopUpCurInputName + "]", $('#' + "PickingCompleteEWriteForm")).val(data.workroom_cd);
+        $("input[name=picking_workroom_nm]", $('#' + "PickingCompleteEWriteForm")).val(data.workroom_nm);
+
+        $("#PickingCompleteEWorkRoomPopup").dxPopup("instance").hide();
+    }
+    //#endregion
+
+
+    //#region 툴바 클릭 이벤트 관련
+
+    function PickingCompleteESearch() {
+        UtilView.dataGridSelect('PickingCompleteEGrid', 'PickingCompleteESearchForm');
+    }
+
+    function PickingCompleteEInput() {
+
+        //$("#PickingCompleteEWriteForm")[0].reset();
+        //$("#PickingCompleteESignTable").dxDataGrid("option", "dataSource", []);
+        //$("#PickingCompleteEFileGrid").dxDataGrid("option", "dataSource", []);
+
+        //TestItemmethodEditCheck(true, 'I');
+    }
+
+    function PickingCompleteEEdit() {
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        var test_status = gridData.test_status;
+
+        if (test_status == "6" || test_status == "7" || test_status == "8" || test_status == "9") {
+            alert("다음 단계가 진행되어, 검체완료를 수정 할 수 없습니다");
+            return;
+        }
+
+        if (_pickingCompleteESignCnt > 0) {
+            alert("최근 서명자만 수정할 수 있습니다.!!!");
+            return;
+        }
+
+        test_status = gridData.sample_status;
+        if (test_status == "0" || test_status == "") {
+            MessageBox.Show("이전 단계가 완료되지 않아 수정할 수 없습니다.!!");
+            return;
+        }
+
+        TestItemmethodEditCheck(true, 'U');
+    }
+
+    function PickingCompleteEDelete() {
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        // 시험 진행 상태가 시험 중(6), 시험완료(7), 확인(8), 승인(9) 일 경우, 검체채취 완료를 취소 할 수 없다.
+        var test_status = gridData.test_status;
+        if (test_status == "6" || test_status == "7" || test_status == "8" || test_status == "9") {
+            alert("다음 단계가 진행되어, 검체완료를 취소 할 수 없습니다");
+            return;
+        }
+
+        if (_pickingCompleteESignCnt < 1) {
+            alert("검체완료인 경우에만 취소가 가능합니다!");
+            return;
+        }
+        else {
+
+            // 지시자의 서명만 끝나고, 검체채취가 안된 대기(1) 상태일경우
+            test_status = gridData.sample_status;
+            if (test_status == "1") {
+                alert("검체채취가 진행되지 않았습니다");
+                return;
+            }
+
+            if (!confirm("검체완료를 취소 하시겠습니까?")) {
+                return;
+            }
+
+        }
+
+        var signGrid = $("#PickingCompleteESignTable").dxDataGrid("instance");
+        var signGridData = signGrid.option("dataSource")[signGrid.totalCount() - 1];
+
+        if (signGridData.sign_emp_cd && signGridData.sign_emp_cd !== sessionStorage.getItem("loginCD")) {
+            alert("최근 서명자만 취소할 수 있습니다.!!!");
+            return;
+        }
+
+        TestItemmethodEditCheck(true, 'D');
+        PickingCompleteESave();
+    }
+
+    function PickingCompleteESave() {
+
+        //var start_qty = $("#PickingCompleteEWriteForm input[name=start_qty]").val();
+
+        var form = $('#PickingCompleteEWriteForm')[0];
+        var formData = new FormData(form);
+
+        if (!UtilView.checkValidForm("PickingCompleteEWriteForm")) {
+            return;
+        }
+
+        //통별 샘플링이 필요한 경우, 통별 샘플링이 완료되었는지 체크한다.
+        UtilView.dataGridTRX(formData, () => PickingCompleteESearch());
+
+        TestItemmethodEditCheck(false, 'N');
+    }
+
+    function PickingCompleteEUndo() {
+        TestItemmethodEditCheck(false, 'N');
+        PickingCompleteEFocusChanged();
+    }
+
+    function PickingCompleteEPrint() {
+        //PickingCompleteECheckTestStatus();
+
+        // <report pre check>
+        var gridName = "PickingCompleteEGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        var gridFocusRowKey = grid.option("focusedRowKey")
+
+        if (!gridFocusRowKey) {
+            alert("출력할 품목을 선택하세요!");
+            return;
+        }
+
+        if (!PickingCompleteECheckTestStatus()) return;
+
+        var gridData = getGridRowByKey(gridName, gridFocusRowKey);
+        var testcontrol_id = gridData.testcontrol_id;
+        var test_type = gridData.test_type;
+        // </report pre check>
+
+        // report 출력 객체 생성
+        var report = new ReportHelper($(event.target));
+        //var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "QualityControl", RptFileName: "rptTest_Sampling" },
+            objSp: { SpName: "SP_TestInformReport", gubun: "S4", reportParam: "testcontrol_id:" + testcontrol_id },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+            // dataset(다중테이블)  사용시, 아래주석을 풀어서 사용한다.
+            //objTblNm: { tblName: "Header,TotalRate" },
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+
+        // 레포트테스트(생성객체확인)
+        //report.testObj();
+        report.run();
+
+
+    }
+
+    function PickingCompleteEExcel() {
+        var m;
+        try { m = UtilView.getCurMenuInfo('menuname'); } catch (e) { m = '이름없음' };
+        m += "_" + '@DateTime.Now.ToShortDateString()';
+        gridExportToExcel("PickingCompleteEGrid", m);
+    }
+
+    //#endregion
+
+    //#region 프로그램별 function
+    // 시험상태 확인
+    function PickingCompleteECheckTestStatus()
+    {
+        var checkStatus = true;
+        var gridName = "PickingCompleteEGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        var gridFocusRowKey = grid.option("focusedRowKey")
+        if (!gridFocusRowKey) {
+            checkStatus = false;
+        }
+        else {
+            if ($.isArray(gridFocusRowKey)) {
+                // 그룹 선택시 리턴
+                checkStatus = false;
+            } else {
+                var gridData = getGridRowByKey(gridName, gridFocusRowKey);
+                if (gridData.test_status == 12 &&      // 지시(12) 상태인데
+                    gridData.sample_status < 3 ||       // 채취 완료 상태가 아니거나
+                    gridData.test_status < 5)           //  ---(0), 의뢰(1), 접수(2) 상태 인 경우
+                {
+                    alert("[불가] 검체 채취를 완료하지 않으면 검체 채취서를 출력 할 수 없습니다");
+                    checkStatus = false;
+                }
+            }
+        }
+        return checkStatus;
+    }
+    //#endregion
+
+    // 전자서명
+    function PickingCompleteESign(e) {
+
+        if (_pickingCompleteECRUDSataus !== "N") {
+            return;
+        }
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            return;
+        }
+
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        if (gridData.sample_status == "" || gridData.sample_status == "0") {
+            alert("시험지시후 전자서명이 가능합니다.!!!");
+            return;
+        }
+
+        if (!UtilView.checkValidForm("PickingCompleteEWriteForm")) {
+            alert("필수 데이터 입력란에 데이터를 입력하세요");
+            return;
+        }
+
+        _pickingCompleteESignData = e.data;
+
+        if (e.columnIndex == 3) {
+
+            _pickingCompleteESignGubun = "U";
+
+            if (e.data.prev_sign_yn == "0") {
+                alert("먼저 앞 단계 승인이 필요합니다.");
+                return;
+            }
+
+            if (e.data.sign_yn == "1") {
+
+                if (!confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                    return;
+                }
+
+                var test_status = gridData.test_status;
+                if (test_status == "6" || test_status == "7" || test_status == "8" || test_status == "9") {
+                    alert("다음 단계가 진행되어, 검체완료를 취소 할 수 없습니다");
+                    return;
+                }
+                _pickingCompleteESignGubun = "D";
+            }
+
+            _pickingCompleteESignGubun2 = 0;
+
+            var popup = $("#PickingCompleteESignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#PickingCompleteESignPopupTemplate"));
+            popup.show();
+
+        }
+    }
+
+    function PickingCompleteESignSubmit() {
+
+        var data = new FormData($('#PickingCompleteESignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    alert("잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                var jsonData = JSON.parse(result)[0];
+
+                var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+                if (_pickingCompleteESignGubun2 === 0) {
+
+                    var isOK = false;
+
+                    //로그인 사용자와 동일한지 여부 체크
+                    if (jsonData.emp_cd !== sessionStorage.getItem("loginCD")) {
+                        alert("로그인 사용자와 서명자가 일치하지 않습니다.");
+                        return;
+                    }
+
+                    var representative_yn = 'N';
+
+                    if (!_pickingCompleteESignData.responsible_emp_cd) {
+                        isOK = true;
+                    }
+                    //서명 책임자와 서명자가 일치하지 않으면 대리자 권한을 체크한다.
+                    else if (_pickingCompleteESignData.responsible_emp_cd !== jsonData.emp_cd) {
+
+                        $.ajax({
+                            type: 'GET',
+                            url: '/TestReq/TestRequestESignDelegateCheck',
+                            data: {
+                                emp_cd: jsonData.emp_cd,
+                                testcontrol_id: gridData.testcontrol_id,
+                                process_kind: '2',
+                                test_type: gridData.test_type,
+                                sign_set_dt_id: _pickingCompleteESignData.sign_set_dt_id,
+                                program_cd: "PickingCompleteE"
+                            },
+                            async: false,
+                            success: function (result) {
+
+                                if (result.length > 0) {
+                                    representative_yn = 'Y';
+                                    isOK = true;
+                                } else {
+                                    isOK = false;
+                                }
+                            }
+                        });
+
+                    } else {
+                        isOK = true;
+                    }
+
+                    if (!isOK) {
+                        alert("권한이 없는 사용자입니다.");
+                        return;
+                    }
+
+                    var paramData = {
+                        gubun: _pickingCompleteESignGubun,
+                        emp_cd: jsonData.emp_cd,
+                        testcontrol_id: gridData.testcontrol_id,
+                        process_kind: '2',
+                        test_type: gridData.test_type,
+                        sign_set_dt_id: _pickingCompleteESignData.sign_set_dt_id,
+                        validation_type: "2",
+                        representative_yn: representative_yn,
+                        program_cd: "PickingCompleteE"
+                    };
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/TestReq/TestRequestESignTRX',
+                        data: paramData,
+                        success: function (result) {
+
+                            alert(result.message);
+
+                            PickingCompleteESearch();
+
+                            _pickingCompleteESignGubun = "";
+
+                            var popup = $("#PickingCompleteESignPopup").dxPopup("instance");
+                            popup.hide();
+
+                        }
+                    });
+                }        // 검체채취 서명
+                else if (_pickingCompleteESignGubun2 === 1) {
+
+                    if (jsonData.emp_cd === _pickingCompleteELabelAuthEmp) {
+
+                        var rpt_name = $("#PickingCompleteERptName").val();
+
+                        $.ajax({
+                            type: 'GET',
+                            url: '/Aprov/ReleasedOrRejectedLabelAddCount',
+                            data: {
+                                testcontrol_id: gridData.testcontrol_id,
+                                test_type: gridData.test_type,
+                                report_cd: rpt_name
+                            },
+                            async: false,
+                            success: function (result) {
+                                PickingcompleteEPrint(rpt_name);
+                            }
+                        });
+                    }
+                    else {
+                        alert("승인권한이 없습니다. 시험성적서 승인자의 서명이 필요합니다.!!!");
+                    }
+
+                    $("#PickingCompleteESignPopup").dxPopup("instance").hide();
+                }   // 라벨 출력횟수 추가를 위한 서명
+            }
+        });
+    }
+
+    function ClearPickingCompleteESignInput() {
+        $('#PickingCompleteESignForm')[0].reset();
+        $("#PickingCompleteERptName").val('');
+    }
+
+    // 전자서명 입력
+    function PickingcompleteELabelPrint(gubun) {
+
+        if (_pickingCompleteECRUDSataus !== "N") {
+            return;
+        }
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        if (!grid.option("focusedRowKey") || gridData.key) {
+            alert("출력할 검체정보를 선택하세요!");
+            return;
+        }
+        else if (gridData.sample_status !== "3") {
+            alert("채취완료한 후 라벨을 출력할 수 있습니다!");
+            return;
+        }
+
+        //일련번호
+        var testcontrol_id = gridData.testcontrol_id;
+        var test_type = gridData.test_type;
+
+        var rptName = "";
+
+        switch (gubun) {
+
+            case 0:
+                rptName = "SampleTakenLabel";
+                break;
+
+            case 1:
+                rptName = "SampleLabel_Test";
+                break;
+
+            case 2:
+                if (!$("#PickingCompleteEWriteForm input[name=microorganism]").prop("checked")) {
+                    alert("미생물시험을 하지않는 시험입니다.");
+                    return;
+                }
+                rptName = "SampleLabel_microbe";
+                break;
+
+            case 3:
+                rptName = "SampleLabel_deposit";
+                break;
+
+            case 4:
+                rptName = "SampleLabel_stability";
+                break;
+
+        }
+
+        var isOk = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Aprov/ReleasedOrRejectedLabelCheckPrintCount',
+            data: {
+                testcontrol_id: testcontrol_id,
+                test_type: test_type,
+                report_cd: rptName
+            },
+            async: false,
+            success: function (result) {
+                isOk = result.isOk;
+            }
+        });
+
+        if (isOk) {
+            PickingcompleteEPrint(rptName);
+        } else {
+
+            if (confirm("출력 가능횟수를 초과했습니다. 재출력을 위한 승인을 하시겠습니까?")) {
+
+                _pickingCompleteELabelAuthEmp = "";
+
+                $.ajax({
+                    type: 'GET',
+                    url: '/Aprov/ReleasedOrRejectedLabelGetAuthorEmp',
+                    data: {
+                        testcontrol_id: testcontrol_id,
+                        test_type: test_type
+                    },
+                    async: false,
+                    success: function (result) {
+
+                        _pickingCompleteELabelAuthEmp = result.emp_cd;
+
+                        _pickingCompleteESignGubun2 = 1;
+
+                        $("#PickingCompleteESignPopup").dxPopup("instance").show();
+
+                        $("#PickingCompleteERptName").val(rptName);
+
+                    }
+                });
+            }
+        }
+    }
+
+    // 라벨 출력
+    function PickingcompleteEPrint(rptName) {
+
+        var report = new ReportHelper();
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        report.addParam({
+            objFile: {
+                path: "QualityControl/LabelView", RptFileName: rptName
+            },
+            objSp: { SpName: "SP_PickingCompleteE", gubun: "SD", reportParam: "testcontrol_id:" + gridData.testcontrol_id + ";test_type:" + gridData.test_type + ";form_cd:" + rptName },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+        report.print();
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/PickingCompleteELabelCnt',
+            data: {
+                testcontrol_id: gridData.testcontrol_id,
+                test_type: gridData.test_type,
+                report_cd: rptName,
+                print_num: 1
+            },
+            success: function (result) {
+
+            }
+        });
+    }
+
+    function PickingCompleteEPackSampling() {
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        _pickingCompleteEPackSamplingChanges = new Array();
+
+        if (!grid.option("focusedRowKey") || gridData.key) {
+            $("#PickingCompleteEPackSamplingSaveBtn").prop("disabled", true);
+
+            var editing = {
+                allowUpdating: false
+            }
+
+            $("#PickingCompleteEPackSamplingGrid").dxDataGrid("option", "editing", editing);
+
+            return;
+        }
+
+        $("#PickingCompleteEPackSamplingPopup").dxPopup("instance").show();
+
+        $("#PickingCompleteEPackSamplingForm input[name=item_nm]").val(gridData.item_nm);
+        $("#PickingCompleteEPackSamplingForm input[name=testrequest_no]").val(gridData.testrequest_no);
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/PickingCompleteEPackSamplingSelect',
+            data: {
+                testcontrol_id: gridData.testcontrol_id
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#PickingCompleteEPackSamplingGrid").dxDataGrid("option", "dataSource", jsonData);
+                } catch {
+                    $("#PickingCompleteEPackSamplingGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+                if (_pickingCompleteECRUDSataus === "U") {
+                    $("#PickingCompleteEPackSamplingSaveBtn").prop("disabled", false);
+
+                    var editing = {
+                        allowUpdating: true,
+                        mode: "batch"
+                    }
+
+                    $("#PickingCompleteEPackSamplingGrid").dxDataGrid("option", "editing", editing);
+                } else {
+                    $("#PickingCompleteEPackSamplingSaveBtn").prop("disabled", true);
+
+                    var editing = {
+                        allowUpdating: false
+                    }
+
+                    $("#PickingCompleteEPackSamplingGrid").dxDataGrid("option", "editing", editing);
+                }
+
+            }
+        });
+    }
+
+    async function PickingCompleteEPackSamplingSave() {
+
+        await $("#PickingCompleteEPackSamplingGrid").dxDataGrid("instance").saveEditData();
+
+        var grid = $("#PickingCompleteEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingCompleteEGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/PickingCompleteEPackSamplingSave',
+            data: {
+                packSampling: JSON.stringify(_pickingCompleteEPackSamplingChanges),
+                testcontrol_id: gridData.testcontrol_id
+            },
+            success: function (result) {
+                $("#PickingCompleteEPackSamplingPopup").dxPopup("instance").hide();
+            }
+        });
+
+    }
+
+    function PickingCompleteEPackSamplingUpdate(e) {
+        var data = e.data;
+        _pickingCompleteEPackSamplingChanges.push(data);
+    }
+
+    function PickingCompleteE_CellPrepared(e) {
+
+        var dataField = e.column.dataField;
+        var rowType = e.rowType;
+        var cellElement = e.cellElement;
+
+        if (rowType != 'data') return;
+
+        // css색상지정
+        var objColor = {
+            "1": { "background-color": "khaki", "color": "black" },             //대기
+            "3": { "background-color": "CornflowerBlue", "color": "black" }              //채취완료
+        };
+
+        var printField, valueField, fieldValue;
+        var fieldColorCss;
+
+        printField = dataField;
+        valueField = 'sample_status';
+        fieldValue = e.data[valueField];
+        fieldColorCss = objColor;
+
+        if (!UtilView.isEmpty(printField)) {
+            var cssConfig = fieldColorCss[fieldValue];
+
+            if (printField == "sample_status_nm") {
+                if (cssConfig)
+                    cellElement.css(cssConfig);
+            }
+
+        }
+    }
+
+</script>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="PickingCompleteEEmployeePopup"></div>
+    <div id="PickingCompleteEWorkRoomPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("PickingCompleteESignPopup")
+            .Width(400)
+            .Height(200)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("ClearPickingCompleteESignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+            .ContentTemplate(new TemplateName("PickingCompleteESignPopupTemplate"))
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("PickingCompleteESignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="PickingCompleteESignForm" class="mb-1">
+
+            <div class="input-wrapper mb-1">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+            </div>
+            <div class="input-wrapper">
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+        </form>
+        <div class="align-end-only">
+            <button class="btn btn-secondary" onclick="PickingCompleteESignSubmit()">확인</button>
+        </div>
+
+        <input id="PickingCompleteERptName" type="text" hidden="hidden" />
+    }
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("PickingCompleteEPackSamplingPopup")
+            .Width(600)
+            .Height(390)
+            .ShowTitle(true)
+            .Title("샘플링정보")
+            //.OnHidden("ClearPickingCompleteESignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+            .ContentTemplate(new TemplateName("PickingCompleteEPackSamplingPopupTemplate"))
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("PickingCompleteEPackSamplingPopupTemplate"))
+    {
+        <form id="PickingCompleteEPackSamplingForm" class="mb-1">
+            <div class="input-wrapper mb-1">
+                <label class="col-2">품명</label>
+                <input type="text" class="col-4 form-control" name="item_nm" readonly>
+                <label class="col-2">의뢰번호</label>
+                <input type="text" class="col-3 form-control" name="testrequest_no" readonly>
+            </div>
+        </form>
+
+        @(Html.DevExtreme().DataGrid()
+            .ID("PickingCompleteEPackSamplingGrid")
+            .KeyExpr("receipt_pack_barcode")
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+            .Height(250)
+            .ShowBorders(true)
+            .FocusedRowEnabled(true)
+            .ColumnAutoWidth(true)
+            .AllowColumnResizing(true)
+            .AllowColumnReordering(true)
+            .ShowColumnLines(true)
+            .HoverStateEnabled(true)
+            .OnToolbarPreparing("HideToolbarButton")
+            .Columns(c =>
+            {
+                c.Add().DataField("receipt_pack_seq").Caption("순번").AllowEditing(false);
+                c.Add().DataField("receipt_pack_barcode").Caption("바코드").AllowEditing(false);
+                c.Add().DataField("receipt_pack_qty").Caption("입고량(g/개/m)").AllowEditing(false);
+                c.Add().DataField("sampling_yn").Caption("샘플링여부").DataType(GridColumnDataType.Boolean)
+                    .CalculateCellValue(@"function(rowData) { return (rowData.sampling_yn == 'Y' || rowData.sampling_yn == true); }");
+                c.Add().DataField("sampling_qty").Caption("샘플량(g/개/m)").DataType(GridColumnDataType.Number);
+            })
+            .OnRowUpdated("PickingCompleteEPackSamplingUpdate")
+        )
+
+        <div class="mt-2 display-flex">
+            <div class="col-6 pl-0 align-end-only">
+                <button class="btn btn-secondary" id="PickingCompleteEPackSamplingSaveBtn" onclick="PickingCompleteEPackSamplingSave()" style="width:inherit;">저장</button>
+            </div>
+            @*<div class="col-6 pr-0">
+                <button class="btn btn-secondary" id="PickingCompleteEPackSamplingCloseBtn" onclick="" style="width:inherit;">닫기</button>
+            </div>*@
+        </div>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="request" id="@(pagePrefix)selectdate1" name="selectdate" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate1">의뢰일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="receipt" id="@(pagePrefix)selectdate2" name="selectdate" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate2">접수일자</label></span>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="pickingorder" id="@(pagePrefix)selectdate3" name="selectdate" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate3">지시일자</label></span>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="test_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC021")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="de_Sdate" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="de_Edate" autocomplete="off">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제형</span>
+                        </div>
+                        <select class="form-control" name="item_form_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM065")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control" name="search_gubun">
+                            <option value="0">의뢰품목</option>
+                            <option value="1">의뢰번호</option>
+                            <option value="2">제조(관리)번호</option>
+                        </select>
+                        <input type="text" class="form-control input-sm text-center" name="search_number">
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Save;Undo;Edit;Delete;Print;Preview;Excel");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-9 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PickingCompleteEGrid")
+                    .KeyExpr("testcontrol_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .ColumnResizingMode(ColumnResizingMode.Widget)
+                    .ColumnChooser(cc=>cc.Enabled(true))
+                    .AllowColumnReordering(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("test_type_nm").Caption("시험종류").GroupIndex(0);
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("start_no").Caption("제조번호");
+                        c.Add().DataField("test_standard_nm_1").Caption("규격");
+                        c.Add().DataField("process_nm").Caption("공정");
+                        c.Add().DataField("request_date").Caption("의뢰일자");
+                        c.Add().DataField("instruction_date").Caption("지시일자");
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("sample_status_nm").Caption("진행상태");
+                        c.Add().DataField("pack_sampling_ck").Caption("통별샘플링대상");
+                        c.Add().DataField("testsample_yn").Caption("분배여부");
+
+                    })
+                .OnFocusedRowChanged("PickingCompleteEFocusChanged")
+                .OnCellPrepared("PickingCompleteE_CellPrepared")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-3 pl-0">
+
+            <div class="box mb-0 flex-box-div">
+
+                <div class="divName mb-1">
+                    <p>검체채취입력</p>
+                    <button class="btn btn-sm btn-secondary" style="float:right; margin-right:10px; font-size:small;" onclick="PickingCompleteEPackSampling()">통별 샘플링</button>
+                </div>
+
+                <form id="PickingCompleteEWriteForm" class="mb-1">
+
+                    <input name="gubun" hidden="hidden" />
+                    <input name="testcontrol_id" hidden="hidden" />
+
+                    <div class="input-wrapper">
+                        <label class="col-4">시험번호/구분</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="test_no">
+                            <select class="form-control col-6" name="test_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                            @*<input type="text" class="form-control col-6" name="test_type">*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">품목</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="item_nm" readonly="readonly" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">품목(영문)</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="item_enm" readonly="readonly" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">규격/공정</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="test_standard_nm_1" readonly="readonly">
+                            <input type="text" class="form-control col-6" name="process_nm" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">제조/지시일자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="start_date" readonly="readonly">
+                            <input type="text" class="form-control col-6" name="instruction_date" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">유통기한</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control datepicker required col-6" name="valid_period" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰량/포장수</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="start_qty" readonly="readonly">
+                            <input type="text" class="form-control col-6" name="pack_cnt" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">샘플링방법/우선순위</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="sampling_calc" readonly="readonly">
+                            <input type="text" class="form-control col-6" name="pack_type" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">채취용기 수량</label>
+                        <div class="input-group col-7">
+                            <input type="number" class="form-control col-6 required" name="pack_sampling_qty" />
+                            <input type="text" class="form-control col-6" name="standard_pack_sampling_qty" readonly="readonly" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4"> 채취일자/채취예정자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control datepicker col-6 required" name="picking_date" />
+                            <input type="text" class="form-control col-6" name="picking_ordered_emp_nm" readonly="readonly" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">채취량/단위</label>
+                        <div class="input-group col-7">
+                            <input type="number" class="form-control col-6 required" name="picking_qty" />
+                            <select class="form-control" name="picking_qty_unit">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "CM012")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-sm btn-primary btn-center" onclick="PickingcompleteELabelPrint(0)">라벨</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">채취자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-4" name="picking_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="picking_emp_nm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">채취장소</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-4" name="picking_workroom_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="picking_workroom_nm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">시험검체량</label>
+                        <div class="input-group col-7">
+                            <input type="number" class="form-control col-6" name="test_sample_qty" />
+                            <input type="number" class="form-control col-6" name="standard_test_sample_qty" readonly="readonly" />
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-sm btn-primary btn-center" onclick="PickingcompleteELabelPrint(1)">라벨</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">미생물시험여부</label>
+                        <div class="input-group col-7">
+                            <input type="checkbox" class="checkbox col-1 mt-1" name="microorganism" value="Y" onclick="return false;"/>
+                            <input type="number" class="form-control col-5" name="sample_microbe_qty" />
+                            <input type="number" class="form-control col-6" name="standard_sample_microbe_qty" readonly="readonly" />
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-sm btn-primary btn-center" onclick="PickingcompleteELabelPrint(2)">라벨</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">보관검체량</label>
+                        <div class="input-group col-7">
+                            <input type="number" class="form-control col-6 required" name="deposit_sample_qty" />
+                            <input type="number" class="form-control col-6" name="standard_deposit_sample_qty" readonly="readonly" />
+                            @*<div class="input-group-append">
+                                <button type="button" class="btn btn-sm btn-primary btn-center" onclick="PickingcompleteELabelPrint(3)">라벨</button>
+                            </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">안정성보관량</label>
+                        <div class="input-group col-7">
+                            <input type="number" class="form-control col-6" name="stability_sample_qty" />
+                            <input type="number" class="form-control col-6" name="standard_stability_sample_qty" readonly="readonly" />
+                            @*<div class="input-group-append">
+                                <button type="button" class="btn btn-sm btn-primary btn-center" onclick="PickingcompleteELabelPrint(4)">라벨</button>
+                            </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">안정성시험 용기재질</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="container_material" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">포장상태</label>
+                        <div class="input-group col-4">
+                            <div class="radioDiv col-12">
+                                <label><input type="radio" name="picking_sop1" value="Y" />적 합</label>
+                                <label><input type="radio" name="picking_sop1" value="N" />부 적 합 </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-4">표준채취량</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="standard_sample_qty" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <!-- 기존start-->
+
+                </form>
+
+                <ul class="nav nav-tabs" id="PickingCompleteETab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('PickingCompleteETab', 'PickingCompleteETabContent', 1);">전자서명 정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('PickingCompleteETab', 'PickingCompleteETabContent', 2);">첨부파일</a>
+                    </li>
+                </ul>
+
+                <div id="PickingCompleteETabContent" class="flex-grow-1">
+
+                    <div id="PickingCompleteETabContent_1" class="height-inherit">
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("PickingCompleteESignTable")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("sign_set_dt_id")
+                            .OnCellClick("PickingCompleteESign")
+                            .Height(261)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(columns =>
+                            {
+                                columns.Add()
+                                    .DataField("displayfield")
+                                    .Width("15%")
+                                    .Caption("구분");
+                                columns.Add()
+                                    .DataField("sign_emp_nm")
+                                    .Width("20%")
+                                    .Caption("서명자");
+                                columns.Add()
+                                    .DataField("sign_time")
+                                    .Caption("서명일자");
+                                columns.Add()
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .DataField("sign_image")
+                                    .Name("sign_image")
+                                    .Caption("서명")
+                                    .Width("25%")
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+
+                    </div>
+
+                    <div id="PickingCompleteETabContent_2" class="height-inherit">
+
+                        <div class="align-end-only">
+                            <button class="btn btn-secondary">등록</button>
+                            <button class="btn btn-secondary">다운로드</button>
+                            <button class="btn btn-secondary">삭제</button>
+                        </div>
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("PickingCompleteEFileGrid")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("file_id")
+                            .Height(238)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(columns =>
+                            {
+                                columns.Add()
+                                    .DataField("doc_file_name")
+                                    .Caption("파일명");
+                            })
+                        )
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

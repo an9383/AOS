@@ -1,0 +1,341 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ClaimGraph2";
+}
+
+<style>
+    #ClaimGraph2 .box .input-wrapper {
+        padding: 3px;
+    }
+</style>
+
+<script id="ClaimGraph2Js">
+
+    var ClaimGraph2_focusedRow = null;
+
+    $(function () {
+        setDatePicker("#ClaimGraph2 .datepicker");
+
+        ClaimGraph2Search();
+    })
+
+    //조회
+    function ClaimGraph2Search() {
+
+        // 초기화영역
+        $('#ClaimGraph2_TopGrid').dxDataGrid("option", "dataSource", []);
+        $('#ClaimGraph2_TopGrid').dxDataGrid("option", "focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Cp/ClaimGraph2_GridSelect',
+            data: {
+                start_date: $("#ClaimGraph2Form input[name='start_date']").val(),
+                end_date: $("#ClaimGraph2Form input[name='end_date']").val()
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    //console.log(json);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    for (var i = 0; i < json.Table.length; i++)
+                        json.Table[i].idx = i;
+
+                    $("#ClaimGraph2_TopGrid").dxDataGrid("option", "dataSource", json.Table);
+                    $("#ClaimGraph2_TopGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                    $("#ClaimGraph2_TopGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                    $("#ClaimGraph2_T").dxChart("option", "dataSource", []);
+                    $("#ClaimGraph2_T").dxChart("option", "dataSource", json.Table1);
+
+                } else {
+                    $("#ClaimGraph2_TopGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                    $("#ClaimGraph2_T").dxChart("option", "dataSource", []);
+                    $("#ClaimGraph2 input[name='item_nm']").val("");   
+
+                }
+            }
+        })
+    }
+
+    function ClaimGraph2_GridSelect1() {
+
+        if (ClaimGraph2_focusedRow != null && ClaimGraph2_focusedRow.data.item_form_nm != "합계") {
+
+            // 초기화영역
+            $('#ClaimGraph2_BottomGrid').dxDataGrid("option", "dataSource", []);
+            $('#ClaimGraph2_BottomGrid').dxDataGrid("option", "focusedRowKey", "");
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Cp/ClaimGraph2_GridSelect1',
+                data: {
+                    start_date: $("#ClaimGraph2Form input[name='start_date']").val(),
+                    item_form_cd: ClaimGraph2_focusedRow.data.item_form_cd
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+                        //console.log(json);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#ClaimGraph2_BottomGrid").dxDataGrid("option", "dataSource", json.Table);
+                        $("#ClaimGraph2_BottomGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                        $("#ClaimGraph2_BottomGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                        $("#ClaimGraph2_B").dxChart("option", "dataSource", []);
+
+                        for (var i = 0; i < json.Table1.length; i++)
+                            json.Table1[i].month = (i + 1);
+
+                        $("#ClaimGraph2_B").dxChart("option", "dataSource", json.Table1);
+                    } else {
+                        $("#ClaimGraph2_BottomGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                        $("#ClaimGraph2_B").dxChart("option", "dataSource", []);
+
+                    }
+                }
+            })
+        } else {
+            $("#ClaimGraph2_BottomGrid").dxDataGrid("option", "focusedRowEnabled", false);
+            $("#ClaimGraph2_B").dxChart("option", "dataSource", []);
+        }
+    }
+
+    //그리드 이벤트
+    function ClaimGraph2_OnFocusedRowChanged(e) {
+        if (!e.row || !e.row.data) {
+            ClaimGraph2_focusedRow = null;
+        } else {
+            ClaimGraph2_focusedRow = e.row;
+            $("#ClaimGraph2 input[name='item_nm']").val(ClaimGraph2_focusedRow.data.item_form_nm);   
+            //$("#ClaimGraph2 input[name='item_nm']").val(ClaimGraph2_focusedRow.data.item_form_cd);  
+        }
+        ClaimGraph2_GridSelect1();
+    }
+
+</script>
+
+<div id="ClaimGraph2" autoresize="Y">
+    @*<h4 class="divTitle">제형별 접수통계</h4>*@
+
+    <div id="ClaimGraph2Top" class="mainTop row">
+
+        <div class="col-8">
+            <form id="ClaimGraph2Form">
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">접수일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Today.ToString("yyyy-01-01")" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control datepicker text-center" name="end_date" value="@DateTime.Today.ToString("yyyy-12-31")" />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search"); }
+
+            @*@(Html.DevExtreme().Toolbar()
+            .ID("ClaimGraph2_Toolbar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                            .Button()
+                            .Type(ButtonType.Default)
+                            .StylingMode(ButtonStylingMode.Contained)
+                            .ID("ClaimGraph2Search")
+                            .Icon("search")
+                            .Text("조회")
+                            .OnClick("ClaimGraph2Search")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )*@
+        </div>
+    </div>
+
+
+    <div class="row margin-bottom">
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("ClaimGraph2_TopGrid")
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Height(410)
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ShowRowLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .KeyExpr("idx")
+                .Columns(c =>
+                {
+                    c.Add().DataField("item_form_nm").Caption("제형");
+                    //c.Add().DataField("item_form_cd").Caption("제형");
+                    c.Add().Caption("건수").IsBand(true);
+                    c.Add().DataField("p_cnt").Caption("작년").OwnerBand(1);
+                    c.Add().DataField("t_cnt").Caption("당년").OwnerBand(1);
+                    c.Add().DataField("d_cnt").Caption("증감").OwnerBand(1);
+                })
+                .OnFocusedRowChanged("ClaimGraph2_OnFocusedRowChanged")
+            )
+            </div>
+        </div>
+
+        <div class="col-8 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().Chart()
+                .Title("제형별 발생건수(전년대비)")
+                .ID("ClaimGraph2_T")
+                .Size(c => c.Height(410) )
+                .Series(s => s
+                    .Add()
+                    .ArgumentField("제형")
+                    .ValueField("작년건수")
+                    .Name("작년건수")
+                    .Type(SeriesType.Bar)
+                    .Color("#28a745")
+                )
+                .Series(s => s
+                    .Add()
+                    .ArgumentField("제형")
+                    .ValueField("당년건수")
+                    .Name("당년건수")
+                    .Type(SeriesType.Bar)
+                    .Color("#ffaa66")
+                )
+                .Tooltip(t => t
+                    .Enabled(true)
+                    .Shared(true)
+                    .CustomizeTooltip(
+                        @<text>
+                            function(info) {
+                                return {
+                                    html: "<div><div class='tooltip-header'>" +
+                                    info.argumentText + "</div>" +
+                                    "<div class='tooltip-body'><div class='series-name'>" +
+                                    info.points[0].seriesName +
+                                    ": </div><div class='value-text'>" +
+                                    info.points[0].valueText +
+                                    " 건</div><div class='series-name'>" +
+                                    info.points[1].seriesName +
+                                    ": </div><div class='value-text'>" +
+                                    info.points[1].valueText +
+                                    " 건</div></div></div>"
+                                };
+                            }
+                        </text>)
+                    )
+                )
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                <div class="input-wrapper">
+                    <label class="col-2">제형종류</label>
+                    <input class="form-control col-9" name="item_nm" readonly="readonly">
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                .ID("ClaimGraph2_BottomGrid")
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Height(430)
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ShowRowLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .KeyExpr("claim_month")
+                .Columns(c =>
+                {
+                    c.Add().DataField("claim_month").Caption("월");
+                    c.Add().DataField("pre_cnt").Caption("전년");
+                    c.Add().DataField("this_cnt").Caption("당년");
+                    c.Add().DataField("diff_cnt").Caption("증감");
+                })
+            )
+            </div>
+        </div>
+
+        <div class="col-8 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().Chart()
+                .ID("ClaimGraph2_B")
+                .Title("월별 발생건수(전년대비)")
+                .Size(c => c.Height(430))
+                .Series(s => s
+                    .Add()
+                    .ArgumentField("month")
+                    .ValueField("전년")
+                    .Name("전년")
+                    .Type(SeriesType.Bar)
+                    .Color("#28a745")
+                )
+                .Series(s => s
+                    .Add()
+                    .ArgumentField("month")
+                    .ValueField("당년")
+                    .Name("당년")
+                    .Type(SeriesType.Bar)
+                    .Color("#ffaa66")
+                )
+                .Tooltip(t => t
+                .Enabled(true)
+                .Shared(true)
+                .CustomizeTooltip(
+                        @<text>
+                            function(info) {
+                                return {
+                                    html: "<div><div class='tooltip-header'>" +
+                                    info.argumentText + "월</div>" +
+                                    "<div class='tooltip-body'><div class='series-name'>" +
+                                    info.points[0].seriesName +
+                                    ": </div><div class='value-text'>" +
+                                    info.points[0].valueText +
+                                    " 건</div><div class='series-name'>" +
+                                    info.points[1].seriesName +
+                                    ": </div><div class='value-text'>" +
+                                    info.points[1].valueText +
+                                    " 건</div></div></div>"
+                                };
+                            }
+                        </text>)
+                    )
+             )
+            </div>
+        </div>
+    </div>
+
+</div>

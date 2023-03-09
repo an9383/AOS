@@ -1,0 +1,577 @@
+﻿@using HACCP.Models
+
+<style>
+
+    /* 그리드 셀 배경*/
+    #Main .beige{ background-color:beige; }         /* 이전 */
+    #Main .lightcyan{ background-color: lightcyan; }/* 금일 */
+
+    /*제조지시 상태*/
+    #Main .lavender{ background-color: lavender;              } /* 대기 */
+    #Main .lightsteelblue{ background-color: lightsteelblue; }  /* 준비 */
+    #Main .cyan{ background-color: cyan; }                      /* 칭량중 */
+    #Main .steelblue{ background-color: cyan; }                 /* 칭량완료 */
+    #Main .cadetblue{ background-color: gold; }            /* 작업중 */
+    #Main .mediumturquoise{ background-color: lightsalmon; }/* 승인대기 */
+    #Main .aquamarine{ background-color: steelblue; }          /* 작업완료 */
+    #Main .lightcoral{ background-color: lightcoral; }          /* 중단 */
+
+
+    /*포장지시 상태*/
+    #Main .lightgoldenrodyellow{ background-color: lightgoldenrodyellow; }/* 입력 */
+    #Main .palegoldenrod{ background-color: lavender; }                   /* 대기 */
+    #Main .khaki{ background-color: lightsteelblue; }                     /* 준비 */
+    #Main .gold{ background-color: gold; }                                /* 작업중 */
+    #Main .lightsalmon{ background-color: lightsalmon; }                  /* 승인대기 */
+    #Main .tomato{ background-color: steelblue; }                         /* 작업완료 */
+   
+    #Main .MainWrapper {
+        width: 100%;
+        height: 400px;
+        text-align: center;
+        text-align: center;
+        padding: 10px;
+    }
+
+    #Main .MainWrapper .child {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    #Main .MainWrapper .child-xs-1 { width: 17%; }
+    #Main .MainWrapper .child-sm-1 { width: 25%; }
+    #Main .MainWrapper .child-sm-2 { width: 30%; }
+    #Main .MainWrapper .child-md-1 { width: 43%; }
+    #Main .MainWrapper .child-lg-1 { width: 55%; }
+    #Main .MainWrapper .child-lg-2 { width: 60%; }
+
+    #Main .MainsubTitle {
+        height: 27px;
+        font-size: 14px;
+        color: black;
+        text-shadow: 2px 2px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    #Main .ItemBackground {
+        padding: 7px;
+        border-radius: 5px;
+        background-color: #E2ECF2;
+        border: 1px solid #d4d4d4;
+        /* box-shadow: 3px 3px 1px 5px #d4d4d4;*/
+        box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    #Main .MainWrapper .child:not(last) {
+        margin-right: 10px;
+    }
+
+</style>
+
+<script>
+    /******************************************************** */
+    // full screen mode 적용
+
+    //function toggleFullScreen() {
+    //    var doc = window.document;
+    //    var docEl = doc.documentElement;
+
+    //    debugger;
+    //    var requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+    //    var cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+    //    if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+    //        requestFullScreen.call(docEl);
+    //    }
+    //    else {
+    //        cancelFullScreen.call(doc);
+    //    }
+    //}
+
+    function toggleFullScreen() {
+        var elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen();
+        } else if (elem.mozRequestFullScreen) { /* Firefox */
+            elem.mozRequestFullScreen();
+        } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE/Edge */
+            elem.msRequestFullscreen();
+        }
+    }
+
+    $(function () {
+        getMain();
+        getMain_LIMS();
+
+        //차트 하단 카테고리 설정
+        //DB에서 현재 기준 월까지 나오므로, 12월까지 나올 수 있도록 차트에서 변경
+        $('#MainGraphContainer').dxChart({
+            argumentAxis: {
+                categories: ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"],
+                argumentField: 'month'
+            }
+        });
+        $("#MainGraphContainer").dxChart("instance").render();
+
+
+    })
+
+    function getMain() {
+
+        //공지사항, Top10 메뉴, 제조/포장 지시 목록, 월별 생산 추이 조회
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Comm/GetMain',
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    //console.log(json);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    for (var i = 0; i < json.Table1.length; i++)
+                        json.Table1[i].idx = (i + 1);
+
+                    $("#MainNewsContainer").dxDataGrid("option", "dataSource", json.Table);
+                    $("#MainTop10Container").dxDataGrid("option", "dataSource", json.Table1);
+                    $("#MainOrderContainer").dxDataGrid("option", "dataSource", json.Table2);
+                    $("#MainGraphContainer").dxChart("option", "dataSource", json.Table3);
+
+                    $("#MainNewsContainer").dxDataGrid("instance").option("focusedRowIndex", 0);
+                    $("#MainTop10Container").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                } else {
+                    //그리드 데이터소스 초기화
+                    $("#MainNewsContainer").dxDataGrid("option", "dataSource", []);//공지사항
+                    $("#MainTop10Container").dxDataGrid("option", "dataSource", []);//Top10
+                    $("#MainOrderContainer").dxDataGrid("option", "dataSource", []);//제조/포장 지시 목록
+                    $("#MainGraphContainer").dxChart("option", "dataSource", []);//월별 생산 추이
+
+                    //그리드 포커스키 초기화
+                    $("#MainNewsContainer").dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#MainTop10Container").dxDataGrid("instance").option("focusedRowKey", "");
+                }
+            }
+        })
+
+        //$("#MainGraphContainer").dxChart("instance").option("categories", ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]);
+    }
+
+    function getMain_LIMS() {
+
+        //그리드 데이터소스 초기화
+        $("#MainTodoContainer").dxDataGrid("option", "dataSource", []);
+
+        //그리드 포커스키 초기화
+        $("#MainTodoContainer").dxDataGrid("instance").option("focusedRowKey", "");
+
+        //To do
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Comm/GetMain_LIMS',
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    //console.log(json);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#MainTodoContainer").dxDataGrid("option", "dataSource", json);
+                }
+            }
+        })
+    }
+
+    //업무내용 더블클릭 > 화면이동
+    function todo_clicked(e) {
+        if (!e.data) return;
+
+        var program_cd = e.data.form_cd;
+
+        //form_cd 값이 DB와 매치되지 않는 경우가 있어 일일히 변경해주어야함..
+        //시험 의뢰 관련
+        if (program_cd == "TestRequestE" || program_cd == "TestReceiptE" || program_cd == "TestSchedule" || program_cd == "PickingCompleteE" ||
+            program_cd == "TestItemResultJudgement" || program_cd == "TestCheckE" || program_cd == "TestRecognitionE") {
+            program_cd = "TestRecognitionE_Temp";
+
+        //일탈 관련
+        } else if (program_cd == "Deviation_Registry") {
+            program_cd = "DeviationReg";
+        } else if (program_cd == "Deviation_Receive") {
+            program_cd = "DeviationReceipt";
+
+        //자율점검 관련
+        } else if (program_cd == "SelfAuditPlanWrite") {
+            program_cd = "SelfAuditSchedule";
+        } else if (program_cd == "SelfAuditPlanRecognition") {
+            program_cd = "SelfAuditPlan";
+        } else if (program_cd =="SelfAuditPlanReview") {
+            program_cd = "SelfAuditEditPlanOK";
+        }
+      
+        var pageInfo = {
+            tabName: "",
+            tabId: program_cd,
+            url: ""
+        };
+
+        var programSet = getProgramSet(program_cd);
+
+        if (programSet.length > 0) {
+            for (var i = 0; i < programSet.length; i++) {
+                if (programSet[i].form_cd === pageInfo.tabId) {
+                    pageInfo.tabName = programSet[i].form_nm;
+                    pageInfo.url = programSet[i].form_url;
+                    pageInfo.interface = programSet[i].form_interface;
+                    break;
+                }
+            }
+        }
+
+        //var searchCondition = {};
+
+        //if (program_cd == "OrderGuide" || program_cd == "OrderGuide2" || program_cd == "WorkorderLedger" || program_cd == "PackingOrderLedger") {
+        //    if (program_cd == "OrderGuide" || program_cd == "OrderGuide2") searchCondition.order_no = e.data.code;
+
+        //} else if (program_cd == "ItemGuide" || program_cd == "ItemGuide2") {
+
+        //}
+
+        //console.log(pageInfo);
+        if (pageInfo.tabName != "" && pageInfo.tabName != null && pageInfo.url != "" && pageInfo.url != null) {
+            openOtherPage(pageInfo);
+        }
+        
+        
+    }
+
+    //프로그램 정보 조회
+    function getProgramSet(form_cd) {
+        var programSet = null;
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/ProgramManageSelect',
+            async: false,
+            data: {
+                form_cd: form_cd
+            },
+            success: function (result) {
+
+                programSet = JSON.parse(result);
+
+                if (programSet.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+            }
+        })
+
+        return programSet;
+    }
+
+    //Top10 더블클릭 > 화면이동
+    function top10_clicked(e) {
+
+        if (!e.data) return;
+
+        var program_cd = e.data.program_id;
+
+
+        var pageInfo = {
+            tabName: e.data.program_nm,
+            tabId: program_cd,
+            url: ""
+        };
+
+        var programSet = getProgramSet(program_cd);
+
+        if (programSet.length > 0) {
+            for (var i = 0; i < programSet.length; i++) {
+                if (programSet[i].form_cd === pageInfo.tabId) {
+                    pageInfo.url = programSet[i].form_url;
+                    pageInfo.interface = programSet[i].form_interface;
+                    break;
+                }
+            }
+        }
+
+        //console.log(pageInfo);
+        openOtherPage(pageInfo);
+    }
+
+    //제조지시 더블클릭 
+    function order_clicked(e) {
+
+    }
+
+    //제조/지시 포장 목록 셀 색상 변경
+    function order_cellPrepared(cellInfo) {
+
+        //이전/금일
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "date_gu") {
+            if (cellInfo.data.date_gu === "이전") {
+                cellInfo.cellElement.addClass('beige');
+            } else if (cellInfo.data.date_gu === "금일") {
+                cellInfo.cellElement.addClass('lightcyan');
+            }
+        }
+
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "order_status_nm") {
+
+            //제조지시상태
+            if (cellInfo.data.data_gu === "제조지시") {
+                if (cellInfo.data.order_status_nm === "대기") {
+                    cellInfo.cellElement.addClass('lavender');
+                } else if (cellInfo.data.order_status_nm === "준비") {
+                    cellInfo.cellElement.addClass('lightsteelblue');
+                } else if (cellInfo.data.order_status_nm === "칭량완료") {
+                    cellInfo.cellElement.addClass('steelblue');
+                } else if (cellInfo.data.order_status_nm === "작업중") {
+                    cellInfo.cellElement.addClass('cadetblue');
+                } else if (cellInfo.data.order_status_nm === "승인대기") {
+                    cellInfo.cellElement.addClass('mediumturquoise');
+                } else if (cellInfo.data.order_status_nm === "작업완료") {
+                    cellInfo.cellElement.addClass('aquamarine');
+                } else if (cellInfo.data.order_status_nm === "칭량중") {
+                    cellInfo.cellElement.addClass('cyan');
+                } else if (cellInfo.data.order_status_nm === "중단") {
+                    cellInfo.cellElement.addClass('lightcoral');
+                }
+
+            }
+
+            //포장지시상태
+            if (cellInfo.data.data_gu === "포장지시") {
+                if (cellInfo.data.order_status_nm === "입력") {
+                    cellInfo.cellElement.addClass('lightgoldenrodyellow');
+                } else if (cellInfo.data.order_status_nm === "대기") {
+                    cellInfo.cellElement.addClass('palegoldenrod');
+                } else if (cellInfo.data.order_status_nm === "준비") {
+                    cellInfo.cellElement.addClass('khaki');
+                } else if (cellInfo.data.order_status_nm === "작업중") {
+                    cellInfo.cellElement.addClass('gold');
+                } else if (cellInfo.data.order_status_nm === "승인대기") {
+                    cellInfo.cellElement.addClass('lightsalmon');
+                } else if (cellInfo.data.order_status_nm === "완료") {
+                    cellInfo.cellElement.addClass('tomato');
+                } else if (cellInfo.data.order_status_nm === "중단") {
+                    cellInfo.cellElement.addClass('lightcoral');
+                }
+            }
+
+        }
+    }
+
+</script>
+
+<div id="Main">
+
+    <!-- 공지사항, Todo list, Top10 menu-->
+    <div class="MainWrapper">
+
+        <!-- News -->
+        <div class="child child-sm-2 ItemBackground">
+            <div class="MainsubTitle">공지사항</div>
+            @(Html.DevExtreme().DataGrid()
+                .ID("MainNewsContainer")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ShowRowLines(true)
+                .Height(330)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .HoverStateEnabled(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .KeyExpr("news_cd")
+                //.DataSource(D => D.WebApi().RouteName("Comm").LoadAction("GetNews"))
+                .Columns(c =>
+                {
+                    c.Add().DataField("news_gb_nm").Caption("구분");
+                    c.Add().DataField("news_title").Caption("제목");
+                    //c.Add().DataField("news_content").Caption("내용");
+                    c.Add().DataField("news_writer_nm").Caption("공지자");
+                })
+                .MasterDetail(md => md.Enabled(true)
+                                .Template(@<text>
+                                            <div class="NewsDetail">
+                                                <p><%- data.news_content %></p>
+                                            </div>
+                                        </text>)
+                )
+                @*.OnSelectionChanged(@<text>
+                    function(e) {
+                        console.log(e);
+                        e.component.collapseAll(-1);
+                        e.component.expandRow(e.currentSelectedRowKeys[0]);
+                    }
+                </text>)*@
+            )
+        </div>
+
+        <!-- 월별 생산 추이-->
+        <div class="child child-lg-2 ItemBackground">
+            <div class="MainsubTitle">월별 생산 추이</div>
+            @(Html.DevExtreme().Chart()
+            //.Title("월별 생산 추이")
+            .ID("MainGraphContainer")
+            .Size(c => c.Height(330) )
+            .Panes(p =>
+            {
+                p.Add().Name("Pane").BackgroundColor("#FFFFFF"); //차트영역 배경색상
+            })
+            .ValueAxis(v => v.Add().Name("cnt").Position(Position.Left))
+            .Series(s => s
+                .Add()
+                .ArgumentField("month")
+                .ValueField("cntAll")
+                .Name("생산지시")
+                .Type(SeriesType.Line)
+                .Axis("cnt")
+                .Color("#6b71c3")
+                .Pane("Pane")
+            )
+            .Series(s => s
+                .Add()
+                .ArgumentField("month")
+                .ValueField("cntEnd")
+                .Name("생산완료")
+                .Type(SeriesType.Line)
+                .Axis("cnt")
+                .Color("#28a745")
+                .Pane("Pane")
+            )
+            .Tooltip(t => t
+                .Enabled(true)
+                .Shared(true)
+                .CustomizeTooltip(
+                    @<text>
+                        function(info) {
+                            return {
+                                html: "<div><div class='tooltip-header'>" +
+                                info.argumentText + "월</div>" +
+                                "<div class='tooltip-body'><div class='series-name'>" +
+                                info.points[0].seriesName +
+                                ": </div><div class='value-text'>" +
+                                info.points[0].valueText +
+                                "건</div><div class='series-name'>" +
+                                info.points[1].seriesName +
+                                ": </div><div class='value-text'>" +
+                                info.points[1].valueText +
+                                "건 </div></div></div>"
+                            };
+                        }
+                    </text>)
+                )
+            )
+        </div>
+
+    </div>
+
+    <div class="MainWrapper">
+
+        <!-- To do list-->
+        <div class="child child-xs-1 ItemBackground">
+            <div class="MainsubTitle">전자서명 알림</div>
+            @(Html.DevExtreme().DataGrid()
+            .ID("MainTodoContainer")
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .ShowRowLines(true)
+            .Height(400)
+            .Selection(s => s.Mode(SelectionMode.Single))
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .ColumnAutoWidth(true)
+            .AllowColumnResizing(true)
+            .HoverStateEnabled(true)
+            .FocusedRowEnabled(true)
+            .FocusedRowIndex(0)
+            .KeyExpr("code")
+            .Columns(c =>
+            {
+                c.Add().DataField("item").Caption("업무 내용");
+            })
+            .OnCellDblClick("todo_clicked")
+            )
+        </div>
+
+        <!-- Top10 -->
+        <div class="child child-sm-1 ItemBackground">
+            <div class="MainsubTitle">사용자 접속화면</div>
+            @(Html.DevExtreme().DataGrid()
+            .ID("MainTop10Container")
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .ShowRowLines(true)
+            .Height(400)
+            .Selection(s => s.Mode(SelectionMode.Single))
+            .ColumnAutoWidth(true)
+            .AllowColumnResizing(true)
+            .HoverStateEnabled(true)
+            .FocusedRowEnabled(true)
+            .FocusedRowIndex(0)
+            .KeyExpr("program_id")
+            .Columns(c =>
+            {
+                c.Add().DataField("idx").Caption("순위").Width(45);
+                c.Add().DataField("program_nm").Caption("화면명");
+                c.Add().DataField("cnt").Caption("빈도");
+                c.Add().DataField("last_access_time").Caption("최종 접속시간");
+            })
+            .OnCellDblClick("top10_clicked")
+            )
+        </div>
+
+        <!-- 제조/포장 지시 목록-->
+        <div class="child child-lg-1 ItemBackground">
+            <div class="MainsubTitle">제조/포장 지시 목록</div>
+            @(Html.DevExtreme().DataGrid()
+            .ID("MainOrderContainer")
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .ShowRowLines(true)
+            .Height(400)
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .Selection(s => s.Mode(SelectionMode.Single))
+            //.ColumnAutoWidth(true)
+            .AllowColumnResizing(true)
+            .HoverStateEnabled(true)
+            .Columns(c =>
+            {
+                c.Add().DataField("data_gu").Caption("지시구분").Width("9%");
+                c.Add().DataField("date_gu").Caption("금일").Width("5%");
+                c.Add().DataField("planned_date").Caption("계획일자").Width("10%");
+                c.Add().DataField("order_no").Caption("제조지시번호").Width("11%");
+                c.Add().DataField("packing_order_no").Caption("포장지시번호").Width("11%");
+                c.Add().DataField("item_cd").Caption("품목코드").Width("8%");
+                c.Add().DataField("item_nm").Caption("품목명").Width("15%");
+                c.Add().DataField("lot_no").Caption("제조번호").Width("10%");
+                c.Add().DataField("qty").Caption("수량").Width("7%");
+                c.Add().DataField("order_batch_size_unit").Caption("단위").Width("6%");
+                c.Add().DataField("order_status_nm").Caption("상태").Width("8%");
+            })
+            .OnCellDblClick("order_clicked")
+            .OnCellPrepared("order_cellPrepared")
+            )
+        </div>
+
+    </div>
+
+</div>

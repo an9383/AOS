@@ -1,0 +1,244 @@
+﻿@model HACCP.Models.RowMatWh.InOutStatus
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "InOutStatus_P";
+}
+@{
+    var InOutStatus_PData = @Html.Raw(Json.Encode(ViewBag.InOutStatus_PData.Data));
+    var InOutStatus_PAuth = @Html.Raw(Json.Encode(ViewBag.InOutStatus_PAuth.Data));
+}
+@{
+    string[] InOutStatus_Pgridkey = { "date", "inouttype", "type", "in_qty", "out_qty", "remark" };
+}
+
+<script id="InOutStatus_PJs" type="text/javascript">
+    //SP구문, gubun 변수
+    var outGubun = ""
+    var _InOutStatus_PAuth;
+    var InOutStatus_PData = @InOutStatus_PData;
+
+        $(function () {
+            setDatePicker("#InOutStatus_P .datepicker");
+
+            if (InOutStatus_PData.length <= 0) {
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@InOutStatus_PData));
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //사용자 권한
+            _InOutStatus_PAuth = JSON.parse(@InOutStatus_PAuth)[0];
+
+            if (_InOutStatus_PAuth.form_query != "Y") {
+                $("#InOutStatus_PSearch").remove();
+            }
+        });
+
+        //조회
+    function InOutStatus_PSearch() {
+        var formData = new FormData($("#InOutStatus_P_form")[0]);
+        formData.set("use_ck", $("#InOutStatus_P_form input[name=InOutStatus_PCheck_yn]:checked").val());
+        formData.set("start_date", $("#InOutStatus_P_form input[name=statusP_start_date]").val());
+        formData.set("end_date", $("#InOutStatus_P_form input[name=statusP_end_date]").val());
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/InOutStatusSelect',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#InOutStatus_PGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowIndex", -1);                    
+
+                    $("#InOutStatus_PDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#InOutStatus_PDetailGrid").dxDataGrid("instance").option("focusedRowIndex", -1);                    
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#InOutStatus_PGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+        //상단 그리드 선택 변경 시, 하단 그리드 이벤트 처리
+        function InOutStatus_PFocus_changed() {
+
+            if ($("#InOutStatus_PGrid").dxDataGrid("option", "focusedRowIndex") < 0) {
+
+                return;
+            }
+
+            var grid = $("#InOutStatus_PGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("InOutStatus_PGrid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatWh/InOutStatusSelect_S2',
+                data: {
+                    receipt_no: gridData.receipt_no,
+                    receipt_id: gridData.receipt_id,
+                    receipt_pack_seq: gridData.receipt_pack_seq
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#InOutStatus_PDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#InOutStatus_PDetailGrid").dxDataGrid("instance").option("focusedRowIndex", -1);                        
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#InOutStatus_PDetailGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+            });
+        }
+
+</script>
+
+<div id="InOutStatus_P" autoresize="Y">
+    @*<h4 class="divTitle">자재 팩 수불현황</h4>*@
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="InOutStatus_P_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="statusP_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="statusP_end_date" value="@DateTime.Today.ToShortDateString()" />
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="InOutStatus_PCheck_yn" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="InOutStatus_PCheck_yn">사용중</label></span>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="InOutStatus_PCheck_yn" />
+                        </div>
+                        <span class="form-control-sm"><label for="InOutStatus_PCheck_yn">사용X</label></span>
+
+                    </div>
+                </div>
+                <!--InOut_M 원료 3 / 자재 2-->
+                <input type="hidden" name="s_gubun" value="2" />
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!--상단 그리드-->
+        <div class="col-12 pb-1">
+            <div id="InOutStatus_PMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("InOutStatus_PGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("receipt_pack_barcode")
+                    .Height(500)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("qc_no").Caption("시험번호");
+                        c.Add().DataField("receipt_no").Caption("입고번호");
+                        c.Add().DataField("receipt_time").Caption("입고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date).AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("receipt_pack_barcode").Caption("팩 바코드");
+                        c.Add().DataField("receipt_pack_unit").Caption("단위").Width(80);
+                        c.Add().DataField("receipt_pack_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("delivery_pack_qty").Caption("출고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_pack_remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    })
+                    .OnFocusedRowChanged("InOutStatus_PFocus_changed")
+                )
+            </div>
+        </div>
+
+        <!--하단 그리드-->
+        <div class="col-12">
+            <div id="InOutStatus_PDetail" class="box mb-0">
+                <div class="divName">
+                    <p>입출고 상세 내역</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("InOutStatus_PDetailGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(false))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr(InOutStatus_Pgridkey)
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("date").Caption("입출고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date).Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("inouttype").Caption("구분").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("type").Caption("상세구분").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("in_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("out_qty").Caption("출고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remark").Caption("비고");
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 입고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("in_qty")
+                                .ShowInColumn("in_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                        /* 출고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("out_qty")
+                                .ShowInColumn("out_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+        </div>
+
+    </div>
+</div>

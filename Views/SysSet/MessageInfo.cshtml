@@ -1,0 +1,326 @@
+﻿@model HACCP.Models.SysSet.MessageInfo
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+
+    // 1.2. 좌측 Grid
+    var MessageInfo = Html.Raw(Json.Encode(ViewBag.MessageInfo.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+}
+
+@*메세지 정보*@
+
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";    // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    // SP 구문, gubun 변수
+    var curGubun = "";
+    var MessageInfo_dataGrid;
+    var MessageInfo_selectedItemCd;
+    var MessageInfo_duplicatedCheck = false;
+
+    // 스크립트 시작
+    $(function () {
+
+        if (@MessageInfo) {
+            $("#MessageInfo_GridContainer").dxDataGrid("instance").option("dataSource", JSON.parse(@MessageInfo));
+            $("#MessageInfo_GridContainer").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        MessageInfo_EditCheck(false);
+        MessageInfo_dataGrid = $("#MessageInfo_GridContainer").dxDataGrid("instance");
+      
+    });
+
+    // 수정중인지 체크
+    function MessageInfo_EditCheck(nowEdit) {
+        if (nowEdit) {
+            $("#MessageInfoSave").dxButton().parent().parent().removeClass("display-none");
+            $("#MessageInfoUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#MessageInfoSearch").dxButton().parent().parent().addClass("display-none");
+            $("#MessageInfoInput").dxButton().parent().parent().addClass("display-none");
+            $("#MessageInfoEdit").dxButton().parent().parent().addClass("display-none");
+            $("#MessageInfoDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#MessageInfoWriteForm :disabled").attr('disabled', false);
+            $("#MessageInfo_GridContainer").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#MessageInfoSave").dxButton().parent().parent().addClass("display-none");
+            $("#MessageInfoUndo").dxButton().parent().parent().addClass("display-none");
+            $("#MessageInfoSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#MessageInfoInput").dxButton().parent().parent().removeClass("display-none");
+            $("#MessageInfoEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#MessageInfoDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#MessageInfoWriteForm :enabled").attr('disabled', true);
+            $("#MessageInfo_GridContainer").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    // 그리드 선택변경시 처리
+    function MessageInfo_OnFocusedRowChanged(e) {
+        if (e.row && e.row.data) {
+            $("#MessageInfo #MSG_CODE").val(e.row.data.MSG_CODE);
+            $("#MessageInfo #MSG_TITLE").val(e.row.data.MSG_TITLE);
+            $("#MessageInfo #MSG_NAME").val(e.row.data.MSG_NAME);
+            $("#MessageInfo #MSG_BIGO").val(e.row.data.MSG_BIGO);
+        } else {
+            $("#MessageInfoWriteForm")[0].reset();
+        }
+    }
+
+    // 조회버튼 기능
+    function MessageInfoSearch() {
+        $("#MessageInfo #Gubun").val("S");
+
+        var form = $('#MessageInfoSearchForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/MessageInfoSelect',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    $("#MessageInfo_GridContainer").dxDataGrid("option", "dataSource", json);
+                } else {
+                    $("#MessageInfo_GridContainer").dxDataGrid("option", "dataSource", []);
+                    $("#MessageInfoWriteForm")[0].reset();
+                }
+
+                $("#MessageInfo #Gubun").val("S");
+            }
+        })
+        UtilView.setGridFocus("G", "MessageInfo_GridContainer");
+
+    }
+
+    // 입력 버튼
+    function MessageInfoInput() {
+        $("#MessageInfoWriteForm")[0].reset();
+        MessageInfo_EditCheck(true);
+
+        $("input[name=MSG_CODE]").attr("readonly", false);
+        $("#MessageInfo #Gubun").val("I");
+    }
+
+    // 수정 버튼
+    function MessageInfoEdit() {
+        // 키값을 미리 변수에 넣어 둔 다음 처리한다.
+        var sMsg_code = $("#MSG_CODE").val();
+        MessageInfo_EditCheck(true);
+
+        $("#MSG_CODE").val(sMsg_code);
+        $("input[name=MSG_CODE]").attr("readonly", true);
+
+        $("#MessageInfo #Gubun").val("U");
+    }
+
+    // 취소 버튼
+    function MessageInfoUndo() {
+        MessageInfo_EditCheck(false);
+        $("#MessageInfo #Gubun").val("S");
+    }
+
+    // 저장 버튼
+    function MessageInfoSave() {
+        if (UtilView.checkValidForm("MessageInfoWriteForm")) {
+
+            var form = $('#MessageInfoWriteForm')[0];
+            var data = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/MessageInfoSave',
+                data: data,
+                contentType: false,
+                processData: false,
+                cache: false,
+                timeout: 600000,
+                success: function (result) {
+                    if (result.Ok) {
+                        alert("저장되었습니다");
+
+                        MessageInfo_EditCheck(false);
+                        MessageInfoSearch();
+                        MessageInfo_duplicatedCheck = false;
+                        //complete('MessageInfo');
+                    }
+                    else {
+                        alert("저장에 실패하였습니다");
+
+                    }
+                }
+            })
+        
+        }
+
+    }
+
+    // 삭제 버튼
+    function MessageInfoDelete() {
+        if (confirm("삭제하시겠습니까?")) {
+
+            var grid = $("#MessageInfo_GridContainer").dxDataGrid("instance");
+            if (grid.totalCount() <= 0) return;
+            var data = getGridRowByKey('MessageInfo_GridContainer', grid.option("focusedRowKey"));
+
+            // 키값(data)을 Form 데이터에 세팅
+            $("#sMsg_code").val(data.MSG_CODE);
+            var form = $('#MessageInfoSearchForm')[0];
+            var data = new FormData(form);
+            $("#MessageInfo #Gubun").val("D");
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/MessageInfoDelete',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    if (result) {
+                        alert("삭제되었습니다.");
+                        MessageInfoSearch();
+                    }
+                    else alert("삭제에 실패하였습니다");
+
+                    MessageInfo_EditCheck(false);
+                }
+            });    
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" autoresize="Y">
+
+    <div id="MessageInfoTop" class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">메세지명</span>
+                        </div>
+                        <input type="text" class="form-control" name="sMsg_name">
+                        <input type="text" id="sMsg_code" name="sMsg_code" hidden="hidden" />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+
+    <div class="row">
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("MessageInfo_GridContainer")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Height(900)
+                //.DataSource((System.Collections.IEnumerable)ViewBag.MessageInfo)
+                .KeyExpr("MSG_CODE")
+                .Columns(c =>
+                {
+                    c.Add().DataField("MSG_CODE").Caption("메세지코드");
+                    c.Add().DataField("MSG_TITLE").Caption("메세지구분");
+                    c.Add().DataField("MSG_NAME").Caption("메세지명");
+                    c.Add().DataField("MSG_BIGO").Caption("비고");
+                })
+                .OnFocusedRowChanged("MessageInfo_OnFocusedRowChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box">
+                <div class="divName">
+                    <p>메세지 정보</p>
+                </div>
+
+                <div class="menuDiv">
+                    <form id="@(pagePrefix)WriteForm">
+                        <input type="text" name="Gubun" id="Gubun" hidden="hidden" />
+                        <div class="input-wrapper">
+                            <label class="col-3">메세지코드</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control required" name="MSG_CODE" id="MSG_CODE" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">메세지구분</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control required" name="MSG_TITLE" id="MSG_TITLE" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">메세지명</label>
+                            <div class="input-group col-8">
+                                <textarea class="form-control required" name="MSG_NAME" id="MSG_NAME" required></textarea>
+                            </div>
+                        </div>
+
+
+                        <div class="input-wrapper">
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <textarea class="form-control" name="MSG_BIGO" id="MSG_BIGO"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>

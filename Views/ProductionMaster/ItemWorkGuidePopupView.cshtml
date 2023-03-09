@@ -1,0 +1,377 @@
+﻿@*ItemWorkGuidePopupView*@
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+
+    var WorkGuideData = Html.Raw(Json.Encode(ViewBag.WorkGuideData.Data));
+    var mp_ck = Html.Raw(Json.Encode(ViewBag.mp_ck));
+    var search_info = Html.Raw(Json.Encode(ViewBag.search_info));
+}
+
+    <script>
+    var itemGuide_Count = 0;
+
+    $(function () {
+        if ((@WorkGuideData).length > 0) {
+            $("#ItemWorkGuidePopupGrid").dxDataGrid("option", "dataSource", JSON.parse(@WorkGuideData));
+        }
+
+        $("#ItemWorkGuidePopupGrid .dx-datagrid .dx-textbox ").dxTextBox({
+            value: (@search_info)
+        });
+
+         if ((@mp_ck) == "M") {
+            var itemWorkGuideDataGrid = $("#itemWorkGuideDataGrid").dxDataGrid("instance");
+            itemGuide_Count = itemWorkGuideDataGrid.totalCount() + 1;
+
+         } else if ((@mp_ck) == "P") {
+             var itemWorkGuideDataGrid = $("#ItemGuide2itemWorkGuideDataGrid").dxDataGrid("instance");
+             itemGuide_Count = itemWorkGuideDataGrid.totalCount() + 1;
+        }
+    })
+
+
+    // 복사 버튼 클릭 시 해당 행 복사
+    function RowData_Insert(e) {
+        if (e.rowType == "header" || e.columnIndex != 10) {
+
+            return;
+        }
+
+        var url = "/ProductionMaster";
+        var data = e.data;
+        data.pGubun = "I";
+
+        if ((@mp_ck) == "M") {
+            data.item_cd = $("#ItemGuideItemCode").val();
+            data.revision_no = $("#ItemGuideRevisionNo").val();
+            data.batch_size = $("#ItemGuide select[name=batch_size]").val();
+            data.process_cd = "";
+
+            if ($("#itemProcessGrid").dxTreeList("instance").getNodeByKey($("#itemProcessGrid").dxTreeList("option", "focusedRowKey")) != null) {
+
+                data.process_cd = $("#itemProcessGrid").dxTreeList("instance").getNodeByKey($("#itemProcessGrid").dxTreeList("option", "focusedRowKey")).data.process_cd;
+            }
+
+            url += "/ItemWorkGuideCRUD";
+
+        } else if ((@mp_ck) == "P") {
+            data.item_cd = $("#ItemGuide2SearchForm input[name=item_cd]").val();
+            data.revision_no = $("#ItemGuide2SearchForm select[name=revision_no]").val();
+            data.batch_size = "";
+            data.process_cd = "";
+
+            if ($("#ItemGuide2ProcessTreeList").dxTreeList("instance").getNodeByKey($("#ItemGuide2ProcessTreeList").dxTreeList("option", "focusedRowKey")) != null) {
+
+                data.process_cd = $("#ItemGuide2ProcessTreeList").dxTreeList("instance").getNodeByKey($("#ItemGuide2ProcessTreeList").dxTreeList("option", "focusedRowKey")).data.process_cd;
+            }
+
+            url += "/ItemGuide2ItemWorkGuideCRUD";
+        }
+
+        data.workguide_seq = itemGuide_Count;
+
+
+        $.ajax({
+            type: 'POST',
+            url: url,
+            data: data,
+            success: function (result) {
+                if ((@mp_ck) == "M") {
+                    getWorkGuide(data.process_cd);
+                } else if ((@mp_ck) == "P") {
+                    ItemGuide2getWorkGuide(data.process_cd);
+                }
+            }
+        });
+
+        if ((@mp_ck) == "M") {
+            var popup = $("#ItemWorkGuideCopyPopup").dxPopup('instance');
+            popup.hide();
+        } else if ((@mp_ck) == "P") {
+            var popup = $("#ItemWorkGuide2CopyPopup").dxPopup('instance');
+            popup.hide();
+        }
+    }
+
+
+    // 선택복사 클릭 시 선택된 행 전부 복사
+    function SelectGuideCopy() {
+        var grid = $("#ItemWorkGuidePopupGrid").dxDataGrid("instance");
+        var selectedData = grid.getSelectedRowsData();
+
+        if (selectedData.length > 0) {
+            for (var i = 0; i < selectedData.length; i++) {
+                DevExpress.ui.notify({ message: (i + 1) + "/" + selectedData.length + " 번째 작업방법을 복사 중입니다.", height: "50", position: "top center" }, "info", 600);
+
+                var url = "/ProductionMaster";
+                var data = selectedData[i];
+                data.pGubun = "I";
+
+                if ((@mp_ck) == "M") {
+                    data.item_cd = $("#ItemGuideItemCode").val();
+                    data.revision_no = $("#ItemGuideRevisionNo").val();
+                    data.batch_size = $("#ItemGuide select[name=batch_size]").val();
+                    data.process_cd = "";
+
+                    if ($("#itemProcessGrid").dxTreeList("instance").getNodeByKey($("#itemProcessGrid").dxTreeList("option", "focusedRowKey")) != null) {
+
+                        data.process_cd = $("#itemProcessGrid").dxTreeList("instance").getNodeByKey($("#itemProcessGrid").dxTreeList("option", "focusedRowKey")).data.process_cd;
+                    }
+
+                    url += "/ItemWorkGuideCRUD";
+
+                } else if ((@mp_ck) == "P") {
+                    data.item_cd = $("#ItemGuide2SearchForm input[name=item_cd]").val();
+                    data.revision_no = $("#ItemGuide2SearchForm select[name=revision_no]").val();
+                    data.batch_size = "";
+                    data.process_cd = "";
+
+                    if ($("#ItemGuide2ProcessTreeList").dxTreeList("instance").getNodeByKey($("#ItemGuide2ProcessTreeList").dxTreeList("option", "focusedRowKey")) != null) {
+
+                        data.process_cd = $("#ItemGuide2ProcessTreeList").dxTreeList("instance").getNodeByKey($("#ItemGuide2ProcessTreeList").dxTreeList("option", "focusedRowKey")).data.process_cd;
+                    }
+
+                    url += "/ItemGuide2ItemWorkGuideCRUD";
+                }
+
+                data.workguide_seq = itemGuide_Count++;
+
+                $.ajax({
+                    type: 'POST',
+                    url: url,
+                    data: data,
+                    success: function (result) {
+                        if ((@mp_ck) == "M") {
+                            getWorkGuide(data.process_cd);
+                        } else if ((@mp_ck) == "P") {
+                            ItemGuide2getWorkGuide(data.process_cd);
+                        }
+                    }
+                });
+
+                if (i == selectedData.length - 1) {
+                    if ((@mp_ck) == "M") {
+                        var popup = $("#ItemWorkGuideCopyPopup").dxPopup('instance');
+                        popup.hide();
+                    } else if ((@mp_ck) == "P") {
+                        var popup = $("#ItemWorkGuide2CopyPopup").dxPopup('instance');
+                        popup.hide();
+                    }
+                }
+            }
+        }
+    }
+
+
+    // 버튼 컬럼
+    function ItemWorkGuidePopupGridButton(container, cellInfo) {
+        $("<div>").html("<div class='icon-check'></div>")
+            .appendTo(container);
+
+        $(".icon-check").dxButton({
+            icon: "movetofolder",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+
+
+
+    @*
+    var itemCount = 0;
+    var mergeCount = new Array();
+    var test = 0;
+    var test2 = 0;
+    function testFunction(e) {
+        debugger;
+        console.log("TESTTEST");
+
+        var cellData = e.cells;
+
+        if (cellData[0].rowType !== "data") {
+            return;
+        }
+        var data = e.values;
+
+        var search_text = $("#ItemWorkGuidePopupGrid .dx-datagrid .dx-textbox ").dxTextBox("option", "value");
+        var data_source = JSON.parse(@WorkGuideData);
+        var data_arry = new Array();
+
+        for (var i = 0; i < data_source.length; i++) {
+            if (data_source[i].process_nm == search_text) {
+                data_arry.push(data_source[i]);
+            }
+        }
+
+        if (data_arry.length == 0) {
+            data_arry = data_source;
+        }
+
+        const sum = mergeCount.reduce((stack, el) => {
+            return stack + el;
+        }, 0);
+
+        if (data_arry.length == sum) {
+
+        } else {
+            var count = 1;
+            for (var i = 0; i < data_arry.length; i++) {
+                if (i != data_arry.length - 1) {
+                    if (data_arry[i].item_cd == data_arry[i + 1].item_cd) {
+                        mergeCount[itemCount] = count++;
+                    } else {
+                        mergeCount[itemCount] = count++;
+                        itemCount++;
+                        count = 1;
+                    }
+                } else {
+                    if (data_arry[i].item_cd == data_arry[i - 1].item_cd) {
+                        mergeCount[itemCount] = count++;
+                    } else {
+                        mergeCount[itemCount + 1] = 1;
+                    }
+                }
+            }
+            test = mergeCount[0];
+        }
+
+
+        console.log(test);
+        console.log(mergeCount[test2]);
+        console.log(test2)
+        console.log(mergeCount.length);
+        if (test == mergeCount[test2]) {
+            cellData[0].cellElement.attr("rowspan", test);
+            test--;
+        } else if (test != 1) {
+            cellData[0].cellElement.css("display", "none");
+            test--;
+        } else if (test == 1) {
+            cellData[0].cellElement.css("display", "none");
+            test2++
+            test = mergeCount[test2];
+        }
+
+        if (test2 == mergeCount.length) {
+            test2 = 0;
+        }
+    }*@
+
+    </script>
+
+
+
+<div id="@(pagePrefix)">
+    <button class="btn btn-secondary" onclick="SelectGuideCopy()" id="selectGuide_copy_btn">선택복사</button>
+
+    <div>
+        @(Html.DevExtreme().DataGrid()
+            .ID("ItemWorkGuidePopupGrid")
+            .KeyExpr("row_num")
+            .FocusedRowEnabled(true)
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .ShowRowLines(true)
+            .SearchPanel(searchPanel => searchPanel.Visible(true))
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .Selection(select => select.Mode(SelectionMode.Multiple)
+                        .ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+            .Height(600)
+            .AllowColumnResizing(true)
+            .Columns(columns =>
+            {
+                columns.Add()
+                    .Caption("품목명")
+                    .DataField("item_nm")
+                    .DataType(GridColumnDataType.String)
+                    .Width("130");
+                columns.Add()
+                    .Caption("공정명")
+                    .DataField("process_nm")
+                    .DataType(GridColumnDataType.String)
+                    .Width("100");
+                columns.Add()
+                    .Caption("작업방법")
+                    .DataField("workguide_method")
+                    .DataType(GridColumnDataType.String)
+                    .Width("300");
+                columns.Add()
+                    .Caption("자료종류")
+                    .DataField("workguide_data_type_nm")
+                    .DataType(GridColumnDataType.String)
+                    .Width("100");
+                columns.Add()
+                    .Caption("관리min")
+                    .DataField("workguide_min_manage")
+                    .DataType(GridColumnDataType.Number)
+                    .Width("80");
+                columns.Add()
+                    .Caption("관리max")
+                    .DataField("workguide_max_manage")
+                    .DataType(GridColumnDataType.Number)
+                    .Width("80");
+                columns.Add()
+                    .Caption("기계(설비)")
+                    .DataField("equip_nm")
+                    .DataType(GridColumnDataType.String)
+                    .Width("120");
+
+                columns.Add()
+                    .Caption("반복여부")
+                    .DataField("proc_rep_yn")
+                    .DataType(GridColumnDataType.Boolean)
+                    .CalculateCellValue(@"function(rowData) { 
+                        var check = false;
+                        if(rowData.proc_rep_yn == ""Y"" || rowData.proc_rep_yn == true) {
+                            check = true;
+                        }else {
+                            check = false;
+                        }
+
+                        return check; 
+                    }");
+
+                columns.Add()
+                    .Caption("점검항목")
+                    .DataField("check_proc")
+                    .DataType(GridColumnDataType.Boolean)
+                    .CalculateCellValue(@"function(rowData) { 
+                        var check = false;
+                        if(rowData.check_proc == ""Y"" || rowData.check_proc == true) {
+                            check = true;
+                        }else {
+                            check = false;
+                        }
+
+                        return check; 
+                    }");
+
+                columns.Add()
+                    .Caption("")
+                    .Alignment(HorizontalAlignment.Center)
+                    .CellTemplate(new JS("ItemWorkGuidePopupGridButton"))
+                    .Width("50");
+
+                columns.Add()
+                    .Caption("workguide_sub_item")
+                    .Visible(false);
+
+            })
+            //.OnCellDblClick("RowData_Insert")
+            .OnCellClick("RowData_Insert")
+        //.OnRowPrepared("testFunction")
+        )
+    </div>
+</div>

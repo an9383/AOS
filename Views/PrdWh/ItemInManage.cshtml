@@ -1,0 +1,902 @@
+﻿@model HACCP.Models.PrdWh.ItemInManage
+@using System.Data;
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ItemInManage";
+    string sData = ViewData["data"] as String;
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+}
+@{
+    var ItemInManageData = @Html.Raw(Json.Encode(ViewBag.ItemInManageData.Data));
+    var ItemInManageAuth = @Html.Raw(Json.Encode(ViewBag.ItemInManageAuth.Data));
+}
+
+<script id="ItemInManageJs" type="text/javascript">
+        var ItemInManage_Gubun = "";
+        var _ItemInManageAuth;
+        var ItemInManageData = @ItemInManageData;
+        var _ItemInManageCellClickEvent;
+
+    var ItemInManageCrudGubun = "";
+
+    //그리드 수정내용 담는 Array
+    var _ItemInManage_List = new Array();
+    //validation check
+    var _ItemInManage_Valid = true;
+
+
+    $(function () {
+        setDatePicker("#ItemInManage .datepicker");
+
+        if (ItemInManageData.length <= 0) {
+            $("#ItemInManageGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#ItemInManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ItemInManageData));
+            $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //사용자 권한
+        _ItemInManageAuth = JSON.parse(@ItemInManageAuth)[0];
+
+        if (_ItemInManageAuth.form_edit != "Y") {
+            $("#ItemInManageEdit").remove();
+        }
+
+        //수정중 체크
+        ItemInManageEditCheck(false, "N");
+
+    });
+
+    // 수정중인지 체크
+    function ItemInManageEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "@(pagePrefix)DetailGrid"
+            , "@(pagePrefix)Grid"
+            , ""
+        );
+
+        if (nowEdit) {
+
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#ItemInManageGrid").dxDataGrid("option", "editing", editing);
+        }
+        else {
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#ItemInManageGrid").dxDataGrid("option", "editing", editing);
+            ItemInManageCrudGubun = "";
+        }
+
+    }
+
+
+    //기간 변경에 따른 검색
+    function ItemInManageSearch() {
+        //var formData = new FormData($("#ItemInManage_Popupform")[0]);
+
+        $("#ItemInManageGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+        $("#ItemInManageDetailGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ItemInManageDetailGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#ItemInManageDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+        var formData = new FormData();
+
+        var start_date = $("#ItemInManageSearchForm input[name=IIM_start_date]").val();
+        var end_date = $("#ItemInManageSearchForm input[name=IIM_end_date]").val();
+        var in_type = $("#ItemInManageSearchForm select[name=in_type]").val();
+
+        formData.append("start_date", start_date);
+        formData.append("end_date", end_date);
+        formData.append("in_type", in_type);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdWh/ItemInManage_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#ItemInManageGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#ItemInManageDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ItemInManageGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ItemInManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                call_ItemInManage_Detail(json[0]);
+            }
+        });
+    }
+
+    //상단 그리드 선택 변경 시, 하단 그리드 이벤트 처리
+    function ItemInManageFocus_changed(e) {
+        var grid = $("#ItemInManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ItemInManageGrid", grid.option("focusedRowKey"));
+        call_ItemInManage_Detail(gridData);
+    }
+
+    function call_ItemInManage_Detail(data) {
+        $.ajax({
+            type: 'POST',
+            url: '/PrdWh/ItemInManage_Select2',
+            data: {
+                box_barcode_no: data.box_barcode_no
+            },
+            success: function (result) {
+                var json1 = JSON.parse(result);
+                if (result.length <= 0) {
+                    $("#ItemInManageDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ItemInManageDetailGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    return;
+                }
+
+                if (json1.sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ItemInManageDetailGrid").dxDataGrid("instance").option("dataSource", json1);
+                $("#ItemInManageDetailGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ItemInManageDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+    //저장 버튼 비활성화
+    function ItemInManage_ToolbarEdit(e) {
+
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+
+    //그리드 validation check
+    function ItemInManage_Required(e) {
+        _ItemInManage_Valid = e.isValid;
+    }
+
+    //CRUD 수정 버튼 클릭
+    function ItemInManageEdit() {
+        ItemInManageEditCheck(true, "U");
+        ItemInManageCrudGubun = "Update";
+        _ItemInManage_List = new Array();
+
+    }
+
+    ////CRUD 저장 버튼 클릭
+    //function ItemInManageSave() {
+    //    ItemInManageEditCheck(false, "N");
+    //    ItemInManageSearch();
+    //}
+
+
+    //CRUD 저장 버튼 클릭
+    async function ItemInManageSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) {
+            return;
+        }
+
+        await $("#ItemInManageGrid").dxDataGrid("instance").saveEditData();
+
+        if (!_ItemInManage_Valid) {
+            alert("필수 데이터를 입력하시오.");
+            return;
+        }
+        ItemInManageCRUD(_ItemInManage_List);
+
+
+    }
+
+    //CRUD 취소 버튼 클릭
+    function ItemInManageUndo() {
+        ItemInManageEditCheck(false, "N");
+
+        _ItemInManage_List = new Array();
+        _ItemInManage_Valid = true;
+        ItemInManageCrudGubun = "";
+
+        ItemInManageSearch();
+    }
+
+    //Dev 수정버튼
+    function ItemInManageUpdate(info) {
+        ItemInManageEditCheck(true, "U");
+        ItemInManageCrudGubun = "Update";
+
+        //var formData = new FormData();
+        ItemInManage_GetFormData(info.data);
+
+    }
+
+    //Dev 입력버튼
+    function ItemInManageInsert(info) {
+
+        ItemInManageEditCheck(true, "I");
+        ItemInManageCrudGubun = "Insert";
+
+        ItemInManage_GetFormData(info.data);
+
+    }
+
+    //파란 삭제버튼
+    //function ItemInManageDelete() {
+
+    //    ItemInManageEditCheck(true, "D");
+    //    ItemInManageCrudGubun = "Delete";
+    //    var formData = new FormData();
+
+    //    // 삭제 여부 팝업
+    //    if (confirm("정말 삭제하시겠습니까??") === true) {
+
+    //        var grid = $("#ItemInManageGrid").dxDataGrid("instance");
+    //        var data = getGridRowByKey("ItemInManageGrid", grid.option("focusedRowKey"));
+
+    //        ItemInManage_GetFormData(formData, data);
+
+
+    //    } else {   //취소
+
+    //        ItemInManageEditCheck(false, "N");
+    //        ItemInManageSearch();
+    //        return;
+
+    //    }
+
+    //}
+
+    //Dev 삭제버튼
+    function ItemInManageDelete(info) {
+        //var formData = new FormData();
+        ItemInManageCrudGubun = "Delete";
+
+        // 삭제 여부 팝업
+        //if (confirm("정말 삭제하시겠습니까??") === true) {
+
+            ItemInManage_GetFormData(info.data);
+
+        //} else {   //취소
+        //    ItemInManageUndo();
+        //    return;
+
+        //}
+
+    }
+
+    function ItemInManage_GetFormData(data) {
+
+        //var formData = new FormData();
+
+        if (data.in_date != null) {
+            var date = new Date(data.in_date);
+
+            var year = date.getFullYear();
+            var month = date.getMonth() + 1;
+            var day = date.getDate();
+
+            month = (month < 10) ? ("0" + month) : month;
+            day = (day < 10) ? ("0" + day) : day;
+
+            data.in_date = year + "-" + month + "-" + day;
+
+            //formData.append("in_date", data.in_date);
+        }
+        else {
+            alert("기타입고 날짜를 입력하세요.");
+            return;
+        }
+
+        if (data.item_cd == null) {
+            //formData.append("item_cd", data.item_cd);
+        //else {
+            alert("기타입고 제품정보를 입력하세요.");
+            return;
+        }
+        if (data.in_qty == null) {
+            //formData.append("in_qty", data.in_qty);
+        //else {
+            alert("기타입고 수량을 입력하세요.");
+            return;
+        }
+        if (data.in_type == null) {
+           // formData.append("in_type", data.in_type);
+        //else {
+            alert("기타입고 상세구분을 입력하세요.");
+            return;
+        }
+
+        //formData.append("item_nm", data.item_nm);
+        //formData.append("lot_no", data.lot_no);
+        //formData.append("box_barcode_no", data.box_barcode_no);
+        //formData.append("prod_qty", data.prod_qty);
+        //formData.append("delivery_qty", data.delivery_qty);
+        //formData.append("stock_qty", data.stock_qty);
+
+        //if (data.packing_result_pack_in_history_id != null)
+        //    formData.append("packing_result_pack_in_history_id", data.packing_result_pack_in_history_id);
+        //else
+        //    formData.append("packing_result_pack_in_history_id", "");
+        //if (data.item_stock_id != null)
+        //    formData.append("item_stock_id", data.item_stock_id);
+        //else
+        //    formData.append("item_stock_id", "");
+
+        //if (data.packing_result_id != null)
+        //    formData.append("packing_result_id", data.packing_result_id);
+        //else
+        //    formData.append("packing_result_id", "");
+        //if (data.in_remark != null)
+        //    formData.append("in_remark", data.in_remark);
+        //else
+        //    formData.append("in_remark", "");
+        //if (data.item_unit != null)
+        //    formData.append("item_unit", data.item_unit);
+        //else
+        //    formData.append("item_unit", "");
+
+
+        //formData.append("gubun", ItemInManageCrudGubun);
+        data.gubun = ItemInManageCrudGubun;
+
+        _ItemInManage_List.push(data);
+
+    }
+    //batch모드 저장
+    function ItemInManageCRUD(data) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdWh/ItemInManageCRUD',
+            data: {
+                mModel: JSON.stringify(data)
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+
+                //if (JSON.parse(result).sessionLoss) {
+                //    alert("세션이 만료되었습니다.");
+                //    sessionStorage.clear();
+                //    location.replace("/Comm/Login");
+                //}
+
+                alert("저장되었습니다.");
+
+                ItemInManageEditCheck(false, "N");
+                ItemInManageSearch();
+
+            }
+        });
+
+        //$.ajax({
+        //    type: 'POST',
+        //    url: '/PrdWh/ItemInManageCRUD',
+        //    data: data,
+        //    contentType: false,
+        //    processData: false,
+        //    success: function (result) {
+        //        alert(result);
+
+        //        ItemInManageEditCheck(false, "N");
+        //        ItemInManageSearch();
+
+        //    }
+        //});
+
+    }
+
+    //구분값에 따라 Cell Readonly
+    function ItemInManageEditableCell(e) {
+
+        if (e.parentType === "dataRow") {
+            if (e.columnIndex == 1 || e.dataField == "item_cd") { //완제품코드
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 2 || e.dataField == "item_nm") { //완제품 명
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 3 || e.dataField == "lot_no") { //제조번호
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 4 || e.dataField == "box_barcode_no") { //팔레트 바코드
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 5 || e.dataField == "prod_qty") { //입고량 합계
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 6 || e.dataField == "delivery_qty") { //출고량 합계
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 7 || e.dataField == "stock_qty") { //재고량
+                e.editorOptions.disabled = true;
+            }
+        }
+
+        //기타입고량 ',' 인식 지정.
+        if (e.parentType == 'dataRow' && e.dataField == 'in_qty') {
+
+            e.editorOptions.format = "#,##0";
+        }
+
+    }
+
+    //CellClick 이벤트
+    function ItemInManagecellWithButton(IIM_container, IIM_cellInfo) {
+
+        if (typeof IIM_cellInfo.value == "undefined" || IIM_cellInfo.value == null)
+            IIM_cellInfo.value = "";
+
+        if (!(ItemInManageCrudGubun == "Update")) {
+            $("<div>").html(IIM_cellInfo.value)
+                .appendTo(IIM_container);
+            return;
+        }
+
+        //$("<div>").html("<div style='float:left;'>" + IIM_cellInfo.value + "</div><div style='float:right;' id='IIM_icon-plus" + (IIM_cellInfo.rowIndex + 1) + "'></div>")
+        //    .appendTo(IIM_container);
+
+        $("<div>").html("<div style='float:left; padding-top: 7%;'>" + IIM_cellInfo.value + "</div><div style='float:right;' id='IIM_icon-plus" + (IIM_cellInfo.rowIndex + 1) + "'></div>")
+            .appendTo(IIM_container);
+
+        $("#IIM_icon-plus" + (IIM_cellInfo.rowIndex + 1)).dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+        //완제품 리스트 팝업
+    function ItemInManageCellEvent(e) {
+
+        $(function () {
+            $('.datepicker').datepicker({
+                format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+                endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+                autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+                calendarWeeks: false, //캘린더 옆에 몇 주차인지 보여주는 옵션 기본값 false 보여주려면 true
+                clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+                //datesDisabled: ['2019-06-24', '2019-06-26'],//선택 불가능한 일 설정 하는 배열 위에 있는 format 과 형식이 같아야함.
+                //daysOfWeekDisabled: [0, 6],	//선택 불가능한 요일 설정 0 : 일요일 ~ 6 : 토요일
+                //daysOfWeekHighlighted: [3], //강조 되어야 하는 요일 설정
+                disableTouchKeyboard: false,	//모바일에서 플러그인 작동 여부 기본값 false 가 작동 true가 작동 안함.
+                immediateUpdates: false,	//사용자가 보는 화면으로 바로바로 날짜를 변경할지 여부 기본값 :false
+                multidate: false, //여러 날짜 선택할 수 있게 하는 옵션 기본값 :false
+                multidateSeparator: ",", //여러 날짜를 선택했을 때 사이에 나타나는 글짜 2019-05-01,2019-06-01
+                templates: {
+                    leftArrow: '&laquo;',
+                    rightArrow: '&raquo;'
+                }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+                //title: "테스트",	//캘린더 상단에 보여주는 타이틀
+                todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+
+            });//datepicker end
+        })
+
+        _ItemInManageCellClickEvent = e;
+
+        if (e.columnIndex == 1) {
+
+            if (!e.row.isNewRow) {
+                alert("완제품 코드는 수정할 수 없습니다.");
+                return;
+            }
+
+            var popup = $("#ItemInManage_ItemPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#ItemInManageItemPopupTemplate_1"));
+
+            var start_date = $("#ItemInManageSearchForm input[name=IIM_start_date]").val();
+            var end_date = $("#ItemInManageSearchForm input[name=IIM_end_date]").val();
+
+            popup.show();
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdWh/ItemInManage_ItemPopup',
+                data: {
+                    start_date: start_date,
+                    end_date: end_date
+                },
+                success: function (result) {
+
+                    if (result[0] != "") {
+                        var jsonResult = JSON.parse(result);
+
+                        $("#ItemInManageItemPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+                    }
+                }
+            })
+        }
+    }
+
+    //완제품 리스트 팝업 -> item 선택 -> main그리드에 값 설정
+    function addItemInManageItem() {
+
+        //완제품 리스트 팝업 선택 데이터
+        var popGrid = $("#ItemInManageItemPopupGrid").dxDataGrid("instance");
+        var selData = getGridRowByKey("ItemInManageItemPopupGrid", popGrid.option("focusedRowKey"));
+
+        //main 상단 그리드
+        var grid = $("#ItemInManageGrid").dxDataGrid("instance");
+
+        var popup = $("#ItemInManage_ItemPopup").dxPopup("instance");
+        popup.hide();
+
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "item_cd", selData.완제품코드);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "item_nm", selData.완제품명);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "lot_no", selData.제조번호);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "box_barcode_no", selData.팔레트바코드);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "prod_qty", selData.입고량);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "delivery_qty", selData.출고량);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "stock_qty", selData.재고량);
+        //화면에 안나오는 정보들
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "item_unit", selData.포장단위);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "item_stock_id", selData.제품재고일련번호);
+        grid.cellValue(_ItemInManageCellClickEvent.rowIndex, "packing_result_id", selData.포장실적일련번호);
+    }
+
+    //완제품 리스트 팝업 -> 기간 선택 -> 기간 내로 조회
+    function searchItemInManageItem() {
+
+        var pop_start_date = $("#ItemInManage_Popupform input[name=IIM_pop_start_date]").val();
+        var pop_end_date = $("#ItemInManage_Popupform input[name=IIM_pop_end_date]").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdWh/ItemInManage_ItemPopup',
+            data: {
+                start_date: pop_start_date,
+                end_date: pop_end_date
+            },
+            success: function (result) {
+
+                if (result[0] != "") {
+                    var jsonResult = JSON.parse(result);
+
+                    $("#ItemInManageItemPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+                } else {
+                    $("#ItemInManageItemPopupGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+</script>
+
+<div id="ItemInManage" autoresize="Y">
+
+    <!--완제품 기타 입고 리스트 팝업-->
+    <div id="ItemInManage_ItemPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("ItemInManage_ItemPopup")
+            .Width(1200)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("완제품 기타 입고 리스트")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("ItemInManageItemPopupToolbar_1"))
+    {
+        <div style="width:1000px;">
+
+            <form id="ItemInManage_Popupform">
+                <div>
+                    <label class="col-1">기간</label>
+                    <input type="text" class="form-control col-1 datepicker" name="IIM_pop_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToShortDateString()" />
+                    &nbsp; ~ &nbsp;
+                    <input type="text" class="form-control col-1 datepicker" name="IIM_pop_end_date" value="@DateTime.Today.ToShortDateString()" />
+                </div>
+            </form>
+
+        </div>
+    }
+
+    @using (Html.DevExtreme().NamedTemplate("ItemInManageItemPopupTemplate_1"))
+    {
+        @(Html.DevExtreme().Toolbar()
+                .ID("ItemInManageItemPopupTemplateToolbar_1")
+                .Items(items =>
+                {
+                    items.Add()
+                    .Template(new TemplateName("ItemInManageItemPopupToolbar_1"))
+                    .Location(ToolbarItemLocation.Before);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("searchItemInManageItem")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("searchItemInManageItem")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("addItemInManageItem")
+                        .Icon("check")
+                        .Text("확인")
+                        .OnClick("addItemInManageItem")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+
+        <div class="row">
+            <div class="col-12">
+                <div id="ItemInManageItemPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                            .ID("ItemInManageItemPopupGrid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(550)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .FocusedRowIndex(0)
+                            .FocusedRowEnabled(true)
+                            .KeyExpr("팔레트바코드")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("입고일자").Caption("입고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                                c.Add().DataField("완제품코드").Caption("완제품 코드");
+                                c.Add().DataField("완제품명").Caption("완제품 명");
+                                c.Add().DataField("제조번호").Caption("제조번호");
+                                c.Add().DataField("팔레트바코드").Caption("팔레트 바코드");
+                            })
+                            .OnRowDblClick("addItemInManageItem")
+                        )
+                </div>
+            </div>
+        </div>
+
+    }
+    <!--완제품 기타 입고 리스트 팝업 종료-->
+
+
+    <div class="mainTop row">
+        <div class="col-8" id="ItemInManageSearchOptions">
+            <form id="ItemInManageSearchForm">
+                <div class="input-wrapper col-12" style="padding:0px">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="IIM_start_date" id="IIM_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToShortDateString()" />
+                        <Label class="p-1">~</Label>
+                        <input type="text" class="form-control datepicker" name="IIM_end_date" id="IIM_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <select class="col-4 form-control" name="in_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.in_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="col-4 CRUD-btn">
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo");}
+        </div>
+
+    </div>
+
+    <div class="row mb-0" style="height:auto">
+        <!--상단 그리드-->
+        <div class="col-12 mb-1" style="height:450px">
+            <div id="ItemInManageMain" class="box mb-1">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemInManageGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Row);
+                        editing.AllowAdding(false);
+                        editing.AllowDeleting(false);
+                        editing.AllowUpdating(false);
+                    })
+                    .OnRowUpdated("ItemInManageUpdate")
+                    .OnRowInserted("ItemInManageInsert")
+                    .OnRowRemoved("ItemInManageDelete")
+                    .OnEditorPreparing("ItemInManageEditableCell")
+                    .OnToolbarPreparing("ItemInManage_ToolbarEdit")
+                    .OnRowValidating("ItemInManage_Required")
+                    .KeyExpr("packing_result_pack_in_history_id")
+                    .Height(450)
+                    .OnCellClick("ItemInManageCellEvent")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("in_date").Caption("입고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("입고일자가 지정되지 않아 저장할 수 없습니다.");
+                            });
+                        c.Add().DataField("item_cd").Caption("완제품 코드").CellTemplate(new JS("ItemInManagecellWithButton")).Width(150)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("완제품코드가 지정되지 않아 저장할 수 없습니다.");
+                            });
+                        c.Add().DataField("item_nm").Caption("완제품 명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("box_barcode_no").Caption("팔레트 바코드");
+                        c.Add().DataField("prod_qty").Caption("입고량 합계").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("delivery_qty").Caption("출고량 합계").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("stock_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add()
+                                .Caption("상세구분")
+                                .Lookup(lookup => lookup
+                                    .DataSource(d => d.WebApi()
+                                        .RouteName("Comm")
+                                        .LoadAction("GetCommon")
+                                        .LoadMethod("GET")
+                                        .LoadParams(new
+                                        {
+                                            pGubun = "공통코드"
+                                            ,
+                                            pDiv = "D"
+                                            ,
+                                            pStrWhere = "GD201"
+                                            ,
+                                            pTableName = "unit"
+                                        }
+                                    ).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    ).DataField("in_type")
+                                    .DataType(GridColumnDataType.String)
+                                    .ValidationRules(vr =>
+                                    {
+                                        vr.AddRequired().Message("상세구분이 지정되지 않아 저장할 수 없습니다.");
+                                    });
+                        c.Add().DataField("in_qty").Caption("기타입고량").Format("#,##0").DataType(GridColumnDataType.Number)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("기타입고량이 지정되지 않아 저장할 수 없습니다.");
+                            });
+                        c.Add().DataField("in_remark").Caption("비고");
+                        c.Add().DataField("item_unit").Caption("포장단위").Visible(false);
+                        c.Add().DataField("item_stock_id").Caption("제품재고일련번호").Visible(false);
+                        c.Add().DataField("packing_result_id").Caption("포장실적일련번호").Visible(false);
+
+                    })
+                    .OnFocusedRowChanged("ItemInManageFocus_changed")
+                )
+            </div>
+        </div>
+
+    </div>
+    <div class="row box m-0">
+        <!--하단 그리드-->
+        <div class="col-12 p-0" style="height:370px">
+            <div id="ItemInManageDetail" class="box ">
+                <div class="divName">
+                    <p>기타 입출고 상세 내역</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemInManageDetailGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .SearchPanel(searchPanel => searchPanel.Visible(false))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .KeyExpr("time")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("date").Caption("입출고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("inouttype").Caption("구분");
+                        c.Add().DataField("type").Caption("상세구분");
+                        c.Add().DataField("in_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("out_qty").Caption("출고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remark").Caption("비고");
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 입고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary_In")
+                        .Column("in_qty")
+                                .ShowInColumn("in_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                        /* 출고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary_Out")
+                        .Column("out_qty")
+                                .ShowInColumn("out_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

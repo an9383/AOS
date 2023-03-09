@@ -1,0 +1,835 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Gmp_doc_record_search";
+
+}
+
+@{
+    var DocRecordSearch_tabs = new[] {
+        new { id = 1, text = "목차" },
+        new { id = 2, text = "색인" }
+    };
+
+    var docRecord_isAuthPrint = Html.IsAuthPrint();
+
+}
+
+<style>
+
+    /*문서 표시 위해 하얀바탕 설정*/
+    #Gmp_doc_record_search .white {
+        background-color: white;
+    }
+</style>
+
+<script id="Gmp_doc_record_searchJs">
+
+        var elect_check_ck = "@ViewBag.elect_check_ck";
+        var file_editable_ck = "@ViewBag.file_editable_ck";
+
+        var Gmp_doc_record_search_tab_num = '1';
+        var Gmp_doc_record_search_tabGubun = 'F';
+
+        //그리드, 트리리스트 포커스 로우 변수
+        var Gmp_doc_record_search_focusedRow_G = null;
+        var Gmp_doc_record_search_focusedRow_T = null;
+
+        $(function () {
+
+            $("#Gmp_doc_record_searchForm input[name=select_gubun][value='1']").prop("checked", true);//문서
+            $("#Gmp_doc_record_searchForm input[name=author_gubun][value='1']").prop("checked", true);//전체
+            $("#Gmp_doc_record_searchForm #user_nm").val(sessionStorage.getItem("loginNM"));
+
+            setDatePicker("#Gmp_doc_record_search .datepicker");
+
+            Gmp_doc_record_search_1(); //문서 조회
+
+            ////구분 변경시 이벤트
+            //$("#Gmp_doc_record_searchForm input[name='select_gubun']").change(function () {
+            //    Gmp_doc_record_searchSearch();
+            //});
+
+
+            //권한 변경시 이벤트
+            $("#Gmp_doc_record_searchForm input[name='author_gubun']").change(function () {
+                Gmp_doc_record_searchSearch();
+            })
+
+        });
+
+        function DocRecordSearch_Tabs_itemMClick(e) {
+            // 현재 보여지고 있는 Tab 이외의 Tab을 선택 했을 시,
+            if (e.itemData.id !== Gmp_doc_record_search_tab_num) {
+
+                // 1.목차
+                if (e.itemData.id === 1) {
+                    // 이전 Tab display-none
+                    $("#Gmp_doc_record_searchMenuDiv_1").removeClass("display-none");
+                    Gmp_doc_record_search_tab_num = '1';
+                    Gmp_doc_record_search_tabGubun = 'F';
+                    $("#Gmp_doc_record_searchMenuDiv_2").addClass("display-none");
+
+                    // 2.색인
+                } else if (e.itemData.id === 2) {
+                    // 이전 Tab display-none
+                    $("#Gmp_doc_record_searchMenuDiv_1").addClass("display-none");
+                    Gmp_doc_record_search_tab_num = '2';
+                    Gmp_doc_record_search_tabGubun = 'S';
+                    $("#Gmp_doc_record_searchMenuDiv_2").removeClass("display-none");
+                }
+                Gmp_doc_record_searchSearch();
+            }
+
+        }
+
+        //조회
+        function Gmp_doc_record_searchSearch() {
+        Gmp_doc_record_search_1();//문서
+
+            //var select = $("#Gmp_doc_record_searchForm input[name='select_gubun']:checked").val();
+
+            //if (select == "1") Gmp_doc_record_search_1();//문서
+            //if (select == "2") Gmp_doc_record_search_2();//기록서
+        }
+
+        //입력
+        function Gmp_doc_record_searchInput() {
+
+        }
+
+        //수정
+        function Gmp_doc_record_searchEdit() {
+
+        }
+
+        //삭제
+        function Gmp_doc_record_searchDelete() {
+
+        }
+
+        //저장
+        function Gmp_doc_record_searchSave() {
+
+        }
+
+        //취소
+        function Gmp_doc_record_searchUndo() {
+
+        }
+
+        //프린트
+        function Gmp_doc_record_searchPrint() {
+
+        }
+
+        //엑셀
+        function Gmp_doc_record_searchExcel() {
+
+        }
+
+
+        //문서 조회
+        function Gmp_doc_record_search_1() {
+
+            var author = $("#Gmp_doc_record_searchForm input[name='author_gubun']:checked").val();
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/Gmp_doc_record_search_SearchDocRecord_1',
+                data: {
+                    elect_check_ck: elect_check_ck,
+                    tabGubun: Gmp_doc_record_search_tabGubun,
+                    start: $("#Gmp_doc_record_search #start_date").val(),
+                    end: $("#Gmp_doc_record_search #end_date").val(),
+                    author: author,
+                    docName: $("#Gmp_doc_record_search #doc_record_nm").val()
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+                        //console.log(json);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        if (json.length > 0) {
+                            if (Gmp_doc_record_search_tabGubun == "F") {
+                                $("#Gmp_doc_record_search_TreeList").dxTreeList("option", "dataSource", json);
+                                $("#Gmp_doc_record_search_TreeList").dxTreeList("instance").option("focusedRowIndex", -1);
+                                $("#Gmp_doc_record_search_TreeList").dxTreeList("instance").option("focusedRowIndex", 0);
+                            } else {
+                                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("option", "dataSource", json);
+                                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                            }
+
+                        } else {
+                            DocRecordSearch_clear();
+                        }
+
+                    } else {
+                        //그리드, 트리리스트, 폼 초기화
+                        DocRecordSearch_clear();
+                    }
+
+                }
+            })
+
+            //그리드, 폼 label text 변경
+            //SetText('1');
+        }
+
+        //문서, 기록서 조회변경시 그리드 컬럼 캡션 변경 - 사용안함
+        function SetText(t) {
+            var grid = $("#Gmp_doc_record_search_DataGrid").dxDataGrid("instance");
+            var treeList = $("#Gmp_doc_record_search_TreeList").dxTreeList("instance");
+
+            if (t == "1") {
+                $("#Gmp_doc_record_search #number_label").text("문서번호");
+                $("#Gmp_doc_record_search #nm_label").text("문서명");
+                //$("#Gmp_doc_record_search #emp_nm_label").text("작성자");
+                //$("#Gmp_doc_record_search #adate_label").text("제정일자");
+                $("#Gmp_doc_record_search #revision_no_label").text("개정번호");
+                $("#Gmp_doc_record_search #title_label").text("문서정보");
+                $("#Gmp_doc_record_search #file_label").text("[문서파일]");
+
+                //컬럼 caption 변경
+                //트리리스트
+                treeList.columnOption(0, "caption", "문서번호");
+                treeList.columnOption(1, "caption", "문서명");
+
+                //그리드
+                grid.columnOption(0, "caption", "문서번호");
+                grid.columnOption(1, "caption", "문서명");
+                grid.columnOption(2, "caption", "영문명");
+                grid.columnOption(3, "caption", "개정번호");
+                grid.columnOption(3, "caption", "시행일자");
+                grid.columnOption(3, "caption", "문서효력일");
+                grid.columnOption(3, "caption", "개정부서");
+                grid.columnOption(3, "caption", "개정자");
+                grid.columnOption(3, "caption", "권한");
+            }else {
+                $("#Gmp_doc_record_search #number_label").text("기록서번호");
+                $("#Gmp_doc_record_search #nm_label").text("기록서명");
+                $("#Gmp_doc_record_search #emp_nm_label").text("기록자");
+                //$("#Gmp_doc_record_search #adate_label").text("기록일자");
+                $("#Gmp_doc_record_search #title_label").text("기록서정보");
+                $("#Gmp_doc_record_search #file_label").text("[기록서파일]");
+
+                //컬럼 caption 변경
+                //트리리스트
+                treeList.columnOption(0, "caption", "기록서번호");
+                treeList.columnOption(1, "caption", "기록서명");
+
+                //그리드
+                grid.columnOption(0, "caption", "기록서번호");
+                grid.columnOption(1, "caption", "기록서명");
+                grid.columnOption(2, "caption", "기록일자");
+                grid.columnOption(3, "caption", "기록자");
+
+            }
+        }
+
+        //기록서 조회 - 사용안함
+        function Gmp_doc_record_search_2() {
+
+            var author = $("#Gmp_doc_record_search_DataGrid input[name='author_gubun']:checked").val();
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/Gmp_doc_record_search_SearchDocRecord_2',
+                data: {
+                    elect_check_ck: elect_check_ck,
+                    //tabGubun: tabGubun,
+                    start: $("#Gmp_doc_record_search #start_date").val(),
+                    end: $("#Gmp_doc_record_search #end_date").val(),
+                    author: author,
+                    docName: $("#doc_record_nm").val()
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.length > 0) {
+                            if (Gmp_doc_record_search_tabGubun == "F") {
+                                $("#Gmp_doc_record_search_TreeList").dxTreeList("option", "dataSource", json);
+                                $("#Gmp_doc_record_search_TreeList").dxTreeList("instance").option("focusedRowIndex", 0);
+                            } else {
+                                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("option", "dataSource", json);
+                                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                            }
+                        } else {
+                            DocRecordSearch_clear();
+                        }
+
+                    } else {
+                        //그리드, 트리리스트, 폼 초기화
+                        DocRecordSearch_clear();
+                    }
+
+                }
+            })
+
+            //그리드, 폼 label text 변경
+            SetText('2');
+        }
+
+        //폼 디테일 설정
+        function Gmp_doc_record_search_SetDetail(data) {
+            if (data != undefined && data != null) {
+                $('#Gmp_doc_record_search input[name="number"]').val(data.number);
+                $('#Gmp_doc_record_search input[name="nm"]').val(data.nm);
+                $('#Gmp_doc_record_search input[name="e_nm"]').val(data.e_nm);
+                //$('#Gmp_doc_record_search input[name="adate"]').val(data.adate);//제정일자 삭제
+                $('#Gmp_doc_record_search input[name="revision_no"]').val(data.revision_no);
+                $('#Gmp_doc_record_search input[name="rdate"]').val(data.rdate);
+                $('#Gmp_doc_record_search input[name="aperiod"]').val(data.aperiod);
+                $('#Gmp_doc_record_search input[name="void_date"]').val(data.void_date);
+                $('#Gmp_doc_record_search input[name="aposition"]').val(data.aposition);
+                //$('#Gmp_doc_record_search input[name="emp_nm"]').val(data.writer_nm);//작성자 삭제
+                $('#Gmp_doc_record_search input[name="main_file_nm"]').val(data.mfile_nm);
+                $('#Gmp_doc_record_search input[name="ref1_file_nm"]').val(data.rfile_nm1);
+                $('#Gmp_doc_record_search input[name="ref2_file_nm"]').val(data.rfile_nm2);
+                $('#Gmp_doc_record_search input[name="ref3_file_nm"]').val(data.rfile_nm3);
+                $('#Gmp_doc_record_search input[name="ref4_file_nm"]').val(data.rfile_nm4);
+            }
+        }
+
+        //그리드 이벤트
+        //목차
+        function Gmp_doc_record_search_OnFocusedRowChanged_G(e) {
+            if (!e.row || !e.row.data) {
+                Gmp_doc_record_search_focusedRow_G = null;
+            } else {
+                Gmp_doc_record_search_focusedRow_G = e.row;
+                Gmp_doc_record_search_SetDetail(e.row.data);
+            }
+        }
+
+        //색인
+        function Gmp_doc_record_search_OnFocusedRowChanged_T(e) {
+            if (!e.row || !e.row.data) {
+                Gmp_doc_record_search_focusedRow_T = null;
+            } else {
+                Gmp_doc_record_search_focusedRow_T = e.row;
+                Gmp_doc_record_search_SetDetail(e.row.data);
+            }
+        }
+
+        //문서 열기
+        function Gmp_doc_record_searchDblClick() {
+            CheckValid("main");
+        }
+
+        //문서인 row에 대하여 하얀 바탕 적용
+        //ImageIndex :0 (체계), 1(문서)
+        function Gmp_doc_record_searchOnRowPrepared(e) {
+            if (e.rowType == "data") {
+                if (e.data.ImageIndex == "1" || e.data.ImageIndex == 1) {
+                    e.rowElement.addClass('white');
+                }
+            }
+        }
+
+        function CheckValid(t) {
+
+            //var select = $("#Gmp_doc_record_searchForm input[name='select_gubun']:checked").val();
+            var data = null;
+
+            if (Gmp_doc_record_search_tabGubun == "F" && Gmp_doc_record_search_focusedRow_T != null) {
+                data = Gmp_doc_record_search_focusedRow_T.data;
+
+                if (data.ImageIndex == "0" || data.ImageIndex == 0)
+                    return;
+            } else if (Gmp_doc_record_search_tabGubun == "S" || Gmp_doc_record_search_focusedRow_G != null){
+                data = Gmp_doc_record_search_focusedRow_G.data;
+            }
+
+            //열람권한 조회 로직 사용안함
+            //if (file_editable_ck == "Y") {
+            //    if (data.checkme != "Y") {
+            //        alert("열람 권한이 없습니다.");
+            //        return;
+            //    }
+            //}
+
+            //var confirmText = ""
+            //if (select == "1") confirmText = "문서를 불러오시겠습니까?";
+            //else confirmText = "기록서를 불러오시겠습니까?";
+         
+            //프로그램 권한으로 권한 체크
+            var docRecord_isAuthPrint = "@docRecord_isAuthPrint";
+
+            if (docRecord_isAuthPrint) {
+                docRecord_isAuthPrint = true;
+            }
+
+            if (!docRecord_isAuthPrint ) {
+                alert("열람 권한이 없습니다.");
+                return;
+            }
+
+            var ok = confirm("문서를 불러오시겠습니까?");
+            if (ok) {
+                var void_date = $("#Gmp_doc_record_search #void_date").val();
+                void_date = (void_date == null || void_date == "") ? "2100-01-01" : void_date;
+                var ok_1 = true;
+
+                $.ajax({
+                    type: 'POST',
+                    async:false,
+                    url: '/Doc/Gmp_doc_record_search_CheckVoidDate',
+                    data: {
+                        voidDate: void_date
+                    },
+                    success: function (result) {
+
+                        if (result.length > 0) {
+                            //console.log(result);
+                            if (result == "caution") {
+                                ok_1 = confirm("문서효력일이 경과하였습니다. 문서를 열람하시겠습니까?");
+                            }
+                        }
+
+                        if (ok_1) {
+                            if (t == "main") DocRecordSearch_GetFile(data.mfile);// 메인, 참고
+                            else if (t == "ref1") DocRecordSearch_GetFile(data.rfile1);
+                            else if (t == "ref2") DocRecordSearch_GetFile(data.rfile2);
+                            else if (t == "ref3") DocRecordSearch_GetFile(data.rfile3);
+                            else if (t == "ref4") DocRecordSearch_GetFile(data.rfile4);
+                        }
+                    }
+                })
+            }
+        }
+
+        function DocRecordSearch_GetFile(doc_file_id) {
+            document.location.assign('/Doc/Gmp_doc_record_search_GetFile?doc_file_id=' + doc_file_id);
+
+            //$.ajax({
+            //    type: 'POST',
+            //    url: '/Doc/Gmp_doc_record_search_GetFile',
+            //    data: {
+            //        doc_file_id: doc_file_id
+            //    },
+            //    success: function (result) {
+            //        if (result.length > 0) {
+            //            var json = JSON.parse(result);
+            //            if (json.hasOwnProperty('sessionLoss')) {
+            //                alert("세션이 만료되었습니다.");
+            //                sessionStorage.clear();
+            //                location.replace("/Comm/Login");
+            //            }
+            //        }
+            //    }
+            //});
+        }
+
+        function DocRecordSearch_DownloadAttatchedFile(id) {
+            //console.log(e);
+            //var id = e.element[0].id;
+            var fileName = $("#Gmp_doc_record_search "+"#" + id + "_file_nm").val();
+
+            if (fileName != "" && fileName != null)
+                CheckValid(id);
+        }
+
+        function DocRecordSearch_clear() {
+
+            if (Gmp_doc_record_search_tabGubun == "F") {
+                $("#Gmp_doc_record_search_TreeList").dxTreeList("option", "dataSource", []);
+                $("#Gmp_doc_record_search_TreeList").dxTreeList("option", "focusedRowKey", "");
+            } else {
+                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("option", "dataSource", []);
+                $("#Gmp_doc_record_search_DataGrid").dxDataGrid("option", "focusedRowKey", "");
+            }
+
+            $("#Gmp_doc_record_searchForm_Right")[0].reset();
+        }
+
+</script>
+
+<div id="Gmp_doc_record_search" autoresize="Y">
+
+    @*<h4 class="divTitle">문서 조회</h4>*@
+
+    <div id="Gmp_doc_record_searchTop" class="mainTop row">
+        <div class="col-8">
+            <form id="Gmp_doc_record_searchForm">
+
+                <div class="input-wrapper">
+                @*<div class="col-2 input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">구분</span>
+                    </div>
+
+                    <label class="p-1"></label>
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="1" id="select_gubun_1" name="select_gubun" />
+                    </div>
+                    <span class="form-control-sm"><label for="use_yn_S_N">문서</label></span>
+
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="2" id="select_gubun_2" name="select_gubun" />
+                    </div>
+                    <span class="form-control-sm"><label for="use_yn_S_Y">기록서</label></span>
+                </div>*@
+                <div class="col-3 input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">일자</span>
+                    </div>
+                    <input type="text" class="form-control datepicker text-center" name="start_date" id="start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                    <label class="p-1">~</label>
+                    <input type="text" class="form-control datepicker text-center" name="end_date" id="end_date" value="@DateTime.Today.ToShortDateString()" />
+                </div>
+                <div class="col-2 input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">사용자</span>
+                    </div>
+                    <input type="text" class="form-control" name="user_nm" id="user_nm" readonly />
+                </div>
+
+                <div class="col-2 input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">권한</span>
+                    </div>
+
+                    <label class="p-1"></label>
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="1" id="author_gubun_1" name="author_gubun" />
+                    </div>
+                    <span class="form-control-sm"><label for="gubun_S_1">전체</label></span>
+
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="2" id="author_gubun_2" name="author_gubun" />
+                    </div>
+                    <span class="form-control-sm"><label for="gubun_S_2">권한 有</label></span>
+                </div>
+
+                <div class="col-3 input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">문서명</span>
+                    </div>
+                    <input type="text" class="form-control" name="doc_record_nm" id="doc_record_nm" />
+                </div>
+            </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search");}
+            @*@(Html.DevExtreme().Toolbar()
+            .ID("Gmp_doc_record_search_Toolbar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                            .Button()
+                            .Type(ButtonType.Default)
+                            .StylingMode(ButtonStylingMode.Contained)
+                            .ID("Gmp_doc_record_search")
+                            .Icon("search")
+                            .Text("조회")
+                        .OnClick("Gmp_doc_record_search")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+        )*@
+        </div>
+    </div><!-- Gmp_doc_record_searchTop -->
+
+    <div class="row">
+        <div class="col-7">
+
+            <!-- DevExtreme Tab -->
+            <div id="Gmp_doc_record_search_MTab">
+                @(Html.DevExtreme().Tabs()
+                            .ID("tabs_Gmp_doc_record_search_M")
+                            .DataSource(DocRecordSearch_tabs)
+                            .SelectedIndex(0)
+                            .OnItemClick("DocRecordSearch_Tabs_itemMClick")
+                        )
+            </div>
+
+            <div id="Gmp_doc_record_searchMenuDiv">
+
+                <!-- 목차 -->
+                <div id="Gmp_doc_record_searchMenuDiv_1"  class="box mb-0">
+                    <div id="Gmp_doc_record_search_LeftMain_1">
+                        @(Html.DevExtreme().TreeList()
+                                    .ID("Gmp_doc_record_search_TreeList")
+                                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                                    //.Selection(s => s.Mode(SelectionMode.Single))
+                                    //.HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .Height(840)
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .ShowRowLines(true)
+                                    //.DataSource((System.Collections.IEnumerable)ViewBag.docRegisterDocumentData)
+                                    .RootValue("")
+                                    .KeyExpr("ID")
+                                    .ParentIdExpr("ParentID")
+                                    .WordWrapEnabled(true)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("number").Caption("문서번호")
+                                        .CellTemplate(@<text>
+
+                                            <% if(data.last_ck == "D"){ %>
+                                                 <img src="/Content/image/document.png" alt="" style="width:15px; height:15px;"/> <%- value %>
+
+                                            <% } else { %>
+                                                 <img src="/Content/image/structure.png" alt="" style="width:10px; height:10px;"/> <%- value %>
+                                            <% } %>
+
+                                        </text>);
+                                        c.Add().DataField("nm").Caption("문서명");
+                                        c.Add().DataField("revision_no").Caption("개정번호");
+                                        c.Add().DataField("rdate").Caption("개정일자");
+                                        //c.Add().DataField("e_nm").Caption("영문명");
+                                        //권한 : 프로그램 권한 설정으로 변경
+                                        //c.Add().DataField("checkme").Caption("권한")
+                                        //.DataType(GridColumnDataType.Boolean)
+                                        //.CalculateCellValue(@"function(rowData) { return (rowData.checkme == ""Y""); }");
+
+                                        c.Add().DataField("adate").Visible(false);
+                                        c.Add().DataField("rdate").Visible(false);
+                                        c.Add().DataField("aperiod").Visible(false);
+                                        c.Add().DataField("void_date").Visible(false);
+                                        c.Add().DataField("aposition").Visible(false);
+                                        c.Add().DataField("mfile").Visible(false);
+                                        c.Add().DataField("rfile1").Visible(false);
+                                        c.Add().DataField("rfile2").Visible(false);
+                                        c.Add().DataField("rfile3").Visible(false);
+                                        c.Add().DataField("rfile4").Visible(false);
+                                        c.Add().DataField("wrter_nm").Visible(false);
+                                        c.Add().DataField("mfile_nm").Visible(false);
+                                        c.Add().DataField("rfile_nm1").Visible(false);
+                                        c.Add().DataField("rfile_nm2").Visible(false);
+                                        c.Add().DataField("rfile_nm3").Visible(false);
+                                        c.Add().DataField("rfile_nm4").Visible(false);
+                                        c.Add().DataField("rfile_nm4").Visible(false);
+                                        c.Add().DataField("ImageIndex").Visible(false);
+
+                                    })
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .ColumnAutoWidth(true)
+                                    .AutoExpandAll(true)
+                                    .ExpandedRowKeys(new[] { 1 })
+                                    .OnFocusedRowChanged("Gmp_doc_record_search_OnFocusedRowChanged_T")
+                                    .OnRowDblClick("Gmp_doc_record_searchDblClick")
+                                    .OnRowPrepared("Gmp_doc_record_searchOnRowPrepared")
+                                )
+                    </div>
+                </div>
+
+                <!-- 색인 -->
+                <div id="Gmp_doc_record_searchMenuDiv_2" class="box mb-0 display-none">
+                    <div id="Gmp_doc_record_search_LeftMain_2">
+                        @(Html.DevExtreme().DataGrid()
+                                    .ID("Gmp_doc_record_search_DataGrid")
+                                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                    .Height(860)
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .ShowRowLines(true)
+                                    .ColumnAutoWidth(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .KeyExpr("number")
+                                    //.Selection(s => s.Mode(SelectionMode.Single))
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("number").Caption("문서번호");
+                                        c.Add().DataField("nm").Caption("문서명");
+                                        //c.Add().DataField("e_nm").Caption("영문명");
+                                        c.Add().DataField("revision_no").Caption("개정번호");
+                                        c.Add().DataField("rdate").Caption("개정일자");
+                                        c.Add().DataField("operation_date").Caption("시행일자");
+                                        c.Add().DataField("void_date").Caption("문서효력일");
+                                        c.Add().DataField("writer_dept_nm").Caption("개정부서"); //문서등록에서 개정에 대한 개정부서
+                                        c.Add().DataField("writer_nm").Caption("개정자");        //문서등록에서 개정에 대한 개정자
+                                        //권한 : 프로그램 권한 설정으로 변경
+                                        //c.Add().DataField("checkme").Caption("권한")
+                                        //.DataType(GridColumnDataType.Boolean)
+                                        //.CalculateCellValue(@"function(rowData) { return (rowData.checkme == ""Y""); }");
+
+                                        c.Add().DataField("adate").Visible(false);
+                                        c.Add().DataField("aperiod").Visible(false);
+                                        c.Add().DataField("aposition").Visible(false);
+                                        c.Add().DataField("mfile").Visible(false);
+                                        c.Add().DataField("rfile1").Visible(false);
+                                        c.Add().DataField("rfile2").Visible(false);
+                                        c.Add().DataField("rfile3").Visible(false);
+                                        c.Add().DataField("rfile4").Visible(false);
+                                        //c.Add().DataField("wrter_nm").Visible(false);
+                                        c.Add().DataField("mfile_nm").Visible(false);
+                                        c.Add().DataField("rfile_nm1").Visible(false);
+                                        c.Add().DataField("rfile_nm2").Visible(false);
+                                        c.Add().DataField("rfile_nm3").Visible(false);
+                                        c.Add().DataField("rfile_nm4").Visible(false);
+                                    })
+                                    .OnFocusedRowChanged("Gmp_doc_record_search_OnFocusedRowChanged_G")
+                                    .OnRowDblClick("Gmp_doc_record_searchDblClick")
+                                )
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="col-5">
+            <div class="box">
+                <form id="Gmp_doc_record_searchForm_Right">
+                    <div class="divName">
+                        <p id="title_label">문서정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3" id="number_label">문서번호</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="number" id="number" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3" id="nm_label">문서명</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="nm" id="nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3" id="enm_label">영문명</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="e_nm" id="e_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        @*<label class="col-3" id="adate_label">제정일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="adate" name="adate" readonly />
+                        </div>*@
+                        <label class="col-3" id="revision_no_label">개정번호</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="revision_no" name="revision_no" readonly />
+                        </div>
+                        <label class="col-2" id="rdate_label">개정일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="rdate" name="rdate" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3" id="period_label">보존기간</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="aperiod" name="aperiod" readonly />
+                        </div>
+                        <label class="col-2" id="void_label">문서효력일</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="void_date" name="void_date" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3" id="aposition_label">보관장소</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="aposition" id="aposition" readonly />
+                        </div>
+                    </div>
+
+                    @*<div class="input-wrapper">
+                        <label class="col-3" id="emp_nm_label">작성자</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="emp_nm" id="emp_nm" readonly />
+                        </div>
+                    </div>*@
+
+                <div class="input-wrapper">
+                    <label class="col-3" id="file_label">[문서파일]</label>
+                    <div class="input-group col-7">
+                        <input type="text" class="form-control" name="main_file_nm" id="main_file_nm" readonly />
+                    </div>
+
+                    <!-- 버튼별 권한체크(출력 권한 있을때 열기 가능) -->
+                    @{ if (Html.IsAuthPrint())
+                        {
+                            <button type="button" class="btn btn-secondary" onclick="DocRecordSearch_DownloadAttatchedFile('main')">열기</button>
+                        }
+                    }
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">[참고파일]</label>
+                    <div class="input-group col-7">
+                        <input type="text" class="form-control" name="ref1_file_nm" id="ref1_file_nm" readonly />
+                    </div>
+                    <!-- 버튼별 권한체크(출력 권한 있을때 열기 가능) -->
+                    @{ if (Html.IsAuthPrint())
+                        {
+                            <button type="button" class="btn btn-secondary" onclick="DocRecordSearch_DownloadAttatchedFile('ref1')">열기</button>
+                        }
+                    }
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3"></label>
+                    <div class="input-group col-7">
+                        <input type="text" class="form-control" name="ref2_file_nm" id="ref2_file_nm" readonly />
+                    </div>
+                    <!-- 버튼별 권한체크(출력 권한 있을때 열기 가능) -->
+                    @{ if (Html.IsAuthPrint())
+                        {
+                            <button type="button" class="btn btn-secondary" onclick="DocRecordSearch_DownloadAttatchedFile('ref2')">열기</button>
+                        }
+                    }
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3"></label>
+                    <div class="input-group col-7">
+                        <input type="text" class="form-control" name="ref3_file_nm" id="ref3_file_nm" readonly />
+                    </div>
+                    <!-- 버튼별 권한체크(출력 권한 있을때 열기 가능) -->
+                    @{ if (Html.IsAuthPrint())
+                        {
+                            <button type="button" class="btn btn-secondary" onclick="DocRecordSearch_DownloadAttatchedFile('ref3')">열기</button>
+                        }
+                    }
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3"></label>
+                    <div class="input-group col-7">
+                        <input type="text" class="form-control" name="ref4_file_nm" id="ref4_file_nm" readonly />
+                    </div>
+                    <!-- 버튼별 권한체크(출력 권한 있을때 열기 가능) -->
+                    @{ if (Html.IsAuthPrint())
+                        {
+                            <button type="button" class="btn btn-secondary" onclick="DocRecordSearch_DownloadAttatchedFile('ref4')">열기</button>
+                        }
+                    }
+                </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

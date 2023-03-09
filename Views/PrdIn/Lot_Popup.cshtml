@@ -1,0 +1,171 @@
+﻿@using System.Data
+@{
+    Layout = null;
+    ViewBag.Title = "Lot_Popup";
+}
+
+<script type="text/javascript" id="Lot_PopupJs">
+
+    $(function () {
+
+        // 아래 그리드 셋팅
+        if ((@Html.Raw(Json.Encode(Model.Data))).length > 0) {
+            $("#Lot_Popup_Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@Html.Raw(Json.Encode(Model.Data))));
+            $("#Lot_Popup_Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#Lot_Popup_Grid").dxDataGrid("instance").option("focusedRowIndex", -1);
+        }
+
+        //datepicker start
+        setDatePicker("#Lot_Popup .datepicker");
+
+    });
+
+    // 조회
+    function Lot_Popup_Search() {
+
+        // 초기화
+        $("#Lot_Popup_Grid").dxDataGrid("instance").option("dataSource", []);
+
+        var formData = new FormData($("#Lot_Popup_form")[0]);
+
+        formData.set("item_cd", '@ViewBag.Lot_ItemCd');
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/Lot_Popup_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#Lot_Popup_Grid").dxDataGrid("instance").option("dataSource", []);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#Lot_Popup_Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#Lot_Popup_Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#Lot_Popup_Grid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+            }
+        });
+    }
+
+    // 로우 더블 클릭 이벤트
+    function LotPopup_OnRowDblClick(e) {
+
+        var data = e.data;
+
+        $("#ItemProduction input[name=lot_no]").val(data.lot_no); // 제조번호
+        $("#ItemProduction input[name=lot_date]").val(data.order_date); // 제조일자
+        $("#ItemProduction input[name=end_date]").val(data.valid_date); // 유통기한
+        $("#ItemProduction input[name=order_no]").val(data.order_no); // 제조지시번호
+
+        // 아래 그리드 초기화
+        $("#Lot_Popup_Grid").dxDataGrid("instance").option("dataSource", []);
+
+        var popup = $("#Lot_Popup").dxPopup("instance");
+        popup.hide();
+    }
+
+</script>
+
+
+<div id="Lot_Popup">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="Lot_Popup_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">날짜</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date_S" value="@DateTime.Today.AddDays(-120).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date_S" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                </div>
+
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @(Html.DevExtreme().Toolbar()
+                .ID("Lot_Popup_ToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("Lot_Popup_Search")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("Lot_Popup_Search")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- 위 그리드 -->
+        <div class="col-12 pb-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Lot_Popup_Grid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr("order_no")
+                    .Height(580)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_no").Caption("제조지시번호");
+                        c.Add().DataField("order_date").Caption("지시일자").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("item_cd").Caption("제조제품코드");
+                        c.Add().DataField("item_nm").Caption("제조제품명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("order_qty").Caption("생산량");
+                        c.Add().DataField("lot_date").Caption("제조일자");
+                        c.Add().DataField("valid_date").Caption("유통기한");
+                    })
+                    .OnRowDblClick("LotPopup_OnRowDblClick")
+                )
+            </div>
+
+        </div>
+        
+    </div>
+
+
+</div>

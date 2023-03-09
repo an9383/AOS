@@ -1,0 +1,1936 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Gmp_doc_manage";
+    var empData = @Html.Raw(Json.Encode(ViewBag.empData.Data));
+}
+
+@{
+    var DocManage_tabs = new[] {
+        new { id = 1, text = "목차" },
+        new { id = 2, text = "색인" }
+    };
+}
+
+<style>
+
+    /*문서 표시 위해 하얀바탕 설정*/
+    #Gmp_doc_manage .white {
+        background-color: white;
+    }
+</style>
+
+<script id="Gmp_doc_manageJs">
+    //DB 공통 변수
+    var Gmp_doc_manage_signCode = "@ViewBag.signCode";
+    var Gmp_doc_manage_userCd = sessionStorage.getItem("loginCD");
+    var Gmp_doc_manage_userNm = sessionStorage.getItem("loginNM");
+
+    //탭 관련 변수
+    var Gmp_doc_manage_tab_num, Gmp_doc_manage_tab_num_1 = '1';
+    var Gmp_doc_manage_tabGubun = 'F';
+
+    //클릭 이벤트 변수
+    var Gmp_doc_manageCellClickEvent;
+
+    //db상태 변수
+    var Gmp_doc_manage_dbState = "init";
+    var Gmp_doc_manage_isInserted = true;
+
+    //그리드 포커스 변수
+    var Gmp_doc_manage_focusedRow_T, Gmp_doc_manage_focusedRow_G = null;    //목차, 색인
+    var Gmp_doc_manage_focusedRow_D1, Gmp_doc_manage_focusedRow_D2 = null;  //배포, 폐기
+
+    //DB 저장 데이터 변수
+    var Gmp_doc_manage_tempArray_D1 = new Array();
+    var Gmp_doc_manage_tempArray_D2 = new Array();
+    var Gmp_doc_manage_initRowCount = 0;
+
+    $(function () {
+        $("#login_nm").val(Gmp_doc_manage_userNm);
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+        createPopup("Gmp_doc_manageEmp", "사원조회", @empData, columns, "emp_cd");
+
+        $("#Gmp_doc_manageForm input[name=search_gubun][value='1']").prop("checked", true);//사용중
+        $("#Gmp_doc_manageForm input[name=s_gubun][value='1']").prop("checked", true);//전체
+
+        Gmp_doc_manageEditing(false);
+        Gmp_doc_manageSearch();
+
+        //사용여부 변경시 이벤트
+        $("#Gmp_doc_manageForm input[name='search_gubun']").change(function () {
+            Gmp_doc_manageSearchByRadio();
+        })
+
+        //권한 변경시 이벤트
+        $("#Gmp_doc_manageForm input[name='s_gubun']").change(function () {
+            Gmp_doc_manageSearchByRadio();
+        })
+
+    })
+
+    function Gmp_doc_manageEditing(isEditing) {
+        if (isEditing) {
+            //수정중
+            $("#Gmp_doc_manageSearch").dxButton().parent().parent().addClass("display-none");//조회 숨김
+            $("#Gmp_doc_manageDelete").dxButton().parent().parent().addClass("display-none");//삭제 숨김
+            $("#Gmp_doc_manageInput").dxButton().parent().parent().addClass("display-none");//입력 숨김
+            $("#Gmp_doc_manageEdit").dxButton().parent().parent().addClass("display-none");//수정 숨김
+
+            $("#Gmp_doc_manageSave").dxButton().parent().parent().removeClass("display-none");//저장 보이기
+            $("#Gmp_doc_manageUndo").dxButton().parent().parent().removeClass("display-none");//취소 보이기
+
+            $("#Gmp_doc_manageForm_Right :enabled").attr('disabled', true); //수정중일 때,disable
+            //$("#Gmp_doc_manageForm_Right :disabled").prop('disabled', false);
+            $("#Gmp_doc_manage_TreeList").dxTreeList("option", "disabled", true);
+            $("#Gmp_doc_manage_DataGrid").dxDataGrid("option", "disabled", true);
+
+        }
+
+        if (!isEditing) {
+            //수정완료 수정취소
+            $("#Gmp_doc_manageSearch").dxButton().parent().parent().removeClass("display-none");//조회 보이기
+            $("#Gmp_doc_manageDelete").dxButton().parent().parent().removeClass("display-none");//삭제 보이기
+            $("#Gmp_doc_manageInput").dxButton().parent().parent().removeClass("display-none");//입력 보이기
+            $("#Gmp_doc_manageEdit").dxButton().parent().parent().removeClass("display-none");//수정 보이기
+
+            $("#Gmp_doc_manageSave").dxButton().parent().parent().addClass("display-none");//저장 숨김
+            $("#Gmp_doc_manageUndo").dxButton().parent().parent().addClass("display-none");//취소 숨김
+
+            $("#Gmp_doc_manageForm_Right :disabled").attr('disabled', false);//활성화
+            //$("#Gmp_doc_manageForm_Right :disabled").prop('disabled', true);
+            $("#Gmp_doc_manage_TreeList").dxTreeList("option", "disabled", false);
+            $("#Gmp_doc_manage_DataGrid").dxDataGrid("option", "disabled", false);
+
+            //그리드 수정모드 비활성화
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false
+            }
+
+            $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "editing", editing);
+            $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "editing", editing);
+
+            Gmp_doc_manage_tempArray_D1 = new Array();
+            Gmp_doc_manage_tempArray_D2 = new Array();
+            Gmp_doc_manage_initRowCount = 0;
+        }
+    }
+
+
+    function Gmp_doc_manage_cellWithButton(container, cellInfo) {
+
+        // 입력 또는 수정이 아닌 경우
+        if (!(Gmp_doc_manage_dbState === "insert" || Gmp_doc_manage_dbState === "edit")) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        if (typeof cellInfo.value === "undefined" || cellInfo.value === null)
+            cellInfo.value = "";
+
+        $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' class='gmc_doc_manage_icon-plus'></div>")
+            .appendTo(container);
+
+        $(".gmc_doc_manage_icon-plus").dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+    //CRUD 및 데이터 매핑 start///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    //좌측 메인 탭 변경시 display 변경 후, 데이터 조회
+    function DocManage_Tabs_itemMClick(e) {
+
+        // 현재 보여지고 있는 Tab 이외의 Tab을 선택 했을 시,
+        if (e.itemData.id !== Gmp_doc_manage_tab_num) {
+
+            // 1.목차
+            if (e.itemData.id === 1) {
+                // 이전 Tab display-none
+                $("#Gmp_doc_manageMenuDiv_1").removeClass("display-none");
+                Gmp_doc_manage_tab_num = '1';
+                Gmp_doc_manage_tabGubun = 'F';
+                $("#Gmp_doc_manageMenuDiv_2").addClass("display-none");
+
+                // 2.색인
+            } else if (e.itemData.id === 2) {
+                // 이전 Tab display-none
+                $("#Gmp_doc_manageMenuDiv_1").addClass("display-none");
+                Gmp_doc_manage_tab_num = '2';
+                Gmp_doc_manage_tabGubun = 'S';
+                $("#Gmp_doc_manageMenuDiv_2").removeClass("display-none");
+            }
+            Gmp_doc_manageSearch();
+        }
+
+    }
+
+    //배포관리, 폐기관리 탭 변경
+    function Gmp_doc_manage_menutab(tabId, divId, tabNum) {
+
+        //초기상태 또는 조회상태에서만 탭 변경
+        if (Gmp_doc_manage_dbState == "search" || Gmp_doc_manage_dbState == "init") {
+
+            //탭, div display 변경
+            $("#" + divId + " > div").addClass("display-none");
+            $("#" + tabId + " a").removeClass("active");
+
+            $("#" + divId + "_" + tabNum).removeClass("display-none");
+            $("#" + tabId + " li:nth-child(" + tabNum + ")").children('a').addClass("active");
+
+        }
+    }
+
+    //상단 조회조건 라디오 변경시 데이터 조회
+    function Gmp_doc_manageSearchByRadio() {
+        Gmp_doc_manageSearch();
+    }
+
+    //그리드 데이터소스 가져오기
+    function Gmp_doc_manage_getData(id) {
+        var dataSource = null;
+
+        var grid = $("#" + id).dxDataGrid("instance");
+        dataSource = grid.getDataSource();
+
+        var data = [];
+        if (dataSource == null) return data;
+        else return dataSource.items();
+    }
+
+    //상단 조회버튼 클릭
+    function Gmp_doc_manageSearch() {
+
+        if (Gmp_doc_manage_GridSelect() == true) {
+            Gmp_doc_manage_dbState = "search";
+        } else {
+            Gmp_doc_manage_dbState = "init";
+        }
+        GetOverPersonInChargeEmpCd();
+    }
+
+    //상단 입력버튼 클릭 -> 배포 및 폐기 데이터 입력 및 수정 가능 상태로 변경
+    function Gmp_doc_manageInput() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != null) {
+
+            var last_ck = data.last_ck;
+
+            if (last_ck == "D") {
+                var checkme = data.checkme;
+
+                if (checkme != "Y") {
+                    alert("권한없는 문서에 대해서 배포 및 폐기 등록할 수 없습니다.");
+                    return;
+                }
+
+
+                var editing = {
+                    allowUpdating: true,
+                    allowAdding: true,
+                    allowDeleting: false,
+                    mode: 'batch'
+                }
+
+                //배포관리 입력시
+                if (Gmp_doc_manage_tab_num_1 == "1") {
+
+                    //폐기관리 탭 disable
+                    $("#Gmp_doc_manageMenuRightDiv_2").prop('disabled', true);
+
+                    //배포관리 그리드 editmode 활성화
+                    $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "editing", editing);
+
+                } else {
+                //폐기관리 입력시
+
+                    if (Gmp_doc_manage_focusedRow_D1 != null) {
+
+                        //배포관리 탭 disable
+                        $("#Gmp_doc_manageMenuRightDiv_1").prop('disabled', true);
+
+                        //폐기관리 그리드 editmode 활성화
+                        $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "editing", editing);
+
+                    } else {
+                        alert("문서를 배포한 적이 없습니다."); return;
+                    }
+                }
+
+            } else {
+                alert("문서를 선택하세요");
+            }
+
+            //그리드 수정가능 상태로 변경
+            Gmp_doc_manageEditing(true);
+            Gmp_doc_manage_dbState = "insert";
+
+        }
+    }
+
+    //상단 수정버튼 클릭 -> 배포 및 폐기 데이터 입력 및 수정 가능 상태로 변경
+    function Gmp_doc_manageEdit() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != null) {
+
+            var last_ck = data.last_ck;
+
+            if (last_ck == "D") {
+
+                //수정가능상태로 변경
+                Gmp_doc_manageEditing(true);
+
+                var editing = {
+                    allowUpdating: true,
+                    allowAdding: true,
+                    allowDeleting: false,
+                    mode: 'batch'
+                }
+
+                if (Gmp_doc_manage_tab_num_1 == "1") {//배포관리 수정일때
+
+                    if (Gmp_doc_manage_focusedRow_D1 == null) {
+                        alert("문서 배포 내용을 입력해야 합니다."); return;
+                    }
+
+                    //배포관리 그리드 editmode 활성화
+                    $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "editing", editing);
+
+                } else {//폐기관리 수정일때
+
+                    //배포관리 데이터가 없을 때
+                    if (Gmp_doc_manage_focusedRow_D1 == null) {
+                        alert("문서를 배포한 적이 없습니다."); return;
+                    }
+                    //폐기관리 데이터가 없을때
+                    if (Gmp_doc_manage_focusedRow_D2 == null) {
+                        alert("수정할 데이터가 없습니다"); return;
+                    }
+
+                     //폐기관리 그리드 editmode 활성화
+                    $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "editing", editing);
+
+                }
+
+                Gmp_doc_manage_dbState = "edit";
+            } else {
+                alert("문서를 선택하세요");
+            }
+        }
+    }
+
+    //상단 삭제버튼 클릭 -> 배포 및 폐기 데이터 삭제가능 상태로 변경
+    function Gmp_doc_manageDelete() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != null) {
+
+            var last_ck = data.last_ck;
+            if (last_ck == "D") {
+
+                //1. 배포관리 탭
+                if (Gmp_doc_manage_tab_num_1 == "1") {
+
+                    //포커스된 배포 데이터가 있는지 확인
+                    if (Gmp_doc_manage_focusedRow_D1 != null) {
+
+                        //배포에 대한 폐기 데이터가 있는지 확인
+                        var datasource_D2 = Gmp_doc_manage_getData("Gmp_doc_manage_DataGrid_2");
+
+                        if (datasource_D2.length > 0) {
+                            alert("폐기관련 데이터가 존재합니다."); return;
+                        }
+
+                        if (!confirm("배포데이터를 삭제하시겠습니까?")) return;
+
+                        $.ajax({
+                            type: 'POST',
+                            async: false,
+                            url: '/Doc/Gmp_doc_manage_GridDelete',
+                            data: {
+                                doc_no: Gmp_doc_manage_focusedRow_D1.data.doc_no,
+                                revision_no: Gmp_doc_manage_focusedRow_D1.data.revision_no,
+                                dist_id: Gmp_doc_manage_focusedRow_D1.data.dist_id
+                            },
+                            success: function (result) {
+                                if (result != "" && result == "Y") alert("삭제되었습니다.");
+                                Gmp_doc_manage_SetRevisionData();
+                            }
+                        })
+
+                    } else {
+                    //포커스된 배포 데이터가 없을 경우
+                        alert("삭제할 배포데이터가 없습니다"); return;
+                    }
+
+                } else {
+                //2. 폐기관리 탭
+
+                    //포커스된 폐기 데이터가 있는지 확인
+                    if (Gmp_doc_manage_focusedRow_D2 != null) {
+
+                        if (!confirm("폐기데이터를 삭제하시겠습니까?")) return;
+
+                        $.ajax({
+                            type: 'POST',
+                            async: false,
+                            url: '/Doc/Gmp_doc_manage_GridDelete1',
+                            data: {
+                                doc_no: Gmp_doc_manage_focusedRow_D2.data.doc_no,
+                                revision_no: Gmp_doc_manage_focusedRow_D2.data.revision_no,
+                                dist_id: Gmp_doc_manage_focusedRow_D2.data.dist_id,
+                                disuse_id: Gmp_doc_manage_focusedRow_D2.data.disuse_id
+                            },
+                            success: function (result) {
+                                if (result != "" && result == "Y") alert("삭제되었습니다.");
+                                Gmp_doc_manage_GridSelect2();//폐기관리 데이터 조회
+                                //Gmp_doc_manage_SetRevisionData();
+                            }
+                        })
+
+                    } else {
+                    //포커스된 폐기 데이터가 없을 경우
+                        alert("삭제할 폐기데이터가 없습니다."); return;
+                    }
+                }
+
+            } else {
+            //문서가 아닐 때
+                alert("문서를 선택하세요");
+            }
+        }
+    }
+
+    //상단 저장버튼 클릭 -> 배포 및 폐기 데이터 저장
+    async function Gmp_doc_manageSave() {
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        var id = "";
+
+        if (Gmp_doc_manage_tab_num_1 == "1") id = "Gmp_doc_manage_DataGrid_1";
+        else {
+            id = "Gmp_doc_manage_DataGrid_2";
+            var dist_qty = $('#Gmp_doc_manage input[name="dist_qty"]').val();
+            var disuse_qty = $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("instance").getTotalSummaryValue("disuse_qty");
+            if (disuse_qty > dist_qty) {
+                alert("폐기 수량이 배포 수량보다 많습니다.");
+                return;
+            }
+        }
+
+        await $("#" + id).dxDataGrid("instance").saveEditData();
+
+            //배포관리 데이터 입력
+        if (Gmp_doc_manage_tempArray_D1.length > 0) {
+            //console.log(JSON.stringify(Gmp_doc_manage_tempArray_D1));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/Gmp_doc_manage_D1_TRX',
+                async: false,
+                data: {
+                    paramData: JSON.stringify(Gmp_doc_manage_tempArray_D1)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    //Gmp_doc_manageSearch();
+                }
+            });
+
+            Gmp_doc_manage_SetRevisionData();
+            Gmp_doc_manageEditing(false);
+            Gmp_doc_manage_dbState = "search";
+
+        }
+
+        //폐기관리 데이터 입력
+        if (Gmp_doc_manage_tempArray_D2.length > 0) {
+            //console.log(JSON.stringify(Gmp_doc_manage_tempArray_D2));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/Gmp_doc_manage_D2_TRX',
+                async: false,
+                data: {
+                    paramData: JSON.stringify(Gmp_doc_manage_tempArray_D2)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    //Gmp_doc_manageSearch();
+                }
+            });
+
+            Gmp_doc_manage_GridSelect2();//폐기관리 데이터 조회
+            Gmp_doc_manageEditing(false);
+            Gmp_doc_manage_dbState = "search";
+
+        }
+
+    }
+
+    //상단 취소버튼 클릭
+    function Gmp_doc_manageUndo() {
+        Gmp_doc_manage_dbState = "search";
+        Gmp_doc_manageEditing(false);
+        Gmp_doc_manageSearch();
+        Gmp_doc_manage_initRowCount = 0;
+    }
+
+    //프린트
+    function Gmp_doc_managePrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var tabIndex = $("#Gmp_doc_manage_menutab .active").parent().index();
+        var grid = "";
+        var data = "";
+
+        if (tabIndex == 0) {
+            grid = $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("instance");
+            if (grid.totalCount() <= 0) {
+                alert("출력할 데이터가 없습니다. 배포 정보를 입력하세요.");
+                return;
+            }
+            data = getGridRowByKey('Gmp_doc_manage_DataGrid_1', grid.option("focusedRowKey"));
+        }
+        else {
+            grid = $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("instance");
+            if (grid.totalCount() <= 0) {
+                alert("출력할 데이터가 없습니다. 폐기 정보를 입력하세요.");
+                return;
+            }
+            data = getGridRowByKey('Gmp_doc_manage_DataGrid_2', grid.option("focusedRowKey"));
+        }
+
+        var report = new ReportHelper();
+
+        if (tabIndex == 0) {
+            report.addParam({
+                objFile: { path: "Doc", RptFileName: "DocumentDistributeList" },
+                objSp: { SpName: "SP_Gmp_doc_manage", gubun: "DocumentDistributeListReport", reportParam: "reportGubun:dist" + ";doc_no:" + data.doc_no + ";revision_no:" + data.revision_no + ";dist_id:" + data.dist_id  },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "" }
+            });
+        }
+        else {
+            report.addParam({
+                objFile: { path: "Doc", RptFileName: "DocumentDisuseList" },
+                objSp: { SpName: "SP_Gmp_doc_manage", gubun: "DocumentDistributeListReport", reportParam: "reportGubun:disuse" + ";doc_no:" + data.doc_no + ";revision_no:" + data.revision_no + ";dist_id:" + data.dist_id },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "" }
+            });
+        }
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+    //엑셀
+    function Gmp_doc_manageExcel() {
+        if (Gmp_doc_manage_tabGubun == "F") {
+            treeExportToExcel("Gmp_doc_manage_TreeList", "Gmp_doc_manageData");
+        } else {
+            gridExportToExcel("Gmp_doc_manage_DataGrid", "Gmp_doc_manageData");
+        }
+    }
+
+    function Gmp_doc_manage_GridSelect() {
+        var search_gubun = $("#Gmp_doc_manageForm input[name='search_gubun']:checked").val();//사용중
+        var s_gubun = $("#Gmp_doc_manageForm input[name='s_gubun']:checked").val();//권한
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Doc/Gmp_doc_manage_Search',
+            data: {
+                doc_nm_S: $("#doc_nm").val(),
+                search_gubun_S: search_gubun,
+                search_select: Gmp_doc_manage_tabGubun,
+                s_gubun_S: s_gubun
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (Gmp_doc_manage_tabGubun == "F") {
+                        $("#Gmp_doc_manage_TreeList").dxTreeList("option", "dataSource", json);
+                        $("#Gmp_doc_manage_TreeList").dxTreeList("instance").option("focusedRowIndex", -1);
+                        $("#Gmp_doc_manage_TreeList").dxTreeList("instance").option("focusedRowIndex", 0);
+
+                    } else {
+                        $("#Gmp_doc_manage_DataGrid").dxDataGrid("option", "dataSource", json);
+                        $("#Gmp_doc_manage_DataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                    }
+
+                    check = true;
+
+                } else {
+
+                    if (Gmp_doc_manage_tabGubun == "F") {
+                        $("#Gmp_doc_manage_TreeList").dxTreeList("option", "dataSource", []);
+                        $("#Gmp_doc_manage_TreeList").dxTreeList("instance").option("focusedRowKey", "");
+
+                    } else {
+                        $("#Gmp_doc_manage_DataGrid").dxDataGrid("option", "dataSource", []);
+                        $("#Gmp_doc_manage_DataGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+
+                    detailClear();
+                    check = false;
+                }
+            }
+        })
+        return check;
+    }
+
+
+    //배포 책임자 조회
+    function GetOverPersonInChargeEmpCd() {
+
+        $.ajax({
+            type: 'POST',
+            async:false,
+            url: '/Doc/Gmp_doc_manage_GetOverPersonInChargeEmpCd',
+            data: {
+                sign_set_cd: Gmp_doc_manage_signCode
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    //console.log(JSON.parse(result));
+
+                    $('#Gmp_doc_manage input[name="charge_emp_cd"]').val(json[0].emp_cd);
+
+                }
+            }
+        })
+    }
+
+    //우측 문서관리 데이터 설정
+    function setDetailData() {
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != undefined && data != null) {
+
+            if (Gmp_doc_manage_dbState != "insert") {
+                // last_ck 외계어 쓰지 말자. "L", "M", "D"가 있는데 무슨 의미인지 모르겠다.
+                // "L" 은 'L 이면 체계 트리의 마지막' 이라는데...   Last 의 "L" 을 의미하는건가?
+                // "D" 는 '문서는 하위 체계가 아니므로' 라는데.... Document 의 "D" 를 의미하는건가?
+                // "M" 은 아마 하위의 노드가 있는 걸 말하는 것 같다..?
+                if (data.last_ck == "D") {
+                    //console.log(data);
+                    $('#Gmp_doc_manage input[name="doc_name"]').val(data.doc_name);
+                    $('#Gmp_doc_manage input[name="doc_class"]').val(data.doc_class_nm);
+                    $('#Gmp_doc_manage input[name="doc_type"]').val(data.doc_type_nm);
+                    $('#Gmp_doc_manage input[name="approval_date"]').val(data.approval_date);
+                    $('#Gmp_doc_manage input[name="start_date"]').val(data.start_date);
+                    $('#Gmp_doc_manage input[name="archive_period"]').val(data.archive_period);
+                    $('#Gmp_doc_manage input[name="archive_period_unit"]').val(data.archive_period_unit);
+                    $('#Gmp_doc_manage input[name="exam_cycle"]').val(data.exam_cycle);
+                    $('#Gmp_doc_manage input[name="exam_cycle_unit"]').val(data.exam_cycle_unit);
+                    $('#Gmp_doc_manage input[name="binding_no"]').val(data.binding_no);
+                    $('#Gmp_doc_manage input[name="archive_position"]').val(data.archive_position);
+                    $('#Gmp_doc_manage input[name="archive_position_nm"]').val(data.archive_position_nm);
+                    $('#Gmp_doc_manage input[name="writer_nm"]').val(data.writer_nm);
+                    $('#Gmp_doc_manage input[name="rule_nm"]').val(data.rule_nm);
+                    $('#Gmp_doc_manage input[name="rule_no"]').val(data.rule_no);
+                    $('#Gmp_doc_manage input[name="use_yn_nm"]').val(data.use_yn_nm);
+
+                    $('#Gmp_doc_manage input[name="doc_ename"]').val(data.doc_ename);
+                    $('#Gmp_doc_manage input[name="writer_dept_nm"]').val(data.writer_dept_nm);
+                    $('#Gmp_doc_manage input[name="operation_date"]').val(data.operation_date);
+
+                    //배포, 폐기 데이터 초기화
+                    initDistData();
+                    initDistDisuseData();
+
+                    //개정번호 lookup 데이터 조회
+                    setLookupData();
+
+                } else {
+                    detailClear();
+                }
+            }
+        }
+    }
+
+    //개정번호 lookup 설정
+    function setLookupData() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != undefined && data != null) {
+
+            $.ajax({
+                type: 'POST',
+                async:false,
+                url: '/Doc/Gmp_doc_manage_GetLookupData',
+                data: {
+                    doc_no: data.doc_no
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#Gmp_doc_manage #revision_no").empty();
+
+                        for (var i = 0; i < json.length; i++) {
+                            var option = $("<option value=" + json[i].keyfield + ">" + json[i].displayfield + "</option>");
+                            $("#Gmp_doc_manage #revision_no").append(option);
+                        }
+
+                        //개정번호에 대한 상세 개정데이터 조회
+                        Gmp_doc_manage_SetRevisionData();
+
+                    } else {
+                        //개정번호 lookup 데이터 없을 경우 > 배포, 폐기 데이터 없음 > 배포,폐기 데이터 초기화
+                        initDistData();
+                        initDistDisuseData();
+                    }
+                }
+            })
+        }
+    }
+
+    //배포관리 데이터 조회
+    function Gmp_doc_manage_GridSelect1() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != undefined && data != null) {
+
+            var revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+            revision_no = (revision_no == "" || revision_no == null) ? "" : revision_no;
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Doc/Gmp_doc_manage_GridSelect1',
+                data: {
+                    doc_no: data.doc_no,
+                    revision_no: revision_no
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "dataSource", json);
+                        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    } else {
+
+                        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "dataSource", []);
+                        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+                }
+            })
+
+        }
+    }
+
+    //폐기관리 데이터 조회
+    function Gmp_doc_manage_GridSelect2() {
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != undefined && data != null) {
+
+            //var revision_no = $("#Gmp_doc_manage #revision_no").val();
+            var revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+            if (revision_no == "" || revision_no == null) return;
+
+            if (Gmp_doc_manage_focusedRow_D1 != undefined && Gmp_doc_manage_focusedRow_D1 != null) {
+                //initDistDisuseData();
+
+                var data_1 = Gmp_doc_manage_focusedRow_D1.data;
+
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    url: '/Doc/Gmp_doc_manage_GridSelect2',
+                    data: {
+                        doc_no: data.doc_no,
+                        revision_no: revision_no,
+                        dist_id: data_1.dist_id
+                    },
+                    success: function (result) {
+
+                        if (result != "") {
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            //console.log(JSON.parse(result));
+                            $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "dataSource", json);
+                            $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                        }
+                        else {
+                            initDistDisuseData();
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    //문서 개정데이터 조회
+    function Gmp_doc_manage_SetRevisionData() {
+        //폐기관리 탭 데이터 초기화
+        initDistDisuseData();
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+        if (data != undefined && data != null) {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Doc/Gmp_doc_manage_GetRevisionData',
+                data: {
+                    doc_no: data.doc_no,
+                    revision_no: $("#Gmp_doc_manageForm_Right #revision_no option:selected").val()
+
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        //console.log(JSON.parse(result));
+
+                        //배포관리 그리드 상단 데이터 설정
+                        $('#Gmp_doc_manage input[name="revision_date"]').val(json[0].revision_date);
+                        $('#Gmp_doc_manage input[name="revise_emp_nm"]').val(json[0].revise_emp_nm);
+                        $('#Gmp_doc_manage input[name="void_date"]').val(json[0].void_date);
+
+                        //배포 데이터 조회
+                        Gmp_doc_manage_GridSelect1();
+
+                    } else {
+
+                        //개정 폼 데이터 및 개정그리드 초기화
+                        initDistData();
+
+                    }
+                }
+            })
+        }
+    }
+
+    //폐기관리 폼에 배포관리의 포커스된 로우에 해당하는 배포데이터 보여주기
+    function Gmp_doc_manage_SetDistDetail() {
+        if (Gmp_doc_manage_focusedRow_D1 != null) {
+            Gmp_doc_manage_GridSelect2();
+
+            var data = Gmp_doc_manage_focusedRow_D1.data;
+            $('#Gmp_doc_manage input[name="dept_nm"]').val(data.dist_dept_nm);
+            $('#Gmp_doc_manage input[name="dist_date"]').val(data.dist_date);
+            $('#Gmp_doc_manage input[name="dist_qty"]').val(data.dist_qty);
+            $('#Gmp_doc_manage input[name="over_emp_nm"]').val(data.over_emp_nm);
+            $('#Gmp_doc_manage input[name="accept_emp_nm"]').val(data.accept_emp_nm);
+        }
+    }
+
+    //CRUD 및 데이터 매핑 end///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    //기타 start ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    //목차(트리리스트) or 색인(그리드) 중 선택된 탭에 대한 포커스 로우 가져오기
+    function Gmp_doc_manage_getFocusedRowData() {
+        var data = null;
+
+        if (Gmp_doc_manage_tabGubun == "F") {
+            data = Gmp_doc_manage_focusedRow_T.data;
+        } else {
+            data = Gmp_doc_manage_focusedRow_G.data;
+        }
+
+        return data;
+    }
+
+    function detailClear() {
+
+        $('#Gmp_doc_manage input[name="doc_name"]').val("");
+        $('#Gmp_doc_manage input[name="doc_class"]').val("");
+        $('#Gmp_doc_manage input[name="doc_type"]').val("");
+        $('#Gmp_doc_manage input[name="approval_date"]').val("");
+        $('#Gmp_doc_manage input[name="start_date"]').val("");
+        $('#Gmp_doc_manage input[name="archive_period"]').val("");
+        $('#Gmp_doc_manage input[name="archive_period_unit"]').val("");
+        $('#Gmp_doc_manage input[name="exam_cycle"]').val("");
+        $('#Gmp_doc_manage input[name="exam_cycle_unit"]').val("");
+        $('#Gmp_doc_manage input[name="binding_no"]').val("");
+        $('#Gmp_doc_manage input[name="archive_position"]').val("");
+        $('#Gmp_doc_manage input[name="archive_position_nm"]').val("");
+        $('#Gmp_doc_manage input[name="writer_nm"]').val("");
+        $('#Gmp_doc_manage input[name="rule_nm"]').val("");
+        $('#Gmp_doc_manage input[name="rule_no"]').val("");
+        $('#Gmp_doc_manage input[name="use_yn_nm"]').val("");
+        $('#Gmp_doc_manage input[name="doc_ename"]').val("");
+        $('#Gmp_doc_manage input[name="writer_dept_nm"]').val("");
+        $('#Gmp_doc_manage input[name="operation_date"]').val("");
+
+        initDistData();
+        initDistDisuseData();
+
+        //개정관리 그리드 초기화
+         //$("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "dataSource", []);
+    }
+
+    //개정 데이터 초기화
+    function initDistData() {
+        $("#Gmp_doc_manage #revision_no").empty(); //selectbox 초기화
+        $('#Gmp_doc_manage input[name="revision_date"]').val("");
+        $('#Gmp_doc_manage input[name="revise_emp_nm"]').val("");
+        $('#Gmp_doc_manage input[name="void_date"]').val("");
+        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "dataSource", []);
+        $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("option", "focusedRowKey", "");
+
+    }
+
+    //폐기 데이터 초기화
+    function initDistDisuseData() {
+        $('#Gmp_doc_manage input[name="dept_nm"]').val("");
+        $('#Gmp_doc_manage input[name="dist_date"]').val("");
+        $('#Gmp_doc_manage input[name="dist_qty"]').val("");
+        $('#Gmp_doc_manage input[name="over_emp_nm"]').val("");
+        $('#Gmp_doc_manage input[name="accept_emp_nm"]').val("");
+        $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "dataSource", []);
+        $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("option", "focusedRowKey", "");
+    }
+
+    //문서 열람시, 문서 유효일 체크
+    function chkVoidDate() {
+        var row = Gmp_doc_manage_getFocusedRowData();
+
+        $.ajax({
+            type: 'POST',
+            async:false,
+            url: '/Doc/Gmp_doc_manage_CheckVoidDate',
+            data: {
+                voidDate: $("#Gmp_doc_manage #void_date").val()
+            },
+            success: function (result) {
+                //if (result != "") {
+                if (result == "caution") {
+                    var ok = confirm("문서효력일이 경과하였습니다. 문서를 열람하시겠습니까?");
+                    if (ok) {
+
+                        if (row != null && row != undefined) {
+                            if (row.main_file_id != null && row.main_file_id != "")
+                                document.location.assign('/Doc/Gmp_doc_manage_GetFile?doc_file_id=' + row.main_file_id);
+
+                            //DocManage_GetFile(row.main_file_id);;
+                        }
+
+                    }
+                } else {
+                    if (row != null && row != undefined) {
+                        if (row.main_file_id != null && row.main_file_id != "")
+                            document.location.assign('/Doc/Gmp_doc_manage_GetFile?doc_file_id=' + row.main_file_id);
+
+                        //DocManage_GetFile(row.main_file_id);;
+                    }
+                }
+                //}
+
+
+            }
+        })
+    }
+
+    //기타 end  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    //메인그리드 이벤트  start//////////////////////////////////////////////////////////////////////////////////////////////////////
+    //목차 트리리스트 포커스 데이터
+    function Gmp_doc_manageFocuschanged_T(e) {
+
+        if (!e.row || !e.row.data) {
+            Gmp_doc_manage_focusedRow_T = null;
+        } else {
+            Gmp_doc_manage_focusedRow_T = e.row;
+            setDetailData();
+        }
+
+    }
+
+    //색인 그리드 포커스 데이터
+    function Gmp_doc_manageFocuschanged_G(e) {
+
+        if (!e.row || !e.row.data) {
+            Gmp_doc_manage_focusedRow_G = null;
+        } else {
+            Gmp_doc_manage_focusedRow_G = e.row;
+            setDetailData();
+        }
+
+    }
+
+    //문서 파일 열기
+    function Gmp_doc_manageDblClick(e) {
+        var last_ck, checkme = "";
+        var row = Gmp_doc_manage_getFocusedRowData();
+        if (row != null) {
+            last_ck = row.last_ck;
+            checkme = row.checkme;
+
+            if (Gmp_doc_manage_tabGubun == "F") {
+                if (row.ImageIndex == "0" || row.ImageIndex == 0) return;
+            }
+
+            if (checkme != "Y") {
+                alert("열람 권한이 없습니다.");
+                return;
+            }
+
+            if (last_ck == "D") {
+                var ok = confirm("문서을 여시겠습니까?");
+                if (ok) {
+
+                    if (chkVoidDate()) return;
+
+                }
+            }
+
+        }
+
+    }
+
+    //문서인 row에 대하여 하얀 바탕 적용
+     //last_ck : D(문서)
+    function Gmp_doc_manageOnRowPrepared(e) {
+        if (e.rowType == "data") {
+            if (e.data.last_ck == "D") {
+                e.rowElement.addClass('white');
+            }
+        }
+    }
+
+    //메인그리드 이벤트  end////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    //배포/폐기 관리 그리드 이벤트 start////////////////////////////////////////////////////////////////////////////////////////////
+    //배포관리 그리드 포커스 이벤트
+    function Gmp_doc_manageFocuschanged_D1(e) {
+        if (!e.row || !e.row.data) {
+            Gmp_doc_manage_focusedRow_D1 = null;
+        } else {
+            Gmp_doc_manage_focusedRow_D1 = e.row;
+            Gmp_doc_manage_SetDistDetail();
+        }
+
+    }
+
+    //폐기관리 그리드 포커스 이벤트
+    function Gmp_doc_manageFocuschanged_D2(e) {
+        if (!e.row || !e.row.data) {
+            Gmp_doc_manage_focusedRow_D2 = null;
+        } else {
+            Gmp_doc_manage_focusedRow_D2 = e.row;
+        }
+    }
+
+    //배포관리 그리드 저장버튼 숨기기
+    function Gmp_doc_manage_OnToolbarPreparing_D1(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+
+            //로우 추가버튼 클릭시
+            if (item.name == "addRowButton") {
+                item.options.onClick = function (args) {
+
+                    if (item.options.disabled && Gmp_doc_manage_initRowCount >= 1) {
+                        alert("배포데이터는 한 번에 하나만 입력 가능합니다.");
+                    }
+
+                    //하나의 로우만 추가가능
+                    if (Gmp_doc_manage_initRowCount == 0) {
+                        e.component.addRow();
+                        item.options.disabled = true;//로우추가 이벤트 발생 X
+                    }
+
+                };
+            }
+
+            //되돌리기 버튼 클릭시
+            if (item.name == "revertButton") {
+                item.options.onClick = function (args) {
+                    e.component.cancelEditData();
+                    Gmp_doc_manage_initRowCount = 0;
+                    toolbarItems[1].options.disabled = false;//로우추가 이벤트 발생 ㅇ
+                };
+            }
+        });
+    }
+
+    //폐기관리 그리드 저장버튼 숨기기
+    function Gmp_doc_manage_OnToolbarPreparing_D2(e) {
+        var toolbarItems = e.toolbarOptions.items;
+        //console.log(toolbarItems);
+
+        $.each(toolbarItems, function (_, item) {
+
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+
+            //로우 추가버튼 클릭시
+            if (item.name == "addRowButton") {
+                item.options.onClick = function (args) {
+
+                    if (item.options.disabled && Gmp_doc_manage_initRowCount >= 1) {
+                        alert("폐기데이터는 한 번에 하나만 입력 가능합니다.");
+                    }
+
+                    //하나의 로우만 추가가능
+                    if (Gmp_doc_manage_initRowCount == 0) {
+                        e.component.addRow();
+                        item.options.disabled = true;//로우추가 이벤트 발생 X
+                    }
+
+                };
+            }
+
+            //되돌리기 버튼 클릭시
+            if (item.name == "revertButton") {
+                item.options.onClick = function (args) {
+                    e.component.cancelEditData();
+                    Gmp_doc_manage_initRowCount = 0;
+                    Gmp_doc_manage_tempArray_D1 = new Array();
+                    Gmp_doc_manage_tempArray_D2 = new Array();
+                    toolbarItems[1].options.disabled = false;//로우추가 이벤트 발생 ㅇ
+                };
+            }
+        });
+    }
+
+    //사원 조회 팝업 띄우기
+    function Gmp_doc_manageCellClick(e) {
+        Gmp_doc_manageCellClickEvent = e;
+
+        if (!(Gmp_doc_manage_dbState === "insert" || Gmp_doc_manage_dbState === "edit")) {
+            return;
+        }
+
+        //edit가 활성화된 row에 대해서
+        if (e.hasOwnProperty("row") && e.row.hasOwnProperty("isEditing") && e.row.isEditing) {
+            var showPopup = false;
+
+            if (Gmp_doc_manage_tab_num_1 == "1") { //배포
+                if (e.columnIndex == 6) showPopup = true;
+
+            } else {//폐기
+                if (e.columnIndex == 2) showPopup = true;
+            }
+
+            if (showPopup) {
+                var popup = $("#Gmp_doc_manageEmpPopup").dxPopup("instance");
+                popup.show();
+            }
+        }
+
+    }
+
+    //배포관리 그리드 insert row
+    function Gmp_doc_manageOnRowInserted_1(e) {
+        //2020.11.03 수정(배치모드에서 row 추가후 수정시, 수정으로 들어가는지 확인)
+        var data = e.data;
+
+        var row = Gmp_doc_manage_getFocusedRowData();
+        if (row != undefined && row != null) {
+            data.doc_no = row.doc_no;
+        }
+
+        data.gubun = "I";
+        data.revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+        data.dist_id = "";
+        data.dist_status = "1";
+
+        //배포날짜 설정
+        var date = new Date(data.dist_date);
+        var day = (date.getDate() < 10) ? "0" + date.getDate() : date.getDate();
+        var month = date.getMonth() + 1;
+        var year = date.getFullYear();
+        month = (month < 10) ? ("0" + month) : month;
+        data.dist_date = year + "-" + month + "-" + day;
+        //console.log(data);
+
+        Gmp_doc_manage_tempArray_D1.push(data);
+    }
+
+    //배포관리 그리드 new row
+    function Gmp_doc_manageOnInitNewRow_1(e) {
+        Gmp_doc_manage_initRowCount++;
+
+        var data = Gmp_doc_manage_getFocusedRowData();
+
+        if (data != null) {
+            //var revision_no = $("#Gmp_doc_manage #revision_no").val();
+            var revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+
+            e.data.doc_no = data.doc_no;//visible:false
+            e.data.revision_no = revision_no;//visible:false
+            e.data.dist_qty = 0;
+            e.data.dist_date = "@DateTime.Today.ToString("yyyy-MM-dd")";
+            e.data.over_emp_cd = Gmp_doc_manage_userCd;
+            e.data.over_emp_nm = Gmp_doc_manage_userNm;
+            e.data.dist_type = "D"; //배포상태
+        }
+
+    }
+
+    //배포관리 그리드 update row
+    function Gmp_doc_manageOnRowUpdated_1(e) {
+        var data = e.data;
+
+        var row = Gmp_doc_manage_getFocusedRowData();
+        if (row != undefined && row != null) {
+
+            data.gubun = "U";
+            data.doc_no = row.doc_no;
+            data.revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+
+            //배포날짜 설정
+            var date = new Date(data.dist_date);
+            var day = (date.getDate() < 10) ? "0" + date.getDate() : date.getDate();
+            var month = date.getMonth() + 1;
+            var year = date.getFullYear();
+            month = (month < 10) ? ("0" + month) : month;
+            data.dist_date = year + "-" + month + "-" + day;
+
+            Gmp_doc_manage_tempArray_D1.push(data);
+        }
+    }
+
+
+    //폐기관리 그리드 insert row
+    function Gmp_doc_manageOnRowInserted_2(e) {
+
+        var data = e.data;//입력한 폐기 데이터
+        data.gubun = "I";
+
+        var distFocusedData = Gmp_doc_manage_focusedRow_D1.data;
+
+        var row = Gmp_doc_manage_getFocusedRowData();
+        if (row != undefined && row != null) {
+            data.doc_no = row.doc_no;
+        }
+
+        data.revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+        data.dist_id = distFocusedData.dist_id;
+        data.disuse_id = "";
+
+        ///폐기날짜 설정
+        var date = new Date(data.disuse_date);
+        var day = (date.getDate() < 10) ? "0" + date.getDate() : date.getDate();
+        var month = date.getMonth() + 1;
+        var year = date.getFullYear();
+        month = (month < 10) ? ("0" + month) : month;
+        data.disuse_date = year + "-" + month + "-" + day;
+
+        Gmp_doc_manage_tempArray_D2.push(data);
+    }
+
+    //폐기관리 그리드 new row
+    function Gmp_doc_manageOnInitNewRow_2(e) {
+        Gmp_doc_manage_initRowCount++;
+
+        //배포관리 focused row의 데이터를 가지고온다
+        if (Gmp_doc_manage_focusedRow_D1 != null && Gmp_doc_manage_focusedRow_D1 != undefined) {
+            var data = Gmp_doc_manage_focusedRow_D1.data;
+
+            e.data.doc_no = data.doc_no;
+            e.data.revision_no = data.revision_no;
+            e.data.disuse_qty = 0;
+            e.data.dist_id = data.dist_id;
+            e.data.disuse_date = "@DateTime.Today.ToString("yyyy-MM-dd")";
+
+        }
+    }
+
+    //폐기관리 그리드 update row
+    function Gmp_doc_manageOnRowUpdated_2(e) {
+        //2020.11.03 수정
+        var data = e.data;//입력한 폐기 데이터
+        data.gubun = "U";
+
+        var distFocusedData = Gmp_doc_manage_focusedRow_D1.data;
+
+        var row = Gmp_doc_manage_getFocusedRowData();
+        if (row != undefined && row != null) {
+            data.doc_no = row.doc_no;
+        }
+
+        data.revision_no = $("#Gmp_doc_manageForm_Right #revision_no option:selected").val();
+        data.dist_id = distFocusedData.dist_id;
+
+        //폐기날짜 설정
+        var date = new Date(data.disuse_date);
+        var day = (date.getDate() < 10) ? "0" + date.getDate() : date.getDate();
+        var month = date.getMonth() + 1;
+        var year = date.getFullYear();
+        month = (month < 10) ? ("0" + month) : month;
+        data.disuse_date = year + "-" + month + "-" + day;
+
+        Gmp_doc_manage_tempArray_D2.push(data);
+    }
+
+    //배포/폐기 관리 그리드 이벤트 end /////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    // 사원조회 팝업 이벤트 start //////////////////////////////////////////////////////////////////////////////////////////////////
+    function Gmp_doc_manageEmpRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        var emp_cd = data.emp_cd;
+        var emp_nm = data.emp_nm;
+        var grid = null;
+
+        if (Gmp_doc_manage_tab_num_1 == "1") {//배포관리
+
+            grid = $("#Gmp_doc_manage_DataGrid_1").dxDataGrid("instance");
+
+            grid.cellValue(Gmp_doc_manageCellClickEvent.rowIndex, Gmp_doc_manageCellClickEvent.columnIndex, emp_cd);//인수자코드
+            grid.cellValue(Gmp_doc_manageCellClickEvent.rowIndex, Gmp_doc_manageCellClickEvent.columnIndex + 1, emp_nm);//인수자
+
+        }else {//폐기관리
+            grid = $("#Gmp_doc_manage_DataGrid_2").dxDataGrid("instance");
+            grid.cellValue(Gmp_doc_manageCellClickEvent.rowIndex, "disuse_emp_cd", emp_cd);//폐기자 코드
+            grid.cellValue(Gmp_doc_manageCellClickEvent.rowIndex, "disuse_emp_nm", emp_nm);//폐기자
+        }
+
+        var popup = $("#Gmp_doc_manageEmpPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+     // 사원조회 팝업 이벤트 end ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+</script>
+
+<div id="Gmp_doc_manage" autoresize="Y">
+    @*<h4 class="divTitle">배포/폐기 관리</h4>*@
+
+    @* === 사원조회 팝업 === *@
+    <div id="Gmp_doc_manageEmpPopup"></div>
+
+    @* === 트리 리스트 상단 검색조건 === *@
+    <div id="Gmp_doc_manageTop" class="mainTop row">
+        <div class="col-8">
+            <form id="Gmp_doc_manageForm">
+
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">문서명</span>
+                        </div>
+                        <input class="form-control" type="text" name="doc_nm" id="doc_nm" />
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="search_gubun_2" name="search_gubun" />
+                        </div>
+                        <span class="form-control-sm"><label for="search_gubun_2">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="search_gubun_1" name="search_gubun" />
+                        </div>
+                        <span class="form-control-sm"><label for="search_gubun_1">사용중</label></span>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">열람자</span>
+                        </div>
+                        <input type="text" class="form-control" name="login_nm" id="login_nm" readonly />
+                    </div>
+                </div>
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">권한</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="s_gubun_2" name="s_gubun" />
+                        </div>
+                        <span class="form-control-sm"><label for="s_gubun_2">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="s_gubun_1" name="s_gubun" />
+                        </div>
+                        <span class="form-control-sm"><label for="s_gubun_1">내것만 보기</label></span>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "*");}
+            @*@(Html.DevExtreme().Toolbar()
+                    .ID("Gmp_doc_manage_Toolbar")
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                                  .Button()
+                                  .Type(ButtonType.Default)
+                                  .StylingMode(ButtonStylingMode.Contained)
+                                  .ID("Gmp_doc_manageSearch")
+                                  .Icon("search")
+                                  .Text("조회")
+                                  .OnClick("Gmp_doc_manageSearch")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_manageInput")
+                              .Icon("plus")
+                              .Text("입력")
+                              .OnClick("Gmp_doc_manageInput")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_manageEdit")
+                              .Icon("edit")
+                              .Text("수정")
+                              .OnClick("Gmp_doc_manageEdit")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_manageDelete")
+                              .Icon("trash")
+                              .Text("삭제")
+                              .OnClick("Gmp_doc_manageDelete")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_manageSave")
+                              .Icon("save")
+                              .Text("저장")
+                              .OnClick("Gmp_doc_manageSave")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_manageUndo")
+                              .Icon("undo")
+                              .Text("취소")
+                              .OnClick("Gmp_doc_manageUndo")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+            )*@
+        </div>
+    </div><!-- Gmp_doc_manageTop -->
+
+    <div class="row">
+        <div class="col-6">
+            <div id="Gmp_doc_manage_MTab">
+                @(Html.DevExtreme().Tabs()
+                .ID("tabs_Gmp_doc_manage_M")
+                .DataSource(DocManage_tabs)
+                .SelectedIndex(0)
+                .OnItemClick("DocManage_Tabs_itemMClick")
+            )
+            </div>
+
+            <div id="Gmp_doc_manageMenuDiv">
+                <div id="Gmp_doc_manageMenuDiv_1" class="box mb-0">
+                    <div id="Gmp_doc_manage_RightMain_1">
+                        @(Html.DevExtreme().TreeList()
+                        .ID("Gmp_doc_manage_TreeList")
+                        .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                        .Height(810)
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .HoverStateEnabled(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .RootValue("")
+                        .KeyExpr("ID")
+                        .ParentIdExpr("ParentID")
+                        .WordWrapEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("doc_no").Caption("문서번호");
+                            c.Add().DataField("structure_nm").Caption("문서명");
+                            c.Add().DataField("checkme").Caption("권한")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.checkme == ""Y""); }");
+
+                            //c.Add().DataField("adate").Visible(false);
+
+                        })
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .ColumnAutoWidth(true)
+                        .AutoExpandAll(true)
+                        .ExpandedRowKeys(new[] { 1 })
+                        .OnFocusedRowChanged("Gmp_doc_manageFocuschanged_T")
+                        .OnRowDblClick("Gmp_doc_manageDblClick")
+                        .OnRowPrepared("Gmp_doc_manageOnRowPrepared")
+                    )
+                    </div>
+                </div>
+                <div id="Gmp_doc_manageMenuDiv_2" class="box mb-0 display-none">
+                    <div id="Gmp_doc_manage_RightMain_2">
+                        @(Html.DevExtreme().DataGrid()
+                        .ID("Gmp_doc_manage_DataGrid")
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .Height(810)
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .KeyExpr("doc_no")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("doc_no").Caption("문서번호");
+                            c.Add().DataField("doc_name").Caption("문서명");
+                            c.Add().DataField("checkme").Caption("권한")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.checkme == ""Y""); }");
+                            c.Add().DataField("exam_cycle_unit").Caption("검토주기단위");
+                        })
+                        .OnFocusedRowChanged("Gmp_doc_manageFocuschanged_G")
+                        .OnRowDblClick("Gmp_doc_manageDblClick")
+                    )
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-6">
+            <div class="box">
+                <form id="Gmp_doc_manageForm_Right">
+                    <div class="divName">
+                        <p id="title_label">문서관리</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">문서명</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="doc_name" id="doc_name" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">영문명</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="doc_ename" id="doc_ename" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">문서구분</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="doc_class" id="doc_class" readonly />
+                        </div>
+                        <label class="col-2">문서분류</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="doc_type" id="doc_type" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제정일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="approval_date" name="approval_date" readonly />
+                        </div>
+                        <label class="col-2">시행일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="start_date" name="start_date" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검토주기</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" id="exam_cycle" name="exam_cycle" readonly />
+                        </div>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" id="exam_cycle_unit" name="exam_cycle_unit" readonly />
+                        </div>
+                        <label class="col-2">보존기간</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" id="archive_period" name="archive_period" readonly />
+                        </div>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" id="archive_period_unit" name="archive_period_unit" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">보관장소</label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control" id="archive_position_nm" name="archive_position_nm" readonly />
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="archive_position" name="archive_position" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">편철번호</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="binding_no" name="binding_no" readonly />
+                        </div>
+                        <label class="col-2">규정번호</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="rule_no" id="rule_no" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">관련규정</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="rule_nm" id="rule_nm" readonly />
+                        </div>
+                        <label class="col-2">작성자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="writer_nm" id="writer_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">작성부서</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="writer_dept_nm" id="writer_dept_nm" readonly />
+                        </div>
+                        <label class="col-2">사용여부</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="use_yn_nm" id="use_yn_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">개정번호</label>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="revision_no" id="revision_no" onchange="Gmp_doc_manage_SetRevisionData();">
+                            </select>
+                        </div>
+                        <label class="col-2">문서유효일</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="void_date" id="void_date" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">개정일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="revision_date" name="revision_date" readonly />
+                        </div>
+                        <label class="col-2">시행일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="operation_date" name="operation_date" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">개정부서</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="revision_dept_nm" name="revision_dept_nm" readonly />
+                        </div>
+                        <label class="col-2">개정자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" id="revise_emp_nm" name="revise_emp_nm" readonly />
+                        </div>
+                    </div>
+                </form>
+
+                <ul class="nav nav-tabs margin-bottom" id="Gmp_doc_manage_menutab">
+                    <li class="nav-item item1">
+                        <a class="nav-link active" onclick="Gmp_doc_manage_menutab('Gmp_doc_manage_menutab', 'Gmp_doc_manageMenuRightDiv', 1); Gmp_doc_manage_tab_num_1= '1' ">배포관리</a>
+                    </li>
+                    <li class="nav-item item2">
+                        <a class="nav-link" onclick="Gmp_doc_manage_menutab('Gmp_doc_manage_menutab', 'Gmp_doc_manageMenuRightDiv', 2); Gmp_doc_manage_tab_num_1= '2'">폐기관리</a>
+                    </li>
+                </ul>
+
+                <div id="Gmp_doc_manageMenuRightDiv">
+
+                    <!-- 배포관리 -->
+                    <div id="Gmp_doc_manageMenuRightDiv_1">
+                        @(Html.DevExtreme().DataGrid()
+                        .ID("Gmp_doc_manage_DataGrid_1")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .Height(200)
+                        .KeyExpr("dist_id")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .OnRowUpdated("Gmp_doc_manageOnRowUpdated_1")
+                        .OnRowInserted("Gmp_doc_manageOnRowInserted_1")
+                        //.OnRowRemoved("Gmp_doc_manageOnRowRemoved_1")
+                        .OnInitNewRow("Gmp_doc_manageOnInitNewRow_1")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("dist_dept_cd").Caption("배포처")
+                            .MinWidth(110)
+                            .Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "부서",
+                                        pDiv = "D",
+                                        pStrWhere = "",
+                                        pTableName = "1"
+                                    }
+                                    ).Key("keyfield"))
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            ).DataType(GridColumnDataType.String);
+
+                            c.Add().DataField("dist_date").Caption("배포일자")
+                            .MinWidth(110)
+                            .DataType(GridColumnDataType.Date).Format("yyyy-MM-dd");
+
+                            c.Add().DataField("dist_type").Caption("배포구분")
+                            .MinWidth(110)
+                            .Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "공통코드",
+                                        pDiv = "D",
+                                        pStrWhere = "GD001",
+                                        pTableName = "2"
+                                    }
+                                    ).Key("keyfield"))
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            ).DataType(GridColumnDataType.String);
+
+                            c.Add().DataField("dist_qty").Caption("배포수량")
+                            .MinWidth(60).DataType(GridColumnDataType.Number);//number
+
+                            c.Add().DataField("over_emp_cd").Caption("인계자코드").AllowEditing(false);
+
+                            c.Add().DataField("over_emp_nm").Caption("인계자").AllowEditing(false);
+
+                            c.Add().DataField("accept_emp_cd").Caption("인수자코드")
+                            .EditCellTemplate(new JS("Gmp_doc_manage_cellWithButton"));
+
+                            c.Add().DataField("accept_emp_nm").Caption("인수자");
+
+                            c.Add().DataField("doc_no").Caption("문서번호").Visible(false);
+                            c.Add().DataField("revision_no").Caption("개정번호").Visible(false);
+                            c.Add().DataField("dist_id").Caption("배포번호").Visible(false);
+
+                        })
+                        .OnToolbarPreparing("Gmp_doc_manage_OnToolbarPreparing_D1")
+                        .OnFocusedRowChanged("Gmp_doc_manageFocuschanged_D1")
+                        .OnCellClick("Gmp_doc_manageCellClick")
+                    )
+                    </div>
+
+                    <!-- 폐기관리 -->
+                    <div id="Gmp_doc_manageMenuRightDiv_2" class="display-none">
+                        <div style="background:#f7f7f7; padding:5px; margin-bottom:0px;">
+                            <div class="input-wrapper">
+                                <label class="col-2">배포처</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control" name="dept_nm" id="dept_nm" readonly />
+                                </div>
+                                <label class="col-2">배포수량</label>
+                                <div class="input-group col-1">
+                                    <input type="text" class="form-control" name="dist_qty" id="dist_qty" readonly />
+                                </div>
+                                <label class="col-2">배포일자</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control" name="dist_date" id="dist_date" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">인계자</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control" name="over_emp_nm" id="over_emp_nm" readonly />
+                                </div>
+                                <label class="col-2">인수자</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control" name="accept_emp_nm" id="accept_emp_nm" readonly />
+                                </div>
+                            </div>
+                        </div>
+
+                        @(Html.DevExtreme().DataGrid()
+                        .ID("Gmp_doc_manage_DataGrid_2")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .Height(200)
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .KeyExpr("disuse_id")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .OnRowUpdated("Gmp_doc_manageOnRowUpdated_2")
+                        .OnRowInserted("Gmp_doc_manageOnRowInserted_2")
+                        //.OnRowRemoved("Gmp_doc_manageOnRowRemoved_2")
+                        .OnInitNewRow("Gmp_doc_manageOnInitNewRow_2")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("disuse_date").Caption("폐기일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd");
+                            c.Add().DataField("disuse_qty").Caption("폐기수량").DataType(GridColumnDataType.Number);
+
+                            c.Add().DataField("disuse_emp_cd").Caption("폐기자코드").EditCellTemplate(new JS("Gmp_doc_manage_cellWithButton"));
+                            c.Add().DataField("disuse_emp_nm").Caption("폐기자");
+                            c.Add().DataField("disuse_reson").Caption("폐기사유");
+
+                            c.Add().DataField("doc_no").Caption("문서번호").Visible(false);
+                            c.Add().DataField("revision_no").Caption("개정번호").Visible(false);
+                            c.Add().DataField("dist_id").Caption("폐기일련번호").Visible(false);
+
+                        })
+                        .OnToolbarPreparing("Gmp_doc_manage_OnToolbarPreparing_D2")
+                        .OnFocusedRowChanged("Gmp_doc_manageFocuschanged_D2")
+                        .OnCellClick("Gmp_doc_manageCellClick")
+                        .Summary(s => s.TotalItems(items =>
+                        {
+                            items.Add()
+                                .Column("disuse_qty")
+                                .ShowInColumn("disuse_qty")
+                                .ValueFormat(Format.Decimal)
+                                .SummaryType(SummaryType.Sum);
+
+                        }).RecalculateWhileEditing(true)
+                        )
+                        )
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+
+
+
+</div>

@@ -1,0 +1,253 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "MaterialBomList";
+
+    var itemJson = @Html.Raw(Json.Encode(ViewBag.items.Data));
+    var MaterialBomList = @Html.Raw(Json.Encode(ViewBag.MaterialBomList.Data));
+}
+<script id="MaterialBomListJs">
+    $(function () {
+        $("#MaterialBomListGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@MaterialBomList));
+
+        var ds = @itemJson;
+
+        var columns = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" },
+            { dataField: "item_gb_nm", caption: "구분" }
+        ];
+        createPopup("MaterialBomListItem", "원료/자재 조회", ds, columns);
+
+    })
+
+
+    // 원료/자재 팝업
+    function SearchItem() {
+        var popup = $("#MaterialBomListItemPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 원료/자재 데이터로우 더블클릭
+    function MaterialBomListItemRowDblClick(selectedItems) {
+        $("#MaterialBomListItemCode").val(selectedItems.values[0]);
+
+        var popup = $("#MaterialBomListItemPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    function MaterialBomListSearch() {
+        clear();
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionMaster/GetBomInfo',
+            data: {
+                pSpName: "SP_MaterialBomList",
+                pGubun: "S",
+                pItemCd: $("#MaterialBomListItemCode").val(),
+                pItemGubun: $("select[id=MaterialBomListGubuns]").val()
+            },
+            success: function (result) {
+                if (result[0] != "") {
+                    var jsonResult = JSON.parse(result);
+
+                    $("#MaterialBomListGrid").dxDataGrid("option", "dataSource", jsonResult);
+                }
+            }
+        })
+        }
+
+    function MaterialBomListGridFocuseChanged() {
+
+       var grid = $("#MaterialBomListGrid").dxDataGrid("instance");
+       var data = getGridRowByKey("MaterialBomListGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionMaster/GetBomDetail',
+            data: {
+                pSpName: "SP_MaterialBomList",
+                pGubun: "S1",
+                pItemCd: data.item_cd
+            },
+            success: function (result) {
+                if (result[0] == "") clear();
+                else {
+                    var jsonResult = JSON.parse(result);
+                    $("#MaterialBomListDetailGrid").dxDataGrid("option", "dataSource", jsonResult);
+
+                }
+
+            }
+        })
+    }
+
+    // 하단 내용 지우기
+    function clear() {
+        $("#MaterialBomListDetailGrid").dxDataGrid("option", "dataSource", []);
+    }
+
+    function MaterialBomListExcel() {
+        gridExportToExcel("MaterialBomListDetailGrid", "MaterialBomData");
+    }
+
+    function MaterialBomListPrint() {
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var grid = $("#MaterialBomListGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("MaterialBomListGrid", grid.option("focusedRowKey"));
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "ProductionMaster", RptFileName: "MaterialBomListR" },
+            objSp: { SpName: "SP_MaterialBomList", gubun: "S1", reportParam: "item_cd:" + data.item_cd },
+            objEtcInfo: { subParam: "" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+</script>
+
+<div id="MaterialBomList" autoresize="Y">
+
+    @* === 원료/자재 팝업 === *@
+    <div id="MaterialBomListItemPopup"></div>
+
+    <div id="MaterialBomList_Top" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="MaterialBomList_Form">
+
+                <div class="input-group input-group-sm col-3">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">품목</span>
+                    </div>
+                    <input type="text" class="form-control" id="MaterialBomListItemCode" name="bom_item_cd">
+                    <div class="input-group-append">
+                        <button class="btn btn-outline-secondary" type="button" onclick="SearchItem()">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="input-group input-group-sm col-3">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">구분</span>
+                    </div>
+                    <select class="custom-select" name="gubuns" id="MaterialBomListGubuns">
+                        @foreach (DataRow row in ((DataTable)ViewBag.Gubuns).Rows)
+                        {
+                            <option value="@row["key_field"]">@row["display_field"]</option>
+                        }
+                    </select>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Preview;Print");}
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-1">
+
+            @* === 원자재 정보 그리드 === *@
+
+            <fieldset class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MaterialBomListGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowIndex(0)
+                    .FocusedRowEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("item_unit").Caption("단위");
+                    })
+                    .OnFocusedRowChanged("MaterialBomListGridFocuseChanged")
+                )
+
+            </fieldset>
+
+        </div>
+
+        <div class="col-8 pl-0">
+
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>Bom 사용 리스트</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                        .ID("MaterialBomListDetailGrid")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .Height(900)
+                        .KeyExpr("item_cd")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add()
+                                    .DataField("item_cd")
+                                    .Caption("코드");
+                            columns.Add()
+                                    .DataField("item_nm")
+                                    .Caption("품목명");
+                            columns.Add()
+                                    .DataField("item_bom_tea_qty")
+                                    .Caption("허가량");
+                            columns.Add()
+                                    .DataField("item_bom_tea_unit")
+                                    .Caption("단위");
+                            columns.Add()
+                                    .DataField("item_bom_standard_qty")
+                                    .Caption("표준량");
+                            columns.Add()
+                                    .DataField("item_bom_batch_qty")
+                                    .Caption("배치량");
+                            columns.Add()
+                                    .DataField("item_bom_batch_unit")
+                                    .Caption("단위");
+                        })
+                        )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

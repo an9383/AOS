@@ -1,0 +1,493 @@
+﻿@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    // 화면 조건에 대한 변수
+    var priorities = new[] { "사용중", "전체" };
+}
+
+<script id="Gmp_doc_system_manageJs">
+        // 메인 그리드
+        var Gmp_doc_system_manage_dataGrid;
+        // 메인 그리드의 선택된 키값, StructureCd
+        var Gmp_doc_system_manage_selectedStructureCd;
+        // 문서체계관리 중복체크
+        var Gmp_doc_system_manage_duplicatedCheck = false;
+
+        var _gmpDocSystemManageCRUDGubun = "";
+
+        // 페이지 로드시 오른쪽 form, 저장, 취소 버튼 비활성화
+        $(function () {
+            Gmp_doc_system_manageEditCheck(false);
+            $("#Gmp_doc_system_manage_Form input[name=select_S][value='1']").prop("checked", true);
+
+            Gmp_doc_system_manageSearch();
+
+            //사용여부 변경시 이벤트
+            $("#Gmp_doc_system_manage_Form input[name='select_S']").change(function () {
+                Gmp_doc_system_manageSearch();
+            })
+
+        });
+
+        // 수정중인지 체크
+        function Gmp_doc_system_manageEditCheck(nowEdit) {
+
+            $('#Gmp_doc_system_manage_RightForm input[name="child_cd"]').prop("readonly", false);
+
+            if (nowEdit) {
+
+                $("#Gmp_doc_system_manageSave").dxButton().parent().parent().removeClass("display-none");
+                $("#Gmp_doc_system_manageUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#Gmp_doc_system_manageSearch").dxButton().parent().parent().addClass("display-none");
+                $("#Gmp_doc_system_manageInput").dxButton().parent().parent().addClass("display-none");
+                $("#Gmp_doc_system_manageEdit").dxButton().parent().parent().addClass("display-none");
+                $("#Gmp_doc_system_manageDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#Gmp_doc_system_manage_RightForm :disabled").attr('disabled', false);
+                $("#Gmp_doc_system_manage_GridContainer").dxTreeList("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#Gmp_doc_system_manageSave").dxButton().parent().parent().addClass("display-none");
+                $("#Gmp_doc_system_manageUndo").dxButton().parent().parent().addClass("display-none");
+                $("#Gmp_doc_system_manageSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#Gmp_doc_system_manageInput").dxButton().parent().parent().removeClass("display-none");
+                $("#Gmp_doc_system_manageEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#Gmp_doc_system_manageDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#Gmp_doc_system_manage_RightForm :enabled").attr('disabled', true);
+                $("#Gmp_doc_system_manage_GridContainer").dxTreeList("option", "disabled", false);
+
+            }
+
+        }
+
+        // 좌측 그리드 선택 변경시 실행
+        function Gmp_doc_system_manage_Focus_changed(e) {
+            if (!e.row) {
+            } else {
+                Gmp_doc_system_manage_fillData(e.row.data);
+            }
+        }
+
+        // 좌측 그리드 상세항목 바인딩
+        function Gmp_doc_system_manage_fillData(data) {
+            $("#Gmp_doc_system_manage_RightForm")[0].reset();
+
+            // 기본 정보를 세팅
+            $("#Gmp_doc_system_manage_RightForm #structure_cd").val(data.structure_cd);
+            $("#Gmp_doc_system_manage_RightForm #structure_nm").val(data.structure_nm);
+            $("#Gmp_doc_system_manage_RightForm #structure_seq").val(data.structure_seq);
+
+            // 숨긴 정보를 세팅
+            $("#Gmp_doc_system_manage_RightForm #parent_cd").val(data.parent_cd);
+            $("#Gmp_doc_system_manage_RightForm #child_cd").val(data.child_cd);
+            $("#Gmp_doc_system_manage_RightForm #structure_level").val(data.structure_level);
+            if (data.use_yn != "") {
+                $('#Gmp_doc_system_manage_RightForm input[name="use_yn"][value=' + data.use_yn + ']').prop("checked", true);
+            }
+
+        }
+
+        // 조회
+        function Gmp_doc_system_manageSearch() {
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/SearchGmp_doc_system_manage',
+                data: {
+                    select_S: $("#Gmp_doc_system_manage_Form input[name=select_S]:checked").val()
+                },
+                success: function (result) {
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        //console.log(JSON.parse(JSON.stringify(result)));
+
+                        $("#Gmp_doc_system_manage_GridContainer").dxTreeList("option", "dataSource", json);
+                        $("#Gmp_doc_system_manage_GridContainer").dxTreeList("instance").option("focusedRowIndex", 0);
+
+                    } else {
+                        $("#Gmp_doc_system_manage_GridContainer").dxTreeList("option", "dataSource", []);
+                        $("#Gmp_doc_system_manage_GridContainer").dxTreeList("instance").option("focusedRowKey", "");
+                    }
+
+                }
+            })
+        }
+
+        // 입력
+        function Gmp_doc_system_manageInput() {
+
+            $("#Gmp_doc_system_manage_RightForm")[0].reset();
+            input_init();
+            $("#pGubun").val("I");
+            Gmp_doc_system_manageEditCheck(true);
+        }
+
+        // 수정
+        function Gmp_doc_system_manageEdit() {
+            $("#pGubun").val("U");
+            Gmp_doc_system_manageEditCheck(true);
+            $('#Gmp_doc_system_manage_RightForm input[name="child_cd"]').prop("readonly", true);
+        }
+
+        // 삭제
+        function Gmp_doc_system_manageDelete() {
+
+            var isOK = confirm("삭제하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/Doc/DeleteGmp_doc_system_manage',
+                data: {
+                    pStructureCd: $('#Gmp_doc_system_manage_RightForm input[name="structure_cd"]').val()
+                },
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    alert(json.messege);
+
+                    Gmp_doc_system_manageSearch();
+                }
+            });
+    }
+
+        // 저장
+        function Gmp_doc_system_manageSave() {
+
+            //var formID = "Gmp_doc_system_manage_RightForm";
+            //var cols = [
+            //    { name: "parent_cd", text: "체계코드", type: "input" },
+            //    { name: "child_cd", text: "체계코드", type: "input" },
+            //    { name: "structure_nm", text: "체계명", type: "input" },
+            //    { name: "structure_seq", text: "순서", type: "input" },
+            //    { name: "use_yn", text: "사용여부", type: "radio" }
+            //]
+
+            //var isValid = validationCk(formID, cols);
+
+            //if (!isValid) {
+            //    return;
+            //}
+
+            if (UtilView.checkValidForm("Gmp_doc_system_manage_RightForm")) {
+
+                var form = $('#Gmp_doc_system_manage_RightForm')[0];
+                var data = new FormData(form);;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Doc/SaveGmp_doc_system_manage',
+                    data: data,
+                    contentType: false,
+                    processData: false,
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        alert(json.messege);
+
+                        Gmp_doc_system_manageEditCheck(false);
+                        Gmp_doc_system_manageSearch();
+
+                    }
+                })
+            }
+
+        }
+
+        // 취소
+        function Gmp_doc_system_manageUndo() {
+            // alert("undo() 호출");
+            Gmp_doc_system_manageEditCheck(false);
+            Gmp_doc_system_manageSearch();
+            $("#pGubun").val("S");
+        }
+
+        //프린트
+        function Gmp_doc_system_managePrint() {
+
+        }
+
+        //엑셀
+        function Gmp_doc_system_manageExcel() {
+            treeExportToExcel("Gmp_doc_system_manage_GridContainer", "Gmp_doc_systemData");
+        }
+
+        // 입력 초기화
+        function input_init() {
+
+            var treeList = $("#Gmp_doc_system_manage_GridContainer").dxTreeList("instance");
+
+            var node = treeList.getNodeByKey(treeList.option("focusedRowKey"));
+
+            $('#Gmp_doc_system_manage_RightForm input[name="parent_cd"]').val(node.data.structure_cd);
+            $('#Gmp_doc_system_manage_RightForm input[name="structure_level"]').val(node.data.structure_level + 1);
+            $('#Gmp_doc_system_manage_RightForm input[name="structure_seq"]').val(node.children.length + 1);
+
+            //Gmp_doc_system_manageEditCheck(false);
+        }
+        // 미사용, 삭제 확인 메시지 창
+        function ConfirmMessage() {
+            var result = DevExpress.ui.dialog.confirm("<i>Are you sure?</i>", "Confirm changes");
+            result.done(function (dialogResult) {
+                alert(dialogResult ? "Confirmed" : "Canceled");
+                if (dialogResult == "Confirmed") {
+                    return true;
+                } else {
+                    return false;
+                }
+
+            });
+        }
+
+</script>
+
+
+<div id="Gmp_doc_system_manage" autoresize="Y">
+    <form id="Gmp_doc_system_manage_Structure_cdForm">
+        <input type="hidden" name="pStructureCd" id="pStructureCd" />
+    </form>
+
+    @*<h4 class="divTitle">문서체계 관리</h4>*@
+
+    @* === 트리 리스트 상단 검색조건 === *@
+    <div id="Gmp_doc_system_manageTop" class="mainTop row">
+        <div class="col-8">
+            <form id="Gmp_doc_system_manage_Form">
+                <div class="input-wrapper">
+                    <div class="col-4 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="select_S_1" name="select_S" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S_1">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="select_S_2" name="select_S" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S_2">사용중</label></span>
+                    </div>
+
+                    @*<div class="radioDiv col-3">
+                            <input type="radio" name="select_S" value="2" onchange="Gmp_doc_system_manageSearch()" /> 사용중
+                            <input type="radio" name="select_S" value="1" onchange="Gmp_doc_system_manageSearch()" /> 전체
+                        </div>*@
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Excel;Save;Undo");}
+
+            @* === CRUD 버튼 === *@
+            @*@(Html.DevExtreme().Toolbar()
+                    .ID("Gmp_doc_system_manage_Toolbar")
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                                  .Button()
+                                  .Type(ButtonType.Default)
+                                  .StylingMode(ButtonStylingMode.Contained)
+                                  .ID("Gmp_doc_system_manageSearch")
+                                  .Icon("search")
+                                  .Text("조회")
+                              .OnClick("Gmp_doc_system_manageSearch")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_system_manageInput")
+                              .Icon("plus")
+                              .Text("입력")
+                              .OnClick("Gmp_doc_system_manageInput")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_system_manageEdit")
+                              .Icon("edit")
+                              .Text("수정")
+                              .OnClick("Gmp_doc_system_manageEdit")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_system_manageSave")
+                              .Icon("save")
+                              .Text("저장")
+                              .OnClick("Gmp_doc_system_manageSave")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_system_manageUndo")
+                              .Icon("undo")
+                              .Text("취소")
+                              .OnClick("Gmp_doc_system_manageUndo")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("Gmp_doc_system_manageDelete")
+                              .Icon("trash")
+                              .Text("삭제")
+                              .OnClick("Gmp_doc_system_manageDelete")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                )*@
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-7">
+            @* === 메인 그리드 === *@
+            <div class="box mb-0">
+                @(Html.DevExtreme().TreeList()
+                        .ID("Gmp_doc_system_manage_GridContainer")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .HoverStateEnabled(true)
+                        //.DataSource((System.Collections.IEnumerable)ViewBag.Gmp_doc_system_manage)
+                        .RootValue("")
+                        .KeyExpr("structure_cd")
+                        .ParentIdExpr("parent_cd")
+                        .WordWrapEnabled(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(880)
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("structure_cd").Caption("체계코드");
+                            c.Add().DataField("structure_nm").Caption("체계명");
+                            c.Add().DataField("structure_seq").Caption("순서");
+                            // 숨겨놓은 칼럼들
+                            c.Add().DataField("parent_cd").Visible(false);
+                            c.Add().DataField("child_cd").Visible(false);
+                            c.Add().DataField("structure_level").Visible(false);
+                        })
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .ColumnAutoWidth(true)
+                        .AutoExpandAll(true)
+                        .ExpandedRowKeys(new[] { 1 })
+                        .OnFocusedRowChanged("Gmp_doc_system_manage_Focus_changed")
+                    )
+            </div>
+        </div>
+
+        <div class="col-5">
+            <div class="box">
+
+                <form id="Gmp_doc_system_manage_RightForm">
+                    <input type="text" name="pGubun" id="pGubun" hidden="hidden" />
+                    <div class="divName">
+                        <p>문서체계정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">체계코드</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="parent_cd" id="parent_cd" readonly />
+                        </div>
+                        <label class="display-none">체계코드</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="child_cd" id="child_cd" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">체계명</label>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control required" name="structure_nm" id="structure_nm">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">순서</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="structure_seq" id="structure_seq" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">사용여부</label>
+                        <div class="input-group col-3">
+                            <div class="radioDiv form-control">
+                                <input type="radio" class="required" name="use_yn" value="Y" /> 사용
+                                <input type="radio" class="required" name="use_yn" value="N" /> 사용안함
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" class="col-3 form-control" name="structure_level" id="structure_level" />
+                    <input type="hidden" class="col-3 form-control" name="structure_cd" id="structure_cd" />
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,274 @@
+﻿@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "AccessLog";
+
+    var accesslog1 = @Html.Raw(Json.Encode(ViewBag.accesslog1.Data));
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+
+}
+
+@{
+    string[] AccessLogListGridKey = { "login_date", "login_time", "logout_time" };
+}
+
+@*AccessLog 확인*@
+
+<script id="AccessLogJs">
+
+        $(function () {
+            setDatePicker("#AccessLog .datepicker");
+
+            if ('@accesslog1' <= 0) {
+                $("#accessLogUserGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+            else {
+                $("#accessLogUserGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@accesslog1));
+                $("#accessLogUserGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#accessLogUserGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+        });
+
+
+        function selectAccessLogUser() {
+
+            var grid = $("#accessLogUserGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("accessLogUserGrid", grid.option("focusedRowKey"));
+
+            var form = $('#AccessLogForm')[0];
+            var formData = new FormData(form);
+
+            formData.set("emp_cd", gridData.emp_cd);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSec/SelectAccessLogUser',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    try {
+                        var json = JSON.parse(result);
+
+                        if (json.sessionLoss) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("dataSource", json);
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    } catch (e) {
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+                }
+            });
+    }
+
+        function selectAccessLogList() {
+
+            var grid = $("#accessLogLogListGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("accessLogLogListGrid", grid.option("focusedRowKey"));
+
+            var form = $('#AccessLogForm')[0];
+            var formData = new FormData(form);
+
+            formData.set("id", gridData.id);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSec/SelectAccessLogList',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    try {
+                        var json = JSON.parse(result);
+
+                        if (json.sessionLoss) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("dataSource", json);
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    } catch (e) {
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+                }
+            });
+        }
+
+    function AccessLogSearch() {
+
+            var form = $('#AccessLogForm')[0];
+            var formData = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSec/SelectAccessLog',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    try {
+                        var json = JSON.parse(result);
+
+                        if (json.sessionLoss) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        $("#accessLogUserGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                        $("#accessLogUserGrid").dxDataGrid("instance").option("dataSource", json);
+                        $("#accessLogUserGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    } catch (e) {
+                        $("#accessLogUserGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogUserGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogLogListGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#accessLogDetailGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+
+                    //selectAccessLogUser();
+                    //selectAccessLogList();
+                }
+            });
+        }
+
+</script>
+
+<div id="AccessLog">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="AccessLogForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+
+                        <input type="text" class="form-control col-5 datepicker" name="login_time" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()" onchange="AccessLogSearch()">
+                        <div class="input-group-append"><span class="input-group-text">~</span></div>
+                        <input type="text" class="form-control col-5 datepicker" name="logout_time" value="@DateTime.Today.ToShortDateString()" onchange="AccessLogSearch()">
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <div class="col-4 CRUD-btn">
+            @{Html.SetToolbar(0, true, "Search");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div id="userListDiv" class="col-8 pr-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("accessLogUserGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .OnFocusedRowChanged("selectAccessLogUser")
+                    .KeyExpr("emp_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(865)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("emp_cd").Caption("사원코드");
+                        c.Add().DataField("emp_nm").Caption("사원명");
+                        c.Add().DataField("dept_nm").Caption("부서");
+                        c.Add().DataField("login_time").Caption("최근로그인시간");
+                    })
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div id="logListDiv" class="box-height-auto mb-1">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("accessLogLogListGrid")
+                    .KeyExpr("login_time")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .FocusedRowEnabled(true)
+                    .Height(400)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .OnFocusedRowChanged("selectAccessLogList")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("login_date").Caption("사용일자");
+                        c.Add().DataField("login_time").Caption("로그인 시간");
+                        c.Add().DataField("logout_time").Caption("로그아웃 시간");
+                    })
+                )
+            </div>
+
+            <div id="logDetailDiv" class="box-height-auto mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("accessLogDetailGrid")
+                    .KeyExpr("start_time")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .FocusedRowEnabled(true)
+                    .Height(459)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("program_nm").Caption("프로그램");
+                        c.Add().DataField("start_time").Caption("시작시간");
+                        c.Add().DataField("end_time").Caption("종료시간");
+                    })
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

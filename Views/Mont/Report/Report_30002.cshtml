@@ -1,0 +1,1102 @@
+﻿@{
+    Layout = null;
+    ViewBag.Title = "Report_30002";
+
+    var employeeData = @Html.Raw(Json.Encode(ViewBag.EmployeeData.Data));
+    var workroomData = @Html.Raw(Json.Encode(ViewBag.WorkroomData.Data));
+}
+
+@*부대시설 온도/습도 점검표*@
+<script id="Report_30002Js" type="text/javascript">
+
+    var Report_format_LoginUserCd = sessionStorage.getItem("loginCD");
+    var Report_format_LoginUserNm = sessionStorage.getItem("loginNM");
+    var Report_30002_Gubun = "";
+    var Report_Saving_yn = false;
+
+    var gridDataSource;
+
+    $(function () {
+        var grid = $("#HACCP_ManagementScreenMasterGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('HACCP_ManagementScreenMasterGrid', grid.option("focusedRowKey"));
+
+        $("#Report_Header_form input[name='MakeDate'").val(gridData.BDate);
+        $("#Report_Header_form input[name='make_emp_cd'").val(gridData.EmpCode);
+
+        $("#Report_SignGrid").dxDataGrid("option", "dataSource", []);
+
+        //#region 날짜 api
+        $('#30002 .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 )
+            startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+            endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+            autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+            calendarWeeks: false, //캘린더 옆에 몇 주차인지 보여주는 옵션 기본값 false 보여주려면 true
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            //datesDisabled: ['2019-06-24', '2019-06-26'],//선택 불가능한 일 설정 하는 배열 위에 있는 format 과 형식이 같아야함.
+            daysOfWeekDisabled: [0, 2, 3, 4, 5, 6],	//선택 불가능한 요일 설정 0 : 일요일 ~ 6 : 토요일
+            daysOfWeekHighlighted: [1], //강조 되어야 하는 요일 설정
+            disableTouchKeyboard: false,	//모바일에서 플러그인 작동 여부 기본값 false 가 작동 true가 작동 안함.
+            immediateUpdates: false,	//사용자가 보는 화면으로 바로바로 날짜를 변경할지 여부 기본값 :false
+            multidate: false, //여러 날짜 선택할 수 있게 하는 옵션 기본값 :false
+            multidateSeparator: ",", //여러 날짜를 선택했을 때 사이에 나타나는 글짜 2019-05-01,2019-06-01
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+            //title: "테스트",	//캘린더 상단에 보여주는 타이틀
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+
+
+        });
+        //#endregion
+
+        var employee = @employeeData;
+        var workroom = @workroomData;
+
+        var emp_columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+        createPopup("Report_30002_Employee", "사원조회", employee, emp_columns, "emp_cd");
+
+        var workroom_columns = [
+            { dataField: "workroom_cd", caption: "작업실코드" },
+            { dataField: "workroom_nm", caption: "작업실명" }
+        ];
+        createPopup("Report_30002_Workroom", "작업실조회", workroom, workroom_columns, "workroom_cd");
+
+        Report_30002EditCheck(false);
+    });
+
+    // 수정중인지 체크
+    function Report_30002EditCheck(nowEdit) {
+        // (공통) 화면영역별 element 활성/비활성처리
+
+        _isReportUpdate = nowEdit;
+
+        if (nowEdit) {
+            Report_30002_Gubun = "U";
+
+            var editing = {
+                allowUpdating: true,
+                allowAdding: false,
+                allowDeleting: false,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#ReportMainGrid").dxDataGrid("option", "editing", editing);
+
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#ReportSub1Grid").dxDataGrid("option", "editing", editing);
+
+
+            $("#Report_List_form input[name=stime]").attr("disabled", false);
+
+
+        }
+        else {
+            Report_30002_Gubun = "";
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#ReportMainGrid").dxDataGrid("option", "editing", editing);
+            $("#ReportSub1Grid").dxDataGrid("option", "editing", editing);
+
+            $("#Report_List_form input[name=stime]").attr("disabled", true);
+        }
+
+    }
+
+    function check_date_validation() {
+
+        var sdate = new Date($("#Report_List_form input[name=sdate]").val());
+        var edate = new Date($("#Report_List_form input[name=edate]").val());
+
+
+        var clac_day = Math.abs(edate.getTime() - sdate.getTime());
+        clac_day = Math.ceil(clac_day / (1000 * 3600 * 24));
+
+        if (clac_day == "5") {
+            return true;
+        }
+        else {
+            return false;
+        }
+
+    }
+
+    function set_date_lastday() {
+
+        var sdate = new Date($("#Report_List_form input[name=sdate]").val());
+
+        var edate = new Date(sdate.setDate(sdate.getDate() + 5));	// 5일후
+
+        var year = edate.getFullYear();
+        var month = (1 + edate.getMonth());
+        month = month >= 10 ? month : '0' + month;
+        var day = edate.getDate();
+        day = day >= 10 ? day : '0' + day;
+
+        $("#Report_List_form input[name=edate]").val(year + '-' + month + '-' + day);
+
+    }
+
+
+    function getReportItem() {
+        if (check_date_validation() == false) {
+            alert("날짜를 정확히 입력 해 주세요. (월~토)");
+            return;
+        }
+
+        $("#ReportMainGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ReportMainGrid").dxDataGrid("instance").option("focusedRowKey", "");
+        $("#ReportSub1Grid").dxDataGrid("instance").option("dataSource", []);
+        $("#ReportSub1Grid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        if (UtilView.checkValidForm("Report_List_form")) {
+
+            var formData = new FormData($("#Report_List_form")[0]);
+            var doc_seq = $("#Report_Header input[name=doc_seq]").val().replace(/\./gi, "");
+            var index_key = get_index_key();
+
+            formData.append("doc_seq", doc_seq); //문서코드
+            formData.append("WORKROOM_AREA", "G007"); //영역구분? 부대시설
+            formData.append("index_key", index_key); //index_key
+            formData.append("gubun", "S"); //구분
+            //전자서명 정보 불러오기
+            Report_SignerSearch();
+
+            Report_30002EditCheck(false);
+
+            var DataList = new Array();
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getReportItem',
+                data: formData,
+                dataType: 'json',
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!Array.isArray(result)) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                    }
+
+                    for (var i = 0; i < result.length; i++) {
+                        DataList[i] = JSON.parse(result[i]);
+
+                        if (DataList[i].data === "empty") {
+                            if (i == 0) {       //0 : H, 1 : S1, 2:M, 3:S2
+                                $("#ReportMainGrid").dxDataGrid("instance").option("dataSource", []);
+                            } else if (i == 1) {
+                                $("#ReportSub1Grid").dxDataGrid("instance").option("dataSource", []);
+                            }
+                        } else {
+                            if (i == 0) {
+                                gridDataSource = DataList[i];
+                                $("#ReportMainGrid").dxDataGrid("instance").option("dataSource", DataList[i]);
+
+                                //console.log(DataList[i][0].data_check_time);
+                                $("#Report_List_form input[name=stime]").val(DataList[i][0].data_check_time);
+
+                            } else if (i == 1) {
+                                $("#ReportSub1Grid").dxDataGrid("instance").option("dataSource", DataList[i]);
+                            }
+                        }
+
+                    }
+
+                }
+            });
+        }
+    }
+
+
+    function get_index_key() {
+        var doc_seq = $("#Report_Header input[name=doc_seq]").val().replace(/\./gi, ""); //.replace("GMP", "");
+        var sdate = $("#Report_List_form input[name=sdate]").val().replace(/\-/gi, "");
+        var edate = $("#Report_List_form input[name=edate]").val().replace(/\-/gi, "");
+        //var workroom_cd = $("#Report_List_form input[name=workroom_cd]").val();
+
+        //var index_cd = doc_cd + "-" + workroom_cd + "-" + time;
+        var index_cd = doc_seq + "-" + sdate + "-" + edate;
+        //조합?
+        return index_cd;
+    }
+
+    //#region 전자서명 정보 가져오기
+    function Report_SignerSearch() {
+
+        var index_key = get_index_key();
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Mont/CCP_SignerSearch',
+            data: {
+                index_key: index_key,
+                sign_set_cd: "9401"
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (jsonData.length > 0) {
+                        $("#Report_SignGrid").dxDataGrid("option", "dataSource", jsonData);
+                    } else {
+                        $("#Report_SignGrid").dxDataGrid("option", "dataSource", []);
+                    }
+                } else {
+                    $("#Report_SignGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+    }
+
+    //#endregion
+
+    //#region 팝업 기능
+
+    //#region 전자서명 기능
+    //전자서명 팝업
+    function Report_format_SignClick(e) {
+        var signGridData = e.data;
+
+        var popup = $("#Report_formatPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#Report_formatSignPopupTemplate"));
+
+        var sign_emp_nm = signGridData.sign_emp_nm;
+        var sign_time = signGridData.sign_time;
+        Report_format_SignSeq = signGridData.sign_set_dt_seq;
+
+
+        //1.서명 정보가 있을 경우
+        if ((sign_emp_nm != "" && sign_emp_nm != null) || (sign_time != "" && sign_time != null)) {
+            //다음단계 서명 확인
+            if (signGridData.next_sign_yn > 0) {
+                alert("다음 단계의 서명이 되어있어 취소할 수 없습니다.");
+                return;
+            }
+
+            var ok = confirm("전자서명을 취소하시겠습니까?");
+
+            if (ok) {
+                Report_format_SignGubun = "cancel";
+                //서명 팝업 창 띄우기
+                popup.show();
+            }
+        }
+        //2.서명 정보가 없을 경우
+        else {
+            if (signGridData.sign_set_dt_seq > 1) {
+                //이전단계 서명 확인
+                if (signGridData.prev_sign_yn == null || signGridData.prev_sign_yn == "" || signGridData.prev_sign_yn == "0") {
+                    alert("이전단계 서명이 완료되지 않았습니다.");
+                    return;
+                }
+            }
+            Report_format_SignGubun = "update";
+            //서명 팝업 창 띄우기
+            popup.show();
+        }
+    }
+
+    //전자서명 폼 -> ID, PW 입력 확인
+    function Report_format_SignSubmit() {
+        var data = new FormData($("#Report_format_Signform")[0]);
+
+
+        //유효 ID 여부 확인
+        var checkUser = Report_format_IDValidation();
+        if (checkUser) {
+
+            //취소
+            if (Report_format_SignGubun == "cancel") {
+                if (Report_formatAuthorityCheck(Report_format_empCd)) {
+                    if (Report_format_SignCancel()) {
+                        alert("전자서명이 취소되었습니다.");
+                        Report_SignerSearch();
+                    } else {
+                        return;
+                    }
+                } else {
+                    alert("권한이 없는 사용자거나 잘못된 ID,PW 입니다.");
+                }
+            }
+
+            //등록
+            if (Report_format_SignGubun == "update") {
+                var representative_yn = "N";
+
+                if (Report_formatAuthorityCheck(Report_format_empCd)) {
+                    representative_yn = "Y";
+                } else {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                if (Report_format_SignSave(representative_yn)) {
+                    alert("서명을 저장하였습니다.");
+                    Report_SignerSearch();
+                } else {
+                    alert("전자서명 도중 오류가 발생했습니다.");
+                }
+
+            }
+        }
+
+        setTimeout(function () {
+            var popup = $("#Report_formatPopup").dxPopup("instance");
+            popup.hide();
+            $("#Report_format_Confirmform input[name='dept_nm']").val("");
+            $("#Report_format_Confirmform input[name='emp_nm']").val("");
+        }, 1000);
+
+    }
+
+    //유효 ID Validation
+    function Report_format_IDValidation() {
+        var check = false;
+
+        //로그인 user 정보
+        var data = new FormData($("#Report_format_Signform")[0]);
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    alert("잘못된 ID,PW 입니다.");
+                } else {
+                    var jsonData = JSON.parse(result);
+
+                    Report_format_empCd = jsonData[0].emp_cd;
+                    Report_format_empNm = jsonData[0].emp_nm;
+
+                    if (Report_format_LoginUserCd != Report_format_empCd) {
+                        alert("로그인 사용자와 서명자가 일치하지 않습니다!");
+                    }
+
+                    if (Report_format_LoginUserCd == Report_format_empCd) {
+                        check = true;
+                    }
+
+                    $("#Report_format_Confirmform input[name='dept_nm']").val(jsonData[0].dept_nm);
+                    $("#Report_format_Confirmform input[name='emp_nm']").val(jsonData[0].emp_nm);
+                }
+            }
+        });
+        return check;
+    }
+
+    //서명자와 권한자 체크
+    function Report_formatAuthorityCheck(emp_cd) {
+        var check = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Comm/AuthorityCheck',
+            data: {
+                emp_cd: emp_cd,
+                sign_set_cd: "9401",
+                sign_set_seq: Report_format_SignSeq
+            },
+            async: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    check = true;
+                }
+            }
+        });
+        return check;
+
+    }
+
+    //전자서명 저장
+    function Report_format_SignSave(representative_yn) {
+
+        var index_key = get_index_key();
+
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/CCP_format_SignSave',
+            data: {
+                sign_emp_cd: Report_format_LoginUserCd,            //서명자코드
+                sign_type: "2",                                 //2.패스워드방식
+                representative_yn: representative_yn,           //대리자 유무
+                index_key: index_key,          //문서별 서명코드
+                sign_set_cd: "9401",                            //페이지권한코드
+                sign_set_dt_seq: Report_format_SignSeq             //작성자:1 , 검토자:2, 승인자:3
+            },
+            async: false,
+            success: function (result) {
+                if (result != "") {
+                    if (result == "Y") {
+                        check = true;
+                    }
+                }
+            }
+        });
+        return check;
+    }
+
+    //전자서명 취소
+    function Report_format_SignCancel() {
+        var index_key = get_index_key();
+
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Mont/CCP_format_SignCancel',
+            data: {
+                index_key: index_key,
+                sign_set_dt_seq: Report_format_SignSeq,
+                sign_set_cd: "9401"
+            },
+            success: function (result) {
+                if (result != "") {
+
+                    if (result == "Y") {
+                        check = true;
+                    }
+
+                }
+            }
+        });
+        return check;
+    }
+
+    //전자 서명 입력 초기화
+    function Report_format_clearSignInput() {
+        $("#Report_format_Signform")[0].reset();
+        $("#Report_format_Signform input[name='dept_nm']").val("");
+        $("#Report_format_Signform input[name='emp_nm']").val("");
+    }
+    //#endregion
+
+
+    //담당자 검색
+    function FindEmp() {
+
+        var MainGrid = $("#ReportMainGrid").dxDataGrid("instance");
+
+        if (MainGrid.totalCount()) {
+            //팝업띄우고
+            var popup = $("#Report_30002_EmployeePopup").dxPopup("instance");
+
+            popup.show();
+        }
+        else {
+            alert("조건을 먼저 조회해 주세요.");
+        }
+    }
+
+
+    function Report_30002_EmployeeRowDblClick(selectedItems) {
+
+        if (_isReportCellClick == true) {
+
+            var grid = $("#ReportSub1Grid").dxDataGrid("instance");
+
+            grid.cellValue(_ReportCellClickEvent.rowIndex, "dev_check_emp_cd", selectedItems.values[0]);
+            grid.cellValue(_ReportCellClickEvent.rowIndex, "dev_check_emp", selectedItems.values[1]);
+        }
+        else {
+            $("#Report_List_form input[name=emp_cd]").val(selectedItems.values[0]);
+            $("#Report_List_form input[name=emp_nm]").val(selectedItems.values[1]);
+        }
+
+        var popup = $("#Report_30002_EmployeePopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //작업실 검색
+    function FindWorkroom(e) {
+        _ReportCellClickEvent = e;
+
+        if (e.columnIndex == 1) {
+            if (_isReportUpdate == true) {
+                _isReportCellClick = true;
+                var popup = $("#Report_30002_WorkroomPopup").dxPopup("instance");
+
+                popup.show();
+            }
+        }
+        if (e.columnIndex == 5) {
+
+            if (_isReportUpdate == true) {
+                _isReportCellClick = true;
+
+                var popup = $("#Report_30002_EmployeePopup").dxPopup("instance");
+
+                popup.show();
+            }
+        }
+
+    }
+
+    function Report_30002_WorkroomRowDblClick(selectedItems) {
+
+        var grid = $("#ReportSub1Grid").dxDataGrid("instance");
+
+        var popup = $("#Report_30002_WorkroomPopup").dxPopup("instance");
+        popup.hide();
+
+
+        grid.cellValue(_ReportCellClickEvent.rowIndex, "workroom_cd", selectedItems.values[0]);
+        grid.cellValue(_ReportCellClickEvent.rowIndex, "dev_location", selectedItems.values[1]);
+    }
+    //#endregion
+
+    //#region 레포트 미리보기 및 인쇄
+
+
+    function Report_Print() {
+        var grid = $("#Report_SignGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("검색조건을 입력 해 주세요.");
+            return;
+        }
+        if (check_date_validation() == false) {
+            alert("날짜를 정확히 입력 해 주세요. (월~토)");
+            return;
+        }
+
+        var btnType;
+        btnType = $(event.target).closest('.btn').attr('id');
+        var doc_seq = $("#Report_Header input[name=doc_seq]").val().replace(/\./gi, "");
+        var index_key = get_index_key();
+        var rpt_nm = doc_seq.replace(/\-/gi, "");
+
+        var sdate = $("#Report_List_form input[name=sdate]").val();
+        var edate = $("#Report_List_form input[name=edate]").val();
+
+
+        var CCP_TblName = rpt_nm + "_H," + rpt_nm + "_S1," + rpt_nm + "_M," + rpt_nm + "_S2"; //테이블 총 4개
+
+
+        var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "Diary", RptFileName: doc_seq },
+            objSp: { SpName: "SP_GET_REPORT_DATA", GUBUN: "R", reportParam: "V_TYPE:" + doc_seq + ";WORKROOM_AREA:" + "G007" + ";SDATE:" + sdate + ";EDATE:" + edate + ";index_key:" + index_key },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: CCP_TblName }
+        });
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+    //#endregion
+
+    //적합으로 일괄입력. 온습도는 값으로 표기해야 하니까 안씀.
+    //function setReportStatus() {
+    //    var MainGrid = $("#ReportMainGrid").dxDataGrid("instance");
+
+    //    if (MainGrid.totalCount()) {
+    //        //select id = "report_status"
+    //        var report_status = $("#Report_List_form select[name=report_status]").val();
+
+    //        report_status = report_status == "1" ? report_status = "O" : "X";
+
+    //        //테이블 수정모드로.
+    //        Report_30002EditCheck(true);
+    //        //1주~5주까지 입력
+
+    //        var data = MainGrid.getVisibleRows();
+    //        var total_cnt = MainGrid.totalCount();
+    //        console.log(data);
+
+    //        for (var i = 0; i < total_cnt; i++) {
+
+    //            data[i].data.result_1 = report_status;
+    //            data[i].data.result_2 = report_status;
+    //            data[i].data.result_3 = report_status;
+    //            data[i].data.result_4 = report_status;
+    //            data[i].data.result_5 = report_status;
+
+    //        }
+
+    //        MainGrid.refresh();
+    //    }
+    //    else {
+    //        alert("조건을 먼저 조회해 주세요.");
+    //    }
+    //}
+
+
+    function editReportItem() {
+
+        var MainGrid = $("#ReportMainGrid").dxDataGrid("instance");
+        if (MainGrid.totalCount()) {
+            Report_30002EditCheck(true);
+        }
+        else {
+            alert("조건을 먼저 조회해 주세요.");
+        }
+    }
+
+
+    async function saveReportItem() {
+        if (true == Report_Saving_yn) {
+            return;
+        }
+        else {
+            Report_Saving_yn = true;
+        }
+
+        var index_key = get_index_key();
+
+        //Main Grid
+        await $("#ReportMainGrid").dxDataGrid("instance").saveEditData();
+        await $("#ReportSub1Grid").dxDataGrid("instance").saveEditData();
+
+        var MainGrid = $("#ReportMainGrid").dxDataGrid("instance");
+
+        var total_cnt = 0;
+
+        //Main Grid
+        if (MainGrid.totalCount()) {
+
+            var Maindata = MainGrid.getVisibleRows();
+            var main_array = new Array();
+            total_cnt = MainGrid.totalCount();
+            for (var i = 0; i < total_cnt; i++) {
+
+                main_array.push(Maindata[i].data);
+                main_array[i].gubun = "U";
+                main_array[i].V_TYPE = @ViewBag.ReportSeq;
+                main_array[i].asign_emp_code = $("#Report_List_form input[name=emp_cd]").val();
+                main_array[i].index_key = index_key;
+                main_array[i].sdate = $("#Report_List_form input[name=sdate]").val();
+                main_array[i].edate = $("#Report_List_form input[name=edate]").val();
+                main_array[i].stime = $("#Report_List_form input[name=stime]").val();
+
+            }
+
+            await saveReport(main_array, "U", @ViewBag.ReportSeq);
+            saveReportItem2();
+        }
+
+    }
+
+    function saveReportItem2() {
+
+        var index_key = get_index_key();
+
+        var Sub1Grid = $("#ReportSub1Grid").dxDataGrid("instance");
+        var total_cnt = Sub1Grid.totalCount();
+
+        //console.log(total_cnt);
+
+        //Sub1 Grid
+        if (total_cnt) {
+            var Sub1data = Sub1Grid.getVisibleRows();
+            var Sub1_array = new Array();
+            for (var i = 0; i < total_cnt; i++) {
+                console.log(Sub1data[i].data);
+
+                Sub1_array.push(Sub1data[i].data);
+                Sub1_array[i].gubun = "U_Deviation";
+                Sub1_array[i].V_TYPE = @ViewBag.ReportSeq;
+                Sub1_array[i].asign_emp_code = Sub1data[i].data.dev_check_emp_cd;
+                Sub1_array[i].index_key = index_key;
+                Sub1_array[i].sdate = $("#Report_List_form input[name=sdate]").val();
+                Sub1_array[i].edate = $("#Report_List_form input[name=edate]").val();
+
+
+                if (Sub1_array[i].dev_date != null) {
+                    var date = new Date(Sub1_array[i].dev_date);
+
+                    var year = date.getFullYear();
+                    var month = date.getMonth() + 1;
+                    var day = date.getDate();
+
+                    month = (month < 10) ? ("0" + month) : month;
+                    day = (day < 10) ? ("0" + day) : day;
+
+                    Sub1_array[i].dev_date = year + "-" + month + "-" + day;
+
+                }
+                if (Sub1_array[i].dev_repair_date != null) {
+                    var date = new Date(Sub1_array[i].dev_repair_date);
+
+                    var year = date.getFullYear();
+                    var month = date.getMonth() + 1;
+                    var day = date.getDate();
+
+                    month = (month < 10) ? ("0" + month) : month;
+                    day = (day < 10) ? ("0" + day) : day;
+
+                    Sub1_array[i].dev_repair_date = year + "-" + month + "-" + day;
+
+                }
+
+            }
+
+            saveReport(Sub1_array, "U_Deviation", @ViewBag.ReportSeq);
+        }
+
+        Report_30002EditCheck(false);
+        getReportItem();
+    }
+
+    function saveReport(data, gubun, V_TYPE) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/setReportItem',
+            data: {
+                mModel: JSON.stringify(data),
+                gubun: gubun,
+                V_TYPE: V_TYPE
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+
+
+                alert("저장되었습니다.");
+
+            }
+        });
+
+        Report_Saving_yn = false;
+    }
+
+
+    //저장 버튼 비활성화
+    function Report_ToolbarEdit(e) {
+
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+</script>
+
+<div id="@ViewBag.ReportSeq" autoresize="Y">
+
+    <div id="Report_30002_EmployeePopup"></div>
+    <div id="Report_30002_WorkroomPopup"></div>
+
+    <!--전자서명 팝업-->
+    @(Html.DevExtreme().Popup()
+            .ID("Report_formatPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("Report_format_clearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("Report_formatSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="Report_format_Signform">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-secondary" onclick="Report_format_SignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <form id="Report_format_Confirmform">
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+
+        </form>
+
+    }
+    <!--#endregion-->
+
+    <div class="row">
+
+        <div id="Report_Header" class="col-12 pb-1">
+            <div class="box mb-0" style="padding-top:1px">
+                <form id="Report_Header_form">
+
+                    <div class="input-wrapper">
+                        <span class="col-1">문서명</span>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" name="doc_cd" value="@ViewBag.ReportCode" readonly />
+                            <input type="hidden" name="doc_seq" value="@ViewBag.ReportSeq" />
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="doc_nm" value="@ViewBag.doc_name" readonly />
+                        </div>
+
+                        <input type="hidden" name="MakeDate" />
+                        <input type="hidden" name="make_emp_cd" />
+                        <input type="hidden" name="Report_order_no" />
+                        <input type="hidden" name="Report_process_cd" />
+                        <input type="hidden" name="Report_item_cd" />
+                        <input type="hidden" name="Report_lot_no" />
+                        <input type="hidden" name="Report_Report_cd" />
+
+                        <input type="hidden" name="Report_equip_type" />
+                        <input type="hidden" name="Report_gubun" />             <!--리포트 양식 gubun값-->
+
+                        <input type="hidden" name="Report_index_key" />
+                        <input type="hidden" name="Report_sign_set_cd" />
+
+
+                        <!--미리보기 및 인쇄-->
+                        <label style="float: right">&nbsp;</label>
+                        <button type="button" class="btn btn-secondary" id="Report_formatPrint" style="float: right" onclick="Report_Print()">인쇄</button>
+                        <label style="float: right">&nbsp;</label>
+                        <button type="button" class="btn btn-secondary" id="Report_formatPreview" style="float:right" onclick="Report_Print()">미리보기</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+
+        <!--#region 하단 데이터 그리드-->
+        <!--#region 전자서명-->
+        <div class="col-6 mb-1 pr-0">
+            <div id="Report_Sign" class="box mb-0">
+                <div class="divName">
+                    <p>전자서명</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                        .ID("Report_SignGrid")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .KeyExpr("sign_set_dt_id")
+                        .OnRowClick("Report_format_SignClick")
+                        .Height(137)
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(c =>
+                        {
+                        c.Add()
+                                .DataField("displayfield")
+                                .Caption("구분").Alignment(HorizontalAlignment.Center);
+                        c.Add()
+                                .DataField("sign_emp_nm")
+                                .Caption("서명자").Alignment(HorizontalAlignment.Center);
+                        c.Add()
+                                .DataField("sign_time")
+                                .Width(180)
+                                .Caption("서명일자").Alignment(HorizontalAlignment.Center);
+                        c.Add()
+                                .AllowFiltering(false)
+                                .AllowSorting(false)
+                                .DataField("sign_image")
+                                .Name("sign_image")
+                                .Caption("서명").Alignment(HorizontalAlignment.Center)
+                                .Width(100)
+                                .CellTemplate(@<text>
+                                        <div>
+                                            <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                        </div>
+                                    </text>);
+                            })
+                            )
+            </div>
+        </div>
+        <div class="col-6 mb-1 pl-1">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>검색조건</p>
+                </div>
+                <div id="SearchForm">
+                    <form id="Report_List_form">
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">기간(월~토)</label>
+                            <div class="input-group col-6">
+                                <input type="text" class="form-control input-sm datepicker text-center required" name="sdate" value="@DateTime.Today.ToString("yyyy-MM-dd")" onchange="set_date_lastday()" />
+                                <label>~</label>
+                                <input type="text" class="form-control input-sm text-center" name="edate" readonly />
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label style="float: right">&nbsp;</label>
+                            <button type="button" class="btn btn-secondary" name="Report_Search" style="float:right;" onclick="getReportItem()">조회</button>
+                        </div>
+
+                        <br /><br /><br />
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">점검시간</label>
+                            <div class="input-group col-3">
+                                <input type="time" class="form-control input-sm" name="stime" value="@DateTime.Today.ToString("HH:mm")"  />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label style="float: right">&nbsp;</label>
+                            <button type="button" class="btn btn-secondary" name="Report_Search" style="float:right;" onclick="saveReportItem()">저장</button>
+                            <label style="float: right">&nbsp;</label>
+                            <button type="button" class="btn btn-secondary" name="Report_Edit" style="float:right;" onclick="editReportItem()">수정</button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+        </div>
+
+        <!--#endregion-->
+        <!--#region 메인레포트 DATA-->
+        <div id="Report_Main" class="col-12">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>메인레포트</p>
+                </div>
+                <div id="ReportMainGrid">
+                    @(Html.DevExtreme().DataGrid()
+                            .ID("ReportMainGrid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(450)
+                            .HoverStateEnabled(true)
+                            .ShowColumnLines(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .KeyExpr("rpt_gubun")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("workroom_cd").Caption("작업실코드").Visible(false);
+                                c.Add().DataField("workroom_nm").Caption("작업실명");
+                                c.Add().DataField("result_temp_mon").Caption("온도-월");
+                                c.Add().DataField("result_hum_mon").Caption("습도-월");
+                                c.Add().DataField("result_press_mon").Caption("차압-월");
+                                c.Add().DataField("result_temp_tue").Caption("온도-화");
+                                c.Add().DataField("result_hum_tue").Caption("습도-화");
+                                c.Add().DataField("result_press_tue").Caption("차압-화");
+                                c.Add().DataField("result_temp_wed").Caption("온도-수");
+                                c.Add().DataField("result_hum_wed").Caption("습도-수");
+                                c.Add().DataField("result_press_wed").Caption("차압-수");
+                                c.Add().DataField("result_temp_thu").Caption("온도-목");
+                                c.Add().DataField("result_hum_thu").Caption("습도-목");
+                                c.Add().DataField("result_press_thu").Caption("차압-목");
+                                c.Add().DataField("result_temp_fri").Caption("온도-금");
+                                c.Add().DataField("result_hum_fri").Caption("습도-금");
+                                c.Add().DataField("result_press_fri").Caption("차압-금");
+                                c.Add().DataField("result_temp_sat").Caption("온도-토");
+                                c.Add().DataField("result_hum_sat").Caption("습도-토");
+                                c.Add().DataField("result_press_sat").Caption("차압-토");
+                            })
+                            .OnToolbarPreparing("Report_ToolbarEdit")
+                         )
+                </div>
+            </div>
+            <!--#endregion-->
+
+        </div>
+        <!--#endregion-->
+        <!--#region 서브레포트1 DATA-->
+        <div id="Report_Sub1" class="col-12">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>서브레포트</p>
+                </div>
+                <div id="ReportSub1Grid">
+                    @(Html.DevExtreme().DataGrid()
+                            .ID("ReportSub1Grid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(150)
+                            .HoverStateEnabled(true)
+                            .ShowColumnLines(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .KeyExpr("dev_gubun")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("workroom_cd").Visible(false);
+                                c.Add().DataField("dev_gubun").Caption("구분").Visible(false);
+                                c.Add().DataField("dev_check_emp_cd").Caption("확인자코드").Visible(false);
+                                c.Add().DataField("dev_date").Caption("날짜").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                                c.Add().DataField("dev_location").Caption("기준이탈장소");
+                                c.Add().DataField("dev_contents").Caption("문제점");
+                                c.Add().DataField("dev_result").Caption("개선조치 사항");
+                                c.Add().DataField("dev_repair_date").Caption("개선일").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                                c.Add().DataField("dev_check_emp").Caption("확인자");
+                            })
+                            .OnCellClick("FindWorkroom")
+                            .OnToolbarPreparing("Report_ToolbarEdit")
+                         )
+                </div>
+            </div>
+            <!--#endregion-->
+
+        </div>
+        <!--#endregion-->
+    </div>
+</div>

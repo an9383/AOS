@@ -1,0 +1,740 @@
+﻿
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var EquipPlan = Html.Raw(Json.Encode(ViewBag.EquipPlan.Data));
+    var itemPopupData = Html.Raw(Json.Encode(ViewBag.itemPopupData.Data));
+}
+
+
+@*설비 가동 실적*@
+
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+    var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+    var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+    var _EquipPlanGrid_EditCheck = false;           // 수정 상태 여부 체크
+    var _EquipPlanCellClickData;                   // EquipPlanGrid 로우 클릭 시 해당 row 정보 보관
+
+    var saveEdit_msg = "";
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    $(function () {
+
+        if ((@EquipPlan).length > 0) {
+            $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@EquipPlan));
+        } else {
+            $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", []);
+        }
+
+        // 팝업 관련
+        var popupColumns = {
+            "itemPopup": [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" },
+                { dataField: "item_gb_nm", caption: "제품구분" }
+            ]
+        };
+
+        createPopup(PagePrefix + "Item", "제품 조회", @itemPopupData, popupColumns.itemPopup, "item_cd");
+
+
+
+
+        // 툴바 활성/비활성
+        EquipPlanEditCheck(false);
+
+        setDatePicker("#EquipPlan .datepicker");
+
+        $("#" + FormNmSearch + " input[name=sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+        $("#" + FormNmSearch + " input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+    });
+
+
+    // 수정중인지 체크
+    function EquipPlanEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#EquipPlanSave").dxButton().parent().parent().removeClass("display-none");
+            $("#EquipPlanUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#EquipPlanSearch").dxButton().parent().parent().addClass("display-none");
+            $("#EquipPlanEdit").dxButton().parent().parent().addClass("display-none");
+            $("#EquipPlanInput").dxButton().parent().parent().addClass("display-none");
+            $("#EquipPlanExcel").dxButton().parent().parent().addClass("display-none");
+
+            _EquipPlanGrid_EditCheck = true;
+
+        }
+        if (!nowEdit) {
+            $("#EquipPlanSave").dxButton().parent().parent().addClass("display-none");
+            $("#EquipPlanUndo").dxButton().parent().parent().addClass("display-none");
+            $("#EquipPlanSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#EquipPlanEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#EquipPlanInput").dxButton().parent().parent().removeClass("display-none");
+            $("#EquipPlanExcel").dxButton().parent().parent().removeClass("display-none");
+
+            _EquipPlanGrid_EditCheck = false;
+        }
+    }
+
+
+    // #region 팝업관련
+    // 검색용 제조제품 팝업
+    function EquipPlanSelectItem() {
+        $("#EquipPlanItemPopup").dxPopup("instance").show();
+    }
+
+    // 검색용 제조제품 팝업 선택
+    function EquipPlanItemRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#EquipPlanSearchForm input[name=item_cd]").val(data.item_cd);
+        $("#EquipPlanSearchForm input[name=item_nm]").val(data.item_nm);
+        $("#EquipPlanSearchForm input[name=item_cd]").prev().children("span").text(data.item_gb_nm);
+
+        $("#EquipPlanItemPopup").dxPopup("instance").hide();
+    }
+
+
+
+    // equipPlanGrid의 1번째(지시번호), 9번째(설비코드) 클릭 시 팝업
+    function EquipPlanGrid_GetPopup(e) {
+        var grid = $("#EquipPlanGrid").dxDataGrid("instance");
+
+        // 수정모드가 아닐 경우 return;
+        if (!_EquipPlanGrid_EditCheck) return;
+
+        // 그리드의 빈 부분 클릭 시 return;
+        if (typeof e.row == "undefined") return;
+
+        //
+        var newRow_check = typeof e.row.isNewRow != "undefined";
+        var allowAdd_check = grid.option("editing").allowAdding;
+        if (!((newRow_check && allowAdd_check) || (!newRow_check && !allowAdd_check))) return;
+
+        _EquipPlanCellClickData = e;        // 클릭한 row의 정보 보관
+        // 클릭한 row가 새로운 row일 경우 임시로 'temp_count'로 row_num를 넣어줌
+        if (typeof _EquipPlanCellClickData.data.row_num == "undefined") {
+            _EquipPlanCellClickData.data.row_num = "temp_" + grid.getVisibleRows().length;
+        }
+
+
+        var popup = null;
+
+        if (e.row.data.level != "1") {
+            switch (e.column.dataField) {
+                case "order_no":
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/ProductionManage/EquipPlanOrderPopupSelect',
+                        async: false,
+                        success: function (result) {
+
+                            if (result <= 0) return;
+
+                            var json = JSON.parse(result);
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+
+                            var orderPopup = [
+                                { dataField: "order_no", caption: "지시번호" },
+                                { dataField: "lot_no", caption: "제조번호" },
+                                { dataField: "item_nm", caption: "제품명" },
+                                { dataField: "order_qty", caption: "지시수량" },
+                                { dataField: "order_date", caption: "지시일자" }
+                            ]
+
+                            createPopup(PagePrefix + "Order", "지시 조회", result, orderPopup, "lot_no");
+                        }
+                    })
+
+                    popup = $("#EquipPlanOrderPopup").dxPopup("instance");
+
+                    break;
+
+                case "equip_cd":
+                    if (typeof _EquipPlanCellClickData.data.order_no == "undefined") {
+                        alert("지시번호를 선택해주세요.");
+
+                        return;
+                    }
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/ProductionManage/EquipPlanEquipPopupSelect',
+                        async: false,
+                        data: _EquipPlanCellClickData.data,
+                        success: function (result) {
+
+                            if (result <= 0) {
+                                var equipPopup = [
+                                    { dataField: "equip_cd", caption: "설비명" },
+                                    { dataField: "equip_nm", caption: "설비번호" },
+                                    { dataField: "ccp_cd", caption: "CCP코드" },
+                                    { dataField: "ccp_nm", caption: "CCP이름" }
+                                ]
+
+                                createPopup(PagePrefix + "Equip", "설비 조회", "", equipPopup, "equip_cd");
+
+                                return;
+                            }
+
+
+                            var json = JSON.parse(result);
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            var equipPopup = [
+                                { dataField: "equip_cd", caption: "설비명" },
+                                { dataField: "equip_nm", caption: "설비번호" },
+                                { dataField: "ccp_cd", caption: "CCP코드" },
+                                { dataField: "ccp_nm", caption: "CCP이름" }
+                            ]
+
+                            createPopup(PagePrefix + "Equip", "설비 조회", result, equipPopup, "equip_cd");
+                        }
+
+                    })
+
+                    popup = $("#EquipPlanEquipPopup").dxPopup("instance");
+
+                    break;
+            }
+        }
+
+
+        if (popup != null) {
+
+            popup.show();
+        }
+
+    }
+
+    // 그리드 입력용 지시 팝업 선택
+    function EquipPlanOrderRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        var planGrid = $("#EquipPlanGrid").dxDataGrid("instance");
+        var planData = planGrid.getVisibleRows();
+
+        for (var i in planData) {
+            //if (planData[i].data.audittrail_id == _EquipPlanCellClickData.data.audittrail_id && planData[i].data.lot_no == _EquipPlanCellClickData.data.lot_no) {
+            if (planData[i].data.row_num == _EquipPlanCellClickData.data.row_num) {
+                planGrid.cellValue(i, "order_no", data.order_no);
+                planGrid.cellValue(i, "mp_ck", data.mp_ck);
+                planGrid.cellValue(i, "order_date", data.order_date);
+                planGrid.cellValue(i, "revision_no", data.revision_no);
+                planGrid.cellValue(i, "item_cd", data.item_cd);
+                planGrid.cellValue(i, "item_nm", data.item_nm);
+                planGrid.cellValue(i, "order_qty", data.order_qty);
+                planGrid.cellValue(i, "lot_no", data.lot_no);
+
+                planGrid.cellValue(i, "equip_cd", "");
+                planGrid.cellValue(i, "equip_nm", "");
+                planGrid.cellValue(i, "s_date", new Date());
+                planGrid.cellValue(i, "s_time", new Date());
+                planGrid.cellValue(i, "required_min", "");
+
+                continue;
+            }
+        }
+
+        $("#EquipPlanOrderPopup").dxPopup("instance").hide();
+    }
+
+    // 그리드 입력용 설비 팝업 선택
+    function EquipPlanEquipRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        var planGrid = $("#EquipPlanGrid").dxDataGrid("instance");
+        var planData = planGrid.getVisibleRows();
+
+        for (var i in planData) {
+            if (planData[i].data.row_num == _EquipPlanCellClickData.data.row_num) {
+                planGrid.cellValue(i, "equip_cd", data.equip_cd);
+                planGrid.cellValue(i, "equip_nm", data.equip_nm);
+                planGrid.cellValue(i, "ccp_cd", data.ccp_cd);
+                planGrid.cellValue(i, "ccp_nm", data.ccp_nm);
+                // planGrid.cellValue(i, "order_proc_id", data.order_proc_id);
+
+                continue;
+            }
+        }
+
+        $("#EquipPlanEquipPopup").dxPopup("instance").hide();
+    }
+
+    // #endregion
+
+
+    // #region 기본crud
+    // 조회
+    function EquipPlanSearch() {
+        var data = new FormData($('#EquipPlanSearchForm')[0]);
+
+        $("#EquipPlanGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EquipPlanGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionManage/EquipPlanGridSelect',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result <= 0) return;
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#EquipPlanGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#EquipPlanGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#EquipPlanGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+
+    // 저장
+    async function EquipPlanSave() {
+
+        var check = await EquipPlanGridValidate_Check();
+        if (check == 1) {
+
+            return;
+        } else if (check == 2) {
+            alert("종료일자와 종료시간 이외에 입력되지 않은 항목이 있습니다.")
+
+            return;
+        } else if (check == 3) {
+            alert("종료일자와 종료시간을 전부 입력해주세요.");
+
+            return;
+        }
+
+
+        await $("#EquipPlanGrid").dxDataGrid("instance").saveEditData();
+        await EquipPlanUndo();
+        alert(saveEdit_msg);
+        saveEdit_msg = "";
+        EquipPlanSearch();
+    }
+
+
+    // 수정
+    function EquipPlanEdit() {
+        EquipPlanEditCheck(true)
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: false,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+
+        $("#EquipPlanGrid").dxDataGrid("option", "editing", editing);
+    }
+
+
+    // 입력
+    function EquipPlanInput() {
+        EquipPlanEditCheck(true)
+
+        var editing = {
+            allowUpdating: false,
+            allowAdding: true,
+            allowDeleting: false,
+            mode: 'batch'
+        }
+
+        $("#EquipPlanGrid").dxDataGrid("option", "editing", editing);
+    }
+
+
+    // 취소
+    function EquipPlanUndo() {
+        EquipPlanEditCheck(false)
+
+        var editing = {
+            allowUpdating: false,
+            allowAdding: false,
+            allowDeleting: false,
+            mode: 'batch'
+        }
+
+        $("#EquipPlanGrid").dxDataGrid("option", "editing", editing);
+    }
+
+
+    function EquipPlanExcel() {
+        gridExportToExcel("EquipPlanGrid", "설비_가동_계획_" + "@DateTime.Now.ToShortDateString()");
+        }
+    // #endregion
+
+
+    // #region 그리드 관련
+    // 지시번호, 설비코드 버튼 아이콘 설정
+    function EquipPlanCellWithButton(container, cellInfo) {
+
+        if (cellInfo.row.data.level === "1") {
+            return;
+        }
+
+        if (_EquipPlanGrid_EditCheck == false) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        $("<div>").html("<div style='float:left; line-height: 2;'>" + (cellInfo.value ? cellInfo.value : "") + "</div><div style='float:right;' class='icon-plus'></div>")
+            .appendTo(container);
+
+        $(".icon-plus").dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+
+    function EquipPlanGrid_Inserted(e) {
+        var data = e.data;
+        data.gubun = "I";
+        saveEdit_msg = "입력되었습니다";
+
+        EquipPlanGrid_CRUD(data);
+
+    }
+
+
+    function EquipPlanGrid_Updated(e) {
+        var data = e.data;
+        data.gubun = "U";
+        saveEdit_msg = "수정되었습니다";
+
+        EquipPlanGrid_CRUD(data);
+    }
+
+
+    function EquipPlanGrid_Deleted(e) {
+        var data = e.data;
+        data.gubun = "D";
+        saveEdit_msg = "삭제되었습니다";
+
+        EquipPlanGrid_CRUD(data);
+    }
+
+
+    function EquipPlanGrid_CRUD(data) {
+        var _data = {...data};
+        console.log(data);
+
+        if (EquipPlan_ValueValidate(_data.s_date)) {
+            _data.s_date = new Date(data.s_date).format("yyyy-MM-dd");
+        } else {
+            _data.s_date = null;
+        }
+
+        if (EquipPlan_ValueValidate(_data.s_time)) {
+            if (typeof _data.s_time != "string") {
+                _data.s_time = new Date(data.s_time).format("HH:mm:ss");
+            }
+        } else {
+            _data.s_time = null;
+        }
+
+        if (EquipPlan_ValueValidate(_data.e_date)) {
+            _data.e_date = new Date(data.e_date).format("yyyy-MM-dd");
+        } else {
+            _data.e_date = null;
+        }
+
+        if (EquipPlan_ValueValidate(_data.e_time)) {
+            if (typeof _data.e_time != "string") {
+                _data.e_time = new Date(data.e_time).format("HH:mm:ss");
+            }
+        } else {
+            _data.e_time = null;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionManage/EquipPlanGrid_CRUD',
+            data: _data,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    saveEdit_msg = "실패하였습니다.";
+
+                }
+            }
+        });
+    }
+
+    // #endregion
+
+
+    // #region 기타
+    // EquipPlanGrid validate체크
+    function EquipPlanGridValidate_Check() {
+        var gridData = $("#EquipPlanGrid").dxDataGrid("instance").getVisibleRows();
+        if (gridData.length == 0) {
+            return 1;
+        }
+
+        var check = 0;
+        for (var i in gridData) {
+            var data = gridData[i].data;
+
+            console.log(data);
+            console.log(Object.keys(data).length);
+
+            // 삭제 행일 경우 continue
+            if (gridData[i].removed) continue;
+
+            //
+            if (Object.keys(data).length == 0) {
+                check = 2
+
+                continue;
+            }
+
+            // 필수입력 항목 체크
+            if (!EquipPlan_ValueValidate(data.order_no) || !EquipPlan_ValueValidate(data.equip_cd) || !EquipPlan_ValueValidate(data.equip_nm)
+                || !EquipPlan_ValueValidate(data.s_date) || !EquipPlan_ValueValidate(data.s_time) || !EquipPlan_ValueValidate(data.required_min)) {
+
+                check = 2;
+
+                continue;
+            }
+
+            // 종료일시 입력 시 일자와 시간은 무조건 함께 입력되도록 체크
+            if (data.e_date != null) {
+
+                if (data.e_time == null) {
+                    check = 3;
+
+                    continue;
+                }
+            }
+            // 종료일시 입력 시 일자와 시간은 무조건 함께 입력되도록 체크
+            if (data.e_time != null) {
+
+                if (data.e_date == null) {
+                    check = 3;
+
+                    continue;
+                }
+            }
+        }
+
+        return check;
+    }
+
+
+
+    function EquipPlan_ValueValidate(data) {
+        var check = true;
+
+        if (data == null) check = false;
+        if (data == "") check = false;
+        if (typeof data == "undefined") check = false;
+
+        return check;
+    }
+
+    // #endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    @*제품팝업*@
+    <div id="@(pagePrefix)ItemPopup"></div>
+    @*지시번호 팝업*@
+    <div id="@(pagePrefix)OrderPopup"></div>
+    @*설비 팝업*@
+    <div id="@(pagePrefix)EquipPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate">
+                        <input type="text" class="form-control datepicker" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control col-2" name="item_cd" id="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="equip_search_btn" onclick="@(pagePrefix)SelectItem()" ;"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control col-8" name="item_nm" id="item_nm" readonly />
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Edit;Input;Excel;Undo;Save;");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .Height(900)
+                    .KeyExpr("row_num")
+                    .ShowBorders(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_no").Caption("지시번호")
+                            .CellTemplate(new JS("EquipPlanCellWithButton"));
+                        c.Add().DataField("mp_ck").Caption("지시구분").AllowEditing(false)
+                            .CalculateCellValue(@"function(rowData)
+                                    {
+                                        return (rowData.mp_ck == ""P"" ? ""포장"" : rowData.mp_ck == ""M"" ? ""제조"" : """");
+                                    }");
+                        c.Add().DataField("order_date").Caption("지시일자").DataType(GridColumnDataType.DateTime)
+                            .Format("yyyy-MM-dd").AllowEditing(false);
+                        c.Add().DataField("revision_no").Caption("개정번호").AllowEditing(false);
+                        c.Add().DataField("item_cd").Caption("제품코드").AllowEditing(false);
+                        c.Add().DataField("item_nm").Caption("제품명").AllowEditing(false);
+                        c.Add().DataField("order_qty").Caption("지시수량").AllowEditing(false).DataType(GridColumnDataType.Number);
+                        c.Add().DataField("lot_no").Caption("제조번호").AllowEditing(false);
+                        c.Add().DataField("ccp_cd").Caption("CCP코드").Visible(false);
+                        c.Add().DataField("ccp_nm").Caption("CCP명");
+                        c.Add().DataField("equip_cd").Caption("설비코드")
+                            .CellTemplate(new JS("EquipPlanCellWithButton"));
+                        c.Add().DataField("equip_nm").Caption("설비명").AllowEditing(false);
+                        //c.Add().DataField("s_date").Caption("시작시간").DataType(GridColumnDataType.DateTime)
+                        //    .EditorOptions(new
+                        //    {
+                        //        displayFormat = "ShortTime",
+                        //        type = "datetime"
+
+                        //    }).Format(Format.ShortDateShortTime)
+                        //    .Width(145);
+
+
+                        c.Add()
+                            .DataField("s_date")
+                            .Caption("시작일자")
+                            .DataType(GridColumnDataType.Date);
+
+                        c.Add()
+                            .DataField("s_time")
+                            .Caption("시작시간")
+                            .AllowFiltering(false)
+                            .DataType(GridColumnDataType.DateTime)
+                            .EditorOptions(new
+                            {
+                                displayFormat = "ShortTime",
+                                type = "time"
+                            })
+                            .Format(Format.ShortTime);
+
+                        c.Add().DataField("required_min").Caption("예상소요시간(분)").DataType(GridColumnDataType.Number)
+                            .Width(115);
+
+
+                        c.Add()
+                            .DataField("e_date")
+                            .Caption("종료일자")
+                            .DataType(GridColumnDataType.Date);
+
+                        c.Add()
+                            .DataField("e_time")
+                            .Caption("종료시간")
+                            .AllowFiltering(false)
+                            .DataType(GridColumnDataType.DateTime)
+                            .EditorOptions(new
+                            {
+                                displayFormat = "ShortTime",
+                                type = "time"
+                            })
+                            .Format(Format.ShortTime);
+
+                        c.Add()
+                            .DataField("row_num")
+                            .Visible(false);
+
+                        //c.Add()
+                        //    .DataField("order_proc_id")
+                        //    .Visible(false);
+                    }
+                    )
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellClick("EquipPlanGrid_GetPopup")
+                    .OnRowInserted("EquipPlanGrid_Inserted")
+                    .OnRowUpdated("EquipPlanGrid_Updated")
+                    .OnRowRemoved("EquipPlanGrid_Deleted")
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

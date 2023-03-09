@@ -1,0 +1,650 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    ViewData["Title"] = "Employee_group_manage";
+    Layout = null;
+
+    var groupJson = @Html.Raw(Json.Encode(ViewBag.groups.Data));
+    var employeeJson = @Html.Raw(Json.Encode(ViewBag.employees.Data));
+    var employeeInGroupJson = @Html.Raw(Json.Encode(ViewBag.employeesInGroup.Data));
+}
+
+@*사원/그룹 설정*@
+
+<script id="Employee_group_manageJs">
+
+        $(function () {
+
+            var ds1 = @groupJson;
+            var ds2 = @employeeJson;
+            var ds3 = @employeeInGroupJson;
+
+            var columns1 = [
+                { dataField: "emp_group_cd", caption: "그룹코드" },
+                { dataField: "emp_group_nm", caption: "그룹" }
+            ];
+            var columns2 = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("EmployeeGroupManageGroup", "그룹조회", ds1, columns1);
+            createPopup("EmployeeGroupManageEmployee", "사원조회", ds2, columns2);
+
+            if (ds1.length > 0) {
+                $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(ds1));
+                $("#GroupDataGrid2").dxDataGrid("instance").option("dataSource", JSON.parse(ds1));
+            }
+            else {
+                $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#GroupDataGrid2").dxDataGrid("instance").option("dataSource", []);
+            }
+            $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+            if (ds2.length > 0) {
+                $("#EmployeeDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(ds2));
+                $("#EmployeeDataGrid2").dxDataGrid("instance").option("dataSource", JSON.parse(ds2));
+                $("#EmployeeDataGrid").dxDataGrid("instance").option("focusedRowIndex", 1);
+                $("#EmployeeDataGrid2").dxDataGrid("instance").option("focusedRowIndex", 1);
+            }
+            else {
+                $("#EmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#EmployeeDataGrid2").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            if (ds3.length > 0) {
+                $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(ds3));
+            }
+            else {
+                $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+        });
+
+        // 그룹 팝업 띄우기
+        function searchGroupBtn() {
+            $("#EmployeeGroupManageGroupPopup").dxPopup("instance").show();
+        }
+
+        // 사원 팝업 띄우기
+        function searchEmployeeBtn() {
+            $("#EmployeeGroupManageEmployeePopup").dxPopup("instance").show();
+        }
+
+        // 그룹팝업 로우 더블클릭
+        function EmployeeGroupManageGroupRowDblClick(selectedItems) {
+            $("#Employee_group_manage input[name=emp_group_nm]").val(selectedItems.data.emp_group_nm);
+
+            searchEmployeeGroup(selectedItems.data.emp_group_cd, $("#Employee_group_manage input[name=emp_nm]").val());
+
+            $("#EmployeeGroupManageGroupPopup").dxPopup("instance").hide();
+        }
+
+        // 사원팝업 로우 더블클릭
+        function EmployeeGroupManageEmployeeRowDblClick(selectedItems) {
+            $("#Employee_group_manage input[name=emp_nm]").val(selectedItems.data.emp_nm);
+
+            searchEmployeeGroup($("#Employee_group_manage input[name=emp_group_nm]").val(), selectedItems.data.emp_nm);
+
+            $("#EmployeeGroupManageEmployeePopup").dxPopup("instance").hide();
+        }
+
+        // 특정 그룹관 해당 그룹에 속한 사원 리스트 조회
+        function searchEmployeeGroup(emp_group_nm, emp_nm) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/SelectEmployeeAndGroup',
+                data: {
+                    empGroupNm: emp_group_nm,
+                    empNm: emp_nm
+                },
+                success: function (result) {
+
+                    if (!Array.isArray(result)) {
+                        if (JSON.parse(result).sessionLoss) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                    }
+
+                    $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                    $("#GroupDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                    $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                    $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            })
+        }
+
+        // 조회 버튼 클릭
+    function Employee_group_manageSearch() {
+        var now_state = $("#EmployeeGroupManageGubun input:radio[name=EmployeeGroupManageToggle]:checked").val();
+
+        if (now_state == '1') { //그룹/사원설정
+            searchEmployeeGroup($("input[name=emp_group_cd]").val(), $("input[name=emp_nm]").val());
+        }
+        else { // 2: 사원/그룹설정
+            var grid2 = $("#EmployeeDataGrid2").dxDataGrid("instance");
+            if (grid2.totalCount() > 0) {
+                var empCd = getGridRowByKey('EmployeeDataGrid2', grid2.option("focusedRowKey"));
+                GroupOfEmployee(empCd.emp_cd);
+
+            }
+        }
+    }
+
+        // 그룹 그리드 선택 변경
+    function groupSelectionChange(selectedItems) {
+        if (selectedItems.length <= 0)
+            return;
+
+        var emp_group_cd = selectedItems.selectedRowsData[0].emp_group_cd;
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectEmployeeInGroup',
+            data: {
+                empGroupCd: emp_group_cd,
+                empNm: $("#Employee_group_manage input[name=emp_nm]").val()
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+                $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+            }
+        });
+
+    }
+
+    // 그룹 그리드 선택 변경 (사원/그룹설정)
+    function groupSelectionChange2(selectedItems) {
+        if (selectedItems.length <= 0)
+            return;
+
+        var emp_group_cd = selectedItems.selectedRowsData[0].emp_group_cd;
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectEmployeeInGroup',
+            data: {
+                empGroupCd: emp_group_cd,
+                empNm: $("#Employee_group_manage input[name=emp_nm]").val()
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+                $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+            }
+        });
+
+    }
+
+        // 그룹에 사원 추가
+    function addEmployee() {
+
+            var grid = $("#GroupDataGrid").dxDataGrid("instance");
+            var grid2 = $("#EmployeeDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0 && grid2.totalCount() > 0) {
+                var empGroupCd = getGridRowByKey('GroupDataGrid', grid.option("focusedRowKey"));
+                var empCd = getGridRowByKey('EmployeeDataGrid', grid2.option("focusedRowKey"));
+
+
+                if (!empCd.emp_cd || empCd.emp_cd == undefined) {
+                    alert("사원 정보가 정확하지 않습니다");
+                    return;
+                }
+
+                employeeCRUD("I", empGroupCd.emp_group_cd, empCd.emp_cd);
+            }
+            else {
+                alert("선택 정보가 정확하지 않습니다.");
+            }
+
+        }
+
+        // 그룹 사원 제거
+        function removeEmployee() {
+
+            var grid = $("#EmployeesInGroupDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var empInGroup = getGridRowByKey('EmployeesInGroupDataGrid', grid.option("focusedRowKey"));
+
+                employeeCRUD("D", empInGroup.emp_group_cd, empInGroup.emp_cd);
+
+            }
+            else {
+                alert("삭제할 데이터가 없습니다.");
+            }
+        }
+
+        // 사원에게 그룹 추가
+        function addGroup() {
+
+            var grid = $("#GroupDataGrid2").dxDataGrid("instance");
+
+            var grid2 = $("#EmployeeDataGrid2").dxDataGrid("instance");
+            if (grid.totalCount() > 0 && grid2.totalCount() > 0) {
+                var empGroupCd = getGridRowByKey('GroupDataGrid2', grid.option("focusedRowKey"));
+                var empCd = getGridRowByKey('EmployeeDataGrid2', grid2.option("focusedRowKey"));
+
+
+                if (!empCd.emp_cd) {
+                    alert("선택 정보가 정확하지 않습니다.");
+                    return;
+                }
+
+                employeeCRUD("I", empGroupCd.emp_group_cd, empCd.emp_cd);
+            }
+            else {
+                alert("선택 정보가 정확하지 않습니다.");
+            }
+        }
+
+        // 사원에게 그룹 제거
+        function removeGroup() {
+            var grid = $("#GroupOfEmployeeDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var empInGroup = getGridRowByKey('GroupOfEmployeeDataGrid', grid.option("focusedRowKey"));
+
+                employeeCRUD("D", empInGroup.emp_group_cd, empInGroup.emp_cd);
+            }
+            else {
+                alert("삭제할 데이터가 없습니다.");
+            }
+        }
+
+        // 그룹 추가, 제거
+        function employeeCRUD(gubun, empGroupCd, empCd) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/EmployeeCRUD',
+                data: {
+                    empGroupCd: empGroupCd,
+                    empCd: empCd,
+                    gubun: gubun
+                },
+                success: function (result) {
+                    alert(result[0]);
+
+                    $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    if (result[1].length > 0) {
+                        $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                        $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                        $("#EmployeesInGroupDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                        $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                    if (result[2].length > 0) {
+                        $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[2]));
+                        $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                        $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                    }
+                }
+            });
+        }
+
+        // 그룹/사원 설정 화면 활성화
+        function div1Activate() {
+            $("#EmployeeGroupDiv1").removeClass("display-none");
+            $("#EmployeeGroupDiv2").addClass("display-none");
+
+            Employee_group_manageSearch();
+        }
+
+        // 사원/그룹 설정 화면 활성화
+        function div2Activate() {
+            $("#EmployeeGroupDiv1").addClass("display-none");
+            $("#EmployeeGroupDiv2").removeClass("display-none");
+
+            Employee_group_manageSearch();
+        }
+
+        // 특정 사원의 그룹 정보 조회
+    function selectGroupOfEmployee(selectedItems) {
+        GroupOfEmployee(selectedItems.selectedRowsData[0].emp_cd);
+    }
+
+    function GroupOfEmployee(emp_cd) {
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectGroupOfEmployee',
+            data: {
+                empCd: emp_cd
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#GroupOfEmployeeDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+</script>
+
+<div id="Employee_group_manage" @*autoresize="Y"*@>
+
+    <div id="EmployeeGroupManageGroupPopup"></div>
+    <div id="EmployeeGroupManageEmployeePopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="EmployeeGroupSearchForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">그룹</span>
+                        </div>
+                        <input type="text" class="form-control" name="emp_group_nm">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchGroupBtn()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사원</span>
+                        </div>
+                        <input type="text" class="form-control" name="emp_nm">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchEmployeeBtn()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search"); }
+        </div>
+
+        <div class="col-8">
+            <div class="input-wrapper">
+
+                <div class="col-3 input-group input-group-sm" id="EmployeeGroupManageGubun">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">구분</span>
+                    </div>
+                    <label class="p-1"></label>
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="1" if="EmployeeGroupManageToggle1" name="EmployeeGroupManageToggle" onclick="div1Activate()" checked="checked" />
+                    </div>
+                    <span class="form-control-sm"><label for="EmployeeGroupManageToggle1">그룹/사원 설정</label></span>
+
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="2" id="EmployeeGroupManageToggle2" name="EmployeeGroupManageToggle" onclick="div2Activate()" />
+
+                    </div>
+                    <span class="form-control-sm"><label for="EmployeeGroupManageToggle2">사원/그룹 설정</label></span>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    @*<button class="btn btn-secondary btn-sm" onclick="div1Activate()">그룹/사원 설정</button>
+    <button class="btn btn-secondary btn-sm" onclick="div2Activate()">사원/그룹 설정</button>*@
+
+    <div class="row" id="EmployeeGroupDiv1">
+
+        <div class="col-2 pr-1">
+            @* === 메인 그리드 === *@
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("GroupDataGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(830)
+                    .ShowBorders(true)
+                    .AllowColumnResizing(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .OnSelectionChanged("groupSelectionChange")
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_group_nm")
+                            .Caption("그룹");
+                    })
+                )
+
+            </div>
+        </div>
+
+        <div class="col-3 pr-1 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeesInGroupDataGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(830)
+                    .ShowBorders(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .KeyExpr("emp_cd")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_cd")
+                            .Caption("사원코드");
+                        columns.Add()
+                            .DataField("emp_nm")
+                            .Caption("사원");
+                        columns.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서");
+                    })
+                )
+            </div>
+        </div>
+
+        <div class="col-1 employeeGroupBtn">
+            <button class="btn btn-primary addBtn" onclick="addEmployee()">
+                @(Html.DevExtreme().Button()
+                        .ID("EmployeeGroupLeftArrow")
+                        .Icon("arrowleft")
+                    )
+            </button>
+            <button class="btn btn-danger removeBtn" onclick="removeEmployee()">
+                @(Html.DevExtreme().Button()
+                        .ID("EmployeeGroupRightArrow")
+                        .Icon("arrowright")
+                    )
+            </button>
+        </div>
+
+        <div class="col-6 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeeDataGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(830)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .KeyExpr("emp_cd")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_cd")
+                            .Caption("사원코드");
+                        columns.Add()
+                            .DataField("emp_nm")
+                            .Caption("사원");
+                        columns.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서")
+                            .GroupIndex(0);
+                    })
+                )
+
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="row display-none" id="EmployeeGroupDiv2">
+
+        <div class="col-3 pr-1">
+            @* === 메인 그리드 === *@
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeeDataGrid2")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(830)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .KeyExpr("emp_cd")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .OnSelectionChanged("selectGroupOfEmployee")
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_cd")
+                            .Caption("사원코드");
+                        columns.Add()
+                            .DataField("emp_nm")
+                            .Caption("사원");
+                        columns.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서")
+                            .GroupIndex(0);
+                    })
+                )
+            </div>
+        </div>
+
+        <div class="col-2 pr-1 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("GroupOfEmployeeDataGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(830)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .KeyExpr("emp_group_nm")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_group_nm")
+                            .Caption("그룹");
+                    })
+                )
+            </div>
+        </div>
+
+        <div class="col-1 employeeGroupBtn">
+            <button class="btn btn-primary addBtn" onclick="addGroup()">
+                @(Html.DevExtreme().Button()
+                        .Icon("arrowleft")
+                    )
+            </button>
+            <button class="btn btn-danger removeBtn" onclick="removeGroup()">
+                @(Html.DevExtreme().Button()
+                        .Icon("arrowright")
+                    )
+            </button>
+        </div>
+
+        <div class="col-6 pl-0">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("GroupDataGrid2")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .Height(830)
+                        .ShowBorders(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .KeyExpr("emp_group_nm")
+                    .FocusedRowIndex(0)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_group_nm")
+                            .Caption("그룹");
+                    })
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

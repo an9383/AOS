@@ -1,0 +1,525 @@
+﻿@*작업실 환경 현황*@
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    var WorkroomEnvironmentStatusData = @Html.Raw(Json.Encode(ViewBag.WorkroomEnvironmentStatusData.Data));
+
+}
+
+<script>
+
+    // 새로고침 객체
+    var WorkroomEnvironmentStatus_intervalSet = {
+        WorkroomEnvironmentStatus_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(WorkroomEnvironmentStatus_intervalSet).length;
+                var _thisViewId = "WorkroomEnvironmentStatus";
+
+                var time = 5;
+                if ($("#WorkroomEnvironmentStatusSearchForm #refresh_time").val() == 0) $("#WorkroomEnvironmentStatusSearchForm #refresh_time").val(1);
+                time = $("#WorkroomEnvironmentStatusSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "WorkroomEnvironmentStatus";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        WorkroomEnvironmentStatus_interval_0: function () {
+            WorkroomEnvironmentStatus_intervalSet.WorkroomEnvironmentStatus_intervalMaster.intervalDelete(0, 0)
+            WorkroomEnvironmentStatus_DataSearch();
+
+        }
+    }
+
+
+    $(document).ready(function () {
+
+        if (@WorkroomEnvironmentStatusData != "") {
+            $("#WorkroomEnvironmentStatusSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + new Date().format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+            WorkroomEnvirionmentStatus_DataInsert(JSON.parse(@WorkroomEnvironmentStatusData));
+        }
+
+        WorkroomEnvironmentStatus_intervalSet.WorkroomEnvironmentStatus_intervalMaster.intervalExcute();
+    })
+
+
+    function WorkroomEnvironmentStatus_DataSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/OperationStatusSearch',
+            data: {
+                operate_type: "%",
+                equipt_category: 1
+            },
+            success: function (result) {
+                if (result <= 0) {
+                    $("#WorkroomEnvironmentStatus div[id*='WorkroomEnvirionmentStatus_infoRow_']").remove();
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                WorkroomEnvirionmentStatus_DataInsert(json);
+            }
+        })
+    }
+
+
+    /**
+     * 데이터를 실제로 입력하기 전 $rowDiv의 위치를 먼저 잡아줌
+     * @@param {object[]} data ViewResult, JsonResult 등으로 반환 받은 데이터는 Parse 후 Array형태로 넘겨줄 것
+     */
+    function WorkroomEnvirionmentStatus_DataInsert(data) {
+        var $rowDiv = "";
+
+        $("#WorkroomEnvironmentStatus div[id*='WorkroomEnvirionmentStatus_infoRow_']").remove();
+
+        for (var i in data) {
+            if (i % 4 == 0) {
+                $rowDiv = $("<div class='row' id='WorkroomEnvirionmentStatus_infoRow_" + (i / 4) + "' style='margin-bottom: 10px;'>");
+            } else {
+                var text = "div #WorkroomEnvirionmentStatus_infoRow_" + parseInt(i / 4);
+                $rowDiv = $(text);
+            }
+
+            WorkroomEnvirionmentStatus_DivCreate($rowDiv, data[i], i);
+        }
+    }
+
+
+    /** 
+     * WorkroomEnvirionmentStatus_DataInsert에서 입력한 $rowDiv에 데이터 삽입
+     * @@param {object} rowDiv 실제 데이터가 삽입될 $rowDiv의 정보
+     * @@param {object} data $rowDiv에 삽입될 data
+     * @@param {string} count $rowDiv의 count 좌측 상단부터 0, 1, 2, 3…
+     */
+    function WorkroomEnvirionmentStatus_DivCreate(rowDiv, data, count) {
+        var $mainDiv = $("#WorkroomEnvironmentStatus");
+        var $rowDiv = rowDiv;
+
+        var $colDiv = $("<div class='col-3'>");
+        var $boxDiv = $("<div class='box pr-1 pl-1 mb-0' id='environment_info_" + count + "' style='border: 2px solid #BDBCBA; border-radius: 5px; padding-top: 10px; position: relative'>");
+
+
+
+        var $flexDiv1 = $('<div class="display-flex display-flex-space-between">');
+        var $flexDiv1_item = $("<dis class='item pl-3'>");
+        var $flexDiv1_item_label = $("<label style='font-weight: 900; font-size: 1.5em;'>").text(data.workroom_nm);
+
+        $flexDiv1_item.append($flexDiv1_item_label);
+        $flexDiv1.append($flexDiv1_item);
+
+
+
+        var $flexDiv2 = $('<div class="display-flex display-flex-space-between">');
+
+        var work_temp = data.EQT_TEMPERATURE == null ? "-" : WorkroomEnvironmentStatus_NumberFormat(WorkroomEnvironmentStatus_NumberChange(data.EQT_TEMPERATURE, 2));
+        var $flexDiv2_item1 = $('<div class="item p-1" style="flex: 1;">');
+        var $flexDiv2_item1_borderDiv = $('<div style="width: 100%; border: 1px solid #BDBCBA; border-radius: 2%;">');
+        var $flexDiv2_item1_flexDiv1 = $('<div class="display-flex mt-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item1_flexDiv1_img = $("<img src='https://img.icons8.com/color/48/000000/thermometer.png' style='width: 4em;'>");
+        var $flexDiv2_item1_flexDiv2 = $('<div class="display-flex mt-3" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item1_flexDiv2_font = $("<font color='#15213B' style='font-weight: 600; font-size: 15px;'>").text("온도");
+        var $flexDiv2_item1_flexDiv3 = $('<div class="display-flex mb-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item1_flexDiv3_font = $("<font color='#15213B' style='font-size: 15px; font-weight: 700;'>").text(work_temp + " °C");
+
+        $flexDiv2_item1_flexDiv1.append($flexDiv2_item1_flexDiv1_img);
+        $flexDiv2_item1_flexDiv2.append($flexDiv2_item1_flexDiv2_font);
+        $flexDiv2_item1_flexDiv3.append($flexDiv2_item1_flexDiv3_font);
+        $flexDiv2_item1_borderDiv.append($flexDiv2_item1_flexDiv1);
+        $flexDiv2_item1_borderDiv.append($flexDiv2_item1_flexDiv2);
+        $flexDiv2_item1_borderDiv.append('<hr class="mt-3 mb-3 mr-2 ml-2" />');
+        $flexDiv2_item1_borderDiv.append($flexDiv2_item1_flexDiv3);
+        $flexDiv2_item1.append($flexDiv2_item1_borderDiv);
+
+        var work_hum = data.EQT_HUMIDITY == null ? "-" : WorkroomEnvironmentStatus_NumberFormat(WorkroomEnvironmentStatus_NumberChange(data.EQT_HUMIDITY, 2));
+        var $flexDiv2_item2 = $('<div class="item p-1" style="flex: 1;">');
+        var $flexDiv2_item2_borderDiv = $('<div style="width: 100%; border: 1px solid #BDBCBA; border-radius: 2%;">');
+        var $flexDiv2_item2_flexDiv1 = $('<div class="display-flex mt-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item2_flexDiv1_img = $("<img src='https://img.icons8.com/ultraviolet/40/000000/wet.png' style='width: 4em;'>");
+        var $flexDiv2_item2_flexDiv2 = $('<div class="display-flex mt-3" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item2_flexDiv2_font = $("<font color='#15213B' style='font-weight: 600; font-size: 15px;'>").text("습도");
+        var $flexDiv2_item2_flexDiv3 = $('<div class="display-flex mb-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item2_flexDiv3_font = $("<font color='#15213B' style='font-size: 15px; font-weight: 700;'>").text(work_hum + " %");
+
+        $flexDiv2_item2_flexDiv1.append($flexDiv2_item2_flexDiv1_img);
+        $flexDiv2_item2_flexDiv2.append($flexDiv2_item2_flexDiv2_font);
+        $flexDiv2_item2_flexDiv3.append($flexDiv2_item2_flexDiv3_font);
+        $flexDiv2_item2_borderDiv.append($flexDiv2_item2_flexDiv1);
+        $flexDiv2_item2_borderDiv.append($flexDiv2_item2_flexDiv2);
+        $flexDiv2_item2_borderDiv.append('<hr class="mt-3 mb-3 mr-2 ml-2" />');
+        $flexDiv2_item2_borderDiv.append($flexDiv2_item2_flexDiv3);
+        $flexDiv2_item2.append($flexDiv2_item2_borderDiv);
+
+        var work_press = data.EQT_PRESSURE == null ? "-" : WorkroomEnvironmentStatus_NumberFormat(WorkroomEnvironmentStatus_NumberChange(data.EQT_PRESSURE, 2));
+        var $flexDiv2_item3 = $('<div class="item p-1" style="flex: 1;">');
+        var $flexDiv2_item3_borderDiv = $('<div style="width: 100%; border: 1px solid #BDBCBA; border-radius: 2%;">');
+        var $flexDiv2_item3_flexDiv1 = $('<div class="display-flex mt-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item3_flexDiv1_img = $("<img src='https://img.icons8.com/color/50/000000/pressure.png' style='width: 4em;'>");
+        var $flexDiv2_item3_flexDiv2 = $('<div class="display-flex mt-3" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item3_flexDiv2_font = $("<font color='#15213B' style='font-weight: 600; font-size: 15px;'>").text("차압");
+        var $flexDiv2_item3_flexDiv3 = $('<div class="display-flex mb-2" style="width: 100%; justify-content: center; align-items: center;">');
+        var $flexDiv2_item3_flexDiv3_font = $("<font color='#15213B' style='font-size: 15px; font-weight: 700;'>").text(work_press + " Pa");
+
+        $flexDiv2_item3_flexDiv1.append($flexDiv2_item3_flexDiv1_img);
+        $flexDiv2_item3_flexDiv2.append($flexDiv2_item3_flexDiv2_font);
+        $flexDiv2_item3_flexDiv3.append($flexDiv2_item3_flexDiv3_font);
+        $flexDiv2_item3_borderDiv.append($flexDiv2_item3_flexDiv1);
+        $flexDiv2_item3_borderDiv.append($flexDiv2_item3_flexDiv2);
+        $flexDiv2_item3_borderDiv.append('<hr class="mt-3 mb-3 mr-2 ml-2" />');
+        $flexDiv2_item3_borderDiv.append($flexDiv2_item3_flexDiv3);
+        $flexDiv2_item3.append($flexDiv2_item3_borderDiv);
+
+        $flexDiv2.append($flexDiv2_item1);
+        $flexDiv2.append($flexDiv2_item2);
+        $flexDiv2.append($flexDiv2_item3);
+
+
+
+        var nowTime = new Date(data.O_DATE);
+        var $flexDiv3 = $('<div class="display-flex" style="justify-content: space-between;">');
+        var $flexDiv3_item1 = $('<dis class="item m-1">');
+        var $flexDiv3_item1_btn = $('<button class="btn btn-outline-secondary" id="WorkroomEnvironmentStatus_infoSearch_' + count + '_btn" style="font-weight: 500;">상세보기</button>');
+        var $flexDiv3_item2 = $('<dis class="item m-1">');
+        var $flexDiv3_item2_label = $('<label style="color: grey; font-size: 1.25em; font-weight: 500;">').text(nowTime.toLocaleString());
+
+        $flexDiv3_item1.append($flexDiv3_item1_btn);
+        $flexDiv3_item2.append($flexDiv3_item2_label);
+        $flexDiv3.append($flexDiv3_item1);
+        $flexDiv3.append($flexDiv3_item2);
+
+
+        $boxDiv.append($flexDiv1);
+        $boxDiv.append($flexDiv2);
+        $boxDiv.append($flexDiv3);
+
+        $colDiv.append($boxDiv);
+        $rowDiv.append($colDiv);
+        $mainDiv.append($rowDiv);
+
+
+        $("#WorkroomEnvironmentStatus_infoSearch_" + count + "_btn").click(function (e) {
+
+            WorkroomEnvironmentStatus_ChartPopupSearch(data.workroom_cd, data.workroom_nm);
+        })
+
+        $("#WorkroomEnvironmentStatusSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + new Date().format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+    }
+
+
+    /**
+     * 상세보기 클릭 시 보여줄 차트의 데이터를 조회
+     * @@param {string} workroom_cd
+     * @@param {string} workroom_nm
+     */
+    function WorkroomEnvironmentStatus_ChartPopupSearch(workroom_cd, workroom_nm) {
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/WorkroomEnvironmentChartSelect',
+            data: {
+                workroom_cd: workroom_cd
+            },
+            success: function (result) {
+
+                if (result.length <= 0 || result == null) {
+                    //$("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("dataSource", []);
+                    //$("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    return;
+                }
+
+                var popup = $("#WorkroomEnvironmentChartPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#WorkroomEnvironmentChartPopupTemplate"));
+                popup.show();
+
+
+                $("#WorkroomEnvironmentChart").dxChart({
+                    title: {
+                        font: {
+                            size: 22,
+                            weight: 700
+                        },
+                        horizontalAlignment: "center",
+                        verticalAlignment: "top",
+                        text: "작업장 온/습도 (" + new Date().format("yyyy.MM.dd") + " : " + workroom_nm + ")"
+                    },
+                    size: {
+                        height: 860
+                    },
+                    dataSource: JSON.parse(result),
+                    commonSeriesSettings: {
+                        argumentField: "input_time",
+                        type: "line"
+                    },
+                    series: [
+                        {
+                            name: "습도",
+                            valueField: "EQT_HUMIDITY",
+                            axis: "hum_axis",
+                            label: {
+                                visible: true,
+                                font: {
+                                    size: 15,
+                                    weight: 600
+                                },
+                                customizeText: function (e) {
+                                    return e.valueText + "%";
+                                }
+                            }
+                        }, {
+                            name: "온도",
+                            valueField: "EQT_TEMPERATURE",
+                            axis: "temp_axis",
+                            label: {
+                                visible: true,
+                                font: {
+                                    size: 15,
+                                    weight: 600
+                                },
+                                customizeText: function (e) {
+                                    return e.valueText + "°C";
+                                }
+                            }
+                        }
+                    ],
+                    legend: {
+                        horizontalAlignment: "center",
+                        verticalAlignment: "bottom",
+                        itemTextPosition: "bottom",
+                        font: {
+                            size: 15,
+                            weight: 600
+                        }
+                    },
+                    valueAxis: [
+                        {
+                            name: "hum_axis",
+                            position: "right",
+                            label: {
+                                font: {
+                                    size: 15,
+                                    weight: 600,
+                                    color: "#1DB2F5"
+                                },
+                                customizeText: function (e) {
+                                    return e.valueText + "%";
+                                }
+                            },
+                            visualRange: [0, Math.max.apply(Math, JSON.parse(result).map(i => { return i.EQT_HUMIDITY; })) > 100 ? Math.max.apply(Math, JSON.parse(result).map(i => { return i.EQT_HUMIDITY; })) : 100],
+                            maxValueMargin: {
+                                startAxisValue: 0,
+                                maxAxisValue: 100,
+                            },
+                            minorGrid: {
+                                visible: true
+                            }
+                        },
+                        {
+                            name: "temp_axis",
+                            position: "left",
+                            label: {
+                                font: {
+                                    size: 15,
+                                    weight: 600,
+                                    color: "#F5564A"
+                                },
+                                customizeText: function (e) {
+                                    return e.valueText + "°C";
+                                }
+                            },
+                            visualRange: [0, Math.max.apply(Math, JSON.parse(result).map(i => { return i.EQT_TEMPERATURE; })) > 100 ? Math.max.apply(Math, JSON.parse(result).map(i => { return i.EQT_TEMPERATURE; })) : 100],
+                            maxValueMargin: {
+                                startAxisValue: 0,
+                                maxAxisValue: 100,
+                            },
+                            minorGrid: {
+                                visible: true
+                            }
+                        }
+                    ],
+                    argumentAxis: {
+                        label: {
+                            font: {
+                                size: 15,
+                                weight: 600
+                            }
+                        },
+                        categories: [
+                            "00시", "01시", "02시", "03시", "04시", "05시", "06시", "07시", "08시", "09시", "10시", "11시",
+                            "12시", "13시", "14시", "15시", "16시", "17시", "18시", "19시", "20시", "21시", "22시", "23시"
+                        ],
+                    }
+                })
+
+                //$("#WorkroomEnvironmentChart").dxChart("option", "title", { text: "작업장 온/습도 (" + new Date().format("yyyy.MM.dd") + " : " + workroom_nm + ")" });
+                //$("#WorkroomEnvironmentChart").dxChart("option", "dataSource", JSON.parse(result));
+                ////$("#WorkroomEnvironmentChart").dxChart("option", "valueAxis")[0].visualRange = { startValue: 0, endValue: 100 };
+                ////$("#WorkroomEnvironmentChart").dxChart("option", "valueAxis")[0].visualRange = { endValue: 100 };
+                ////$("#WorkroomEnvironmentChart").dxChart("instance").resetVisualRange([0, 100]);
+                //console.log($("#WorkroomEnvironmentChart").dxChart("option", "valueAxis"));
+                //console.log($("#WorkroomEnvironmentChart").dxChart("option", "valueAxis")[0]);
+
+            }
+        });
+    }
+
+
+    function WorkroomEnvironmentChartPopup_chartDispose() {
+        if ($("#WorkroomEnvironmentChart").length != 0) {
+            $("#WorkroomEnvironmentChart").dxChart("dispose");
+        }
+    }
+
+
+    /**
+     * 숫자의 1000단위에 ',' 입력
+     * int to string
+     * @@param {number} num 
+     */ 
+    function WorkroomEnvironmentStatus_NumberFormat(num) {
+
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+
+    /**
+     * 숫자 number를 소수점 아래 decimalPoint 자리 이하를 절삭처리.
+     * 소수점 아래 decimalPoint 자리의 빈 값은 0으로 채움.
+     * ex) Number_Change(123.4, 2) >> return 123.40
+     * @@param {number} num 
+     * @@param {number} decimalPoint 표시할 소수점 아래 자리의 수.
+     */
+    function WorkroomEnvironmentStatus_NumberChange(num, decimalPoint) {
+
+        if (decimalPoint == 0) {
+            var result = Math.floor(num);
+
+            return result;
+        } else {
+            var count = Math.pow(10, decimalPoint);
+            var num = Math.floor(num * count) / count;
+            var result = num.toFixed(decimalPoint)// 0을 채워주기 toFixed를 이용
+
+            return result;
+        }
+    }
+
+
+
+    $("#WorkroomEnvironmentStatusSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {  // keyCode:13 = Enter
+
+            $("#WorkroomEnvironmentStatusSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    $("#WorkroomEnvironmentStatusSearchForm #refresh_time").blur(function () {
+
+        WorkroomEnvironmentStatus_intervalSet.WorkroomEnvironmentStatus_intervalMaster.intervalDelete(0, 1);
+        WorkroomEnvironmentStatus_intervalSet.WorkroomEnvironmentStatus_intervalMaster.intervalExcute();
+    });
+
+</script>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+
+    <!-- #region 1일 단위 차트 팝업 -->
+    @* === 제조 공정도 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("WorkroomEnvironmentChartPopup")
+        .Width(1800)
+        .Height(900)
+        .ShowTitle(true)
+        .Title("작업실 온/습도")
+        .Visible(false)
+        .DragEnabled(true)
+        .ShowTitle(false)
+        .CloseOnOutsideClick(true)
+        .OnHidden("WorkroomEnvironmentChartPopup_chartDispose")
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("WorkroomEnvironmentChartPopupTemplate"))
+    {
+        <div id="WorkroomEnvironmentChartDiv">
+            <div id="WorkroomEnvironmentChart">
+
+            </div>
+        </div>
+    }
+    <!-- #endregion -->
+
+
+    <div id="@(pagePrefix)_Top" class="mainTop row">
+
+        <div class="col-12">
+            <form id="@(pagePrefix)SearchForm" onsubmit="return false;">
+
+                <div class="input-wrapper">
+                    <div class="col-7 input-group input-group-sm">
+                    </div>
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="30" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+

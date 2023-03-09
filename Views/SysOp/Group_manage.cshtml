@@ -1,0 +1,357 @@
+﻿@model HACCP.Models.SysOp.Group_manage
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "MenuUser";
+    string sData = ViewData["data"] as String;
+
+    var Group_manageData = @Html.Raw(Json.Encode(ViewBag.Group_manage.Data));
+    var Group_manageAuth = @Html.Raw(Json.Encode(ViewBag.Group_manageAuth.Data));
+
+}
+
+@*사용자 그룹 등록*@
+
+<script type="text/javascript" id="Group_manageJs">
+    // SP 구문, gubun 변수
+    var curdGubun = "";
+
+    var _Group_manageAuth;
+
+    $(function () {
+
+        if ((@Group_manageData).length > 0) {
+            $("#GroupManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@Group_manageData));
+            $("#GroupManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 수정중인지 체크
+        Group_manage_EditCheck(false);
+
+        // 사용자 권한
+        _Group_manageAuth = JSON.parse(@Group_manageAuth)[0];
+
+        if (_Group_manageAuth.form_query != "Y") {
+            $("#Group_manageSearch").remove();
+        }
+        if (_Group_manageAuth.form_insert != "Y") {
+            $("#Group_manageInput").remove();
+        }
+        if (_Group_manageAuth.form_edit != "Y") {
+            $("#GroupMenuManageEdit").remove();
+        }
+        if (_Group_manageAuth.form_delete != "Y") {
+            $("#Group_manageDelete").remove();
+        }
+
+    });
+
+    // 수정중인지 체크
+    function Group_manage_EditCheck(nowEdit) {
+
+        $("#GroupManageRightForm input[name=emp_group_cd]").attr("readonly", false);
+
+        if (nowEdit) {
+            $("#Group_manageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#Group_manageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#Group_manageSearch").dxButton().parent().parent().addClass("display-none");
+            $("#Group_manageInput").dxButton().parent().parent().addClass("display-none");
+            $("#Group_manageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#Group_manageDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#GroupManageRightForm :disabled").attr('disabled', false);
+            $("#GroupManageGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#Group_manageSave").dxButton().parent().parent().addClass("display-none");
+            $("#Group_manageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#Group_manageSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#Group_manageInput").dxButton().parent().parent().removeClass("display-none");
+            $("#Group_manageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#Group_manageDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#GroupManageRightForm :enabled").attr('disabled', true);
+            $("#GroupManageGrid").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    // 좌측 그리드 선택 변경 시, 이벤트 처리
+    function GroupManageFocus_changed(e) {
+
+        if (!e.row || !e.row.data) {
+            return;
+        }
+        GroupManageFillData(e.row.data);
+    }
+
+    // 우측 폼 데이터 채우기
+    function GroupManageFillData(data) {
+
+        $("input[name=emp_group_cd]").val(data.emp_group_cd);
+        $("input[name=emp_group_nm]").val(data.emp_group_nm);
+        $("textarea[name=remark]").val(data.remark);
+
+        if (data.use_yn === "Y") {
+            $("input:radio[name='use_yn']:radio[value='Y']").prop('checked', true);
+        } else {
+            $("input:radio[name='use_yn']:radio[value='N']").prop('checked', true);
+        }
+
+    }
+
+    // 조회버튼 기능
+    function Group_manageSearch() {
+
+        curdGubun = "S";
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysOp/Group_manageSelect',
+            data: {
+                group_text: "",
+                use_yn_S: ""
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#GroupManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#GroupManageGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "GroupManageGrid");
+
+    }
+
+    // 입력 버튼
+    function Group_manageInput() {
+
+        // 버튼 상태값 체크 및 셋팅
+        Group_manage_EditCheck(true);
+
+        $("#GroupManageRightForm")[0].reset();
+
+        // 구분 값
+        curdGubun = "I";
+
+    }
+
+    // 수정 버튼
+    function Group_manageEdit() {
+        var grid = $("#GroupManageGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            // 버튼 상태값 체크 및 셋팅
+            Group_manage_EditCheck(true);
+            // 구분 값
+            curdGubun = "U";
+
+            $("#GroupManageRightForm input[name=emp_group_cd]").attr("readonly", true);
+        }
+        else {
+            alert("선택된 데이터가 없습니다.");
+        }
+
+    }
+
+    // 취소 버튼
+    function Group_manageUndo() {
+
+        // 버튼 상태값 체크 및 셋팅
+        Group_manage_EditCheck(false);
+        // 구분 값
+        curdGubun = "S";
+    }
+
+    // 저장 버튼
+    function Group_manageSave() {
+
+        var formData = new FormData($("#GroupManageRightForm")[0]);
+        formData.set("gubun", curdGubun);
+
+        // Validation Check
+        validationCheck();
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/Group_manageCRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    alert(json.messege);
+                }
+                Group_manage_EditCheck(false);
+                Group_manageSearch();
+
+            }
+        })
+    }
+
+    // 삭제 버튼
+    function Group_manageDelete() {
+        var grid = $("#GroupManageGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("선택된 데이터가 없습니다.");
+            return;
+        }
+
+        // 삭제 여부 팝업
+        if (confirm("정말 삭제하시겠습니까??") === true) {
+
+            // 그리드 객체를 가져온다
+            var grid = $("#GroupManageGrid").dxDataGrid("instance");
+            // 그리드에 포커스 된 로우의 키를 통해서 해당 데이터를 가져온다.
+            var data = getGridRowByKey('GroupManageGrid', grid.option("focusedRowKey"));
+
+            curdGubun = "D";
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/Group_manageCRUD',
+                data: {
+                    emp_group_cd: data.emp_group_cd,
+                    gubun: curdGubun
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        alert(json.messege);
+                    }
+                    Group_manage_EditCheck(false);
+                    Group_manageSearch();
+
+                }
+            });
+
+        } else {   //취소
+
+            return;
+
+        }
+
+    }
+
+    // validation 상태값 표시
+    function validationCheck() {
+
+        var v_emp_group_cd = $("input[name=emp_group_cd]").val();
+        var v_emp_group_nm = $("input[name=emp_group_nm]").val();
+
+        if (typeof v_emp_group_cd === "undefined" || v_emp_group_cd === null || v_emp_group_cd === "") {
+
+            alert('그룹코드를 입력 해주세요.');
+            return;
+        }
+
+        if (typeof v_emp_group_nm === "undefined" || v_emp_group_nm === null || v_emp_group_nm === "") {
+
+            alert('그룹을 입력 해주세요.');
+            return;
+        }
+
+    }
+
+
+</script>
+
+<div id="Group_manage" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 좌측 그리드 -->
+        <div class="col-8 pr-1">
+            <fieldset id="GroupManageLeftMain" class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("GroupManageGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("emp_group_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("emp_group_cd").Caption("그룹코드");
+                        c.Add().DataField("emp_group_nm").Caption("그룹");
+                        c.Add().DataField("use_yn_nm").Caption("사용여부");
+                        c.Add().DataField("remark").Caption("비고");
+                    })
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .OnFocusedRowChanged("GroupManageFocus_changed")
+                )
+
+            </fieldset>
+
+        </div>
+
+        <!-- 우측 그리드 -->
+        <div id="GroupManageRightMain" class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>사용자 그룹 등록</p>
+                </div>
+
+
+                <div class="menuDiv">
+
+                    <form id="GroupManageRightForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">그룹코드<star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="emp_group_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">그룹<star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="emp_group_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <textarea rows="3" class="form-control col-12" name="emp_group_nm"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부</label>
+                            <div class="input-group col-8">
+                                <label>사용 <input type="radio" value="Y" name="use_yn" /></label>
+                                <label>사용안함 <input type="radio" value="N" name="use_yn" /></label>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>

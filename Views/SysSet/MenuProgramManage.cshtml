@@ -1,0 +1,380 @@
+﻿@using System.Data
+
+@{
+    Layout = null;
+    ViewData["Title"] = "MenuProgramManage";
+
+    var menuProgramData = @Html.Raw(Json.Encode(ViewBag.menuProgramData.Data));
+    var programData = @Html.Raw(Json.Encode(ViewBag.programData.Data));
+
+}
+
+@*메뉴구성*@
+
+<script id="MenuProgramManageJs">
+
+        // 페이지 로드시 오른쪽 form, 저장, 취소 버튼 비활성화
+        $(function () {
+            menuProgramManageEditCheck(false);
+
+            if (@menuProgramData) {
+                $("#MenuProgramManageGrid").dxTreeList("instance").option("dataSource", JSON.parse(@menuProgramData));
+                $("#MenuProgramManageGrid").dxTreeList("instance").option("focusedRowIndex", 0);
+            }
+
+            if (@programData) {
+                $("#MenuProgramGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@programData));
+                $("#MenuProgramGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //$("#MenuProgramManage select[name=module_gb]").readOnly();
+
+        });
+
+        // 수정중인지 체크
+        function menuProgramManageEditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#MenuProgramManageOK").dxButton().parent().parent().removeClass("display-none");
+                $("#MenuProgramManageEdit").dxButton().parent().parent().addClass("display-none");
+
+                $("#menuProgram-CRUD-Btn :disabled").attr('disabled', false);
+
+            }
+            if (!nowEdit) {
+
+                $("#MenuProgramManageOK").dxButton().parent().parent().addClass("display-none");
+                $("#MenuProgramManageEdit").dxButton().parent().parent().removeClass("display-none");
+
+                $("#menuProgram-CRUD-Btn :enabled").attr('disabled', true);
+            }
+
+        }
+
+        function MenuProgramManageSelectMenu() {
+
+            $("#MenuProgramManageForm")[0].reset();
+
+            var treeList = $("#MenuProgramManageGrid").dxTreeList("instance");
+            var data = treeList.getNodeByKey(treeList.option("focusedRowKey"));
+
+            if (UtilView.isEmpty(data) || data.level != "2") {
+                return;
+            }
+
+            $("#MenuProgramManageForm input[name=display_nm]").val(data.data.display_nm);
+            $("#MenuProgramManageForm input[name=form_cd]").val(data.data.form_cd);
+            $("#MenuProgramManageForm input[name=form_seq]").val(data.data.form_seq);
+        }
+
+        function MenuProgramManageSelect() {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysSet/MenuProgramSelect',
+                data: {
+                    module_gb: $("#MenuProgramManage select[name=module_gb]").val()
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        $("#MenuProgramManageGrid").dxTreeList("instance").option("dataSource", json);
+                    } else {
+                        $("#MenuProgramManageGrid").dxTreeList("instance").option("dataSource", []);
+                    }
+
+
+                }
+            })
+            UtilView.setGridFocus("T", "MenuProgramManageGrid");
+
+        }
+
+        function MenuProgramManageEdit() {
+            menuProgramManageEditCheck(true);
+
+        }
+
+        function MenuProgramManageOK() {
+            menuProgramManageEditCheck(false);
+
+        }
+
+        function menuProgramCRUD(gubun) {
+
+            var treeList = $("#MenuProgramManageGrid").dxTreeList("instance");
+            var treeListData = treeList.getNodeByKey(treeList.option("focusedRowKey"));
+
+            var grid = $("#MenuProgramGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('MenuProgramGrid', grid.option("focusedRowKey"));
+
+            var data;
+
+            if (gubun === "U2" || gubun === "U3") {
+
+                if (treeListData.level != 2) {
+                    return;
+                }
+
+                if (treeListData.parent.children[0].key === treeListData.data.ID && gubun === "U2") {
+                    alert("첫번째 프로그램입니다.");
+                    return;
+                }
+
+                if (treeListData.parent.children[treeListData.parent.children.length - 1].key === treeListData.data.ID && gubun === "U3") {
+                    alert("마지막 프로그램입니다.");
+                    return;
+                }
+
+                data = {
+                    module_gb: $("#MenuProgramManage select[name=module_gb]").val(),
+                    module_cd: treeListData.data.module_cd,
+                    form_cd: treeListData.data.form_cd,
+                    form_seq: treeListData.data.form_seq,
+                    gubun: gubun
+                }
+
+            } else if (gubun === "I") {
+
+                if (treeListData.level == "0") {
+                    alert("모듈에는 프로그램을 추가 할 수 없습니다.");
+                    return;
+                }
+
+                data = {
+                    module_gb: $("#MenuProgramManage select[name=module_gb]").val(),
+                    module_cd: treeListData.data.module_cd,
+                    module_seq: treeListData.data.module_seq,
+                    form_cd: gridData.form_cd,
+                    form_seq: treeListData.data.form_seq,
+                    gubun: gubun
+                }
+
+            } else if (gubun === "D") {
+
+                data = {
+                    module_gb: $("#MenuProgramManage select[name=module_gb]").val(),
+                    module_cd: treeListData.data.module_cd,
+                    form_cd: treeListData.data.form_cd,
+                    gubun: gubun
+                }
+
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/MenuProgramCRUD',
+                data: data,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        alert(json.messege);
+                    }
+                    MenuProgramManageSelect();
+                }
+            })
+
+        }
+
+</script>
+
+<div id="MenuProgramManage" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="MenuProgramManageSearchForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">모듈구분</span>
+                        </div>
+                        <select class="form-control" name="module_gb" onchange="MenuProgramManageSelect()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.moduleGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @(Html.DevExtreme().Toolbar()
+                .ID("MenuProgramManageToolbar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("MenuProgramManageSelect")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("MenuProgramManageSelect")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("MenuProgramManageEdit")
+                        .Icon("trash")
+                        .Text("수정")
+                        .OnClick("MenuProgramManageEdit")
+                        )
+                        .Location(ToolbarItemLocation.After);
+
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("MenuProgramManageOK")
+                        .Icon("check")
+                        .Text("확인")
+                        .OnClick("MenuProgramManageOK")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            @* === 메인 그리드 === *@
+            <fieldset id="MenuProgramManage_LeftMain" class="box mb-0">
+                @(Html.DevExtreme().TreeList()
+                    .ID("MenuProgramManageGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .RootValue("G-00000000")
+                    .KeyExpr("ID")
+                    .ParentIdExpr("ParentID")
+                    .WordWrapEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("display_nm").Caption("메뉴");
+                        c.Add().DataField("form_seq").Caption("순번");
+                        c.Add().DataField("form_cd").Caption("코드");
+                    })
+                    .ColumnAutoWidth(true)
+                    .ExpandedRowKeys(new[] { 1 })
+                    .OnFocusedRowChanged("MenuProgramManageSelectMenu")
+                )
+            </fieldset>
+        </div>
+
+        <div class="col-1" id="menuProgram-CRUD-Btn" style="margin-top:200px">
+
+            <button class="btn btn-success addBtn" onclick="menuProgramCRUD('U2')">
+                @(Html.DevExtreme().Button()
+                        .ID("MenuProgramUpArrow")
+                        .Icon("arrowup")
+                    ) 위
+            </button>
+
+            <button class="btn btn-success removeBtn" onclick="menuProgramCRUD('U3')">
+                @(Html.DevExtreme().Button()
+                        .ID("MenuProgramDownArrow")
+                        .Icon("arrowdown")
+                    ) 아래
+            </button>
+
+            <button class="btn btn-primary addBtn" onclick="menuProgramCRUD('I')">
+                @(Html.DevExtreme().Button()
+                        .ID("MenuProgramLeftArrow")
+                        .Icon("arrowleft")
+                    ) 추가
+            </button>
+
+            <button class="btn btn-danger removeBtn" onclick="menuProgramCRUD('D')">
+                @(Html.DevExtreme().Button()
+                        .ID("MenuProgramRightArrow")
+                        .Icon("arrowright")
+                    ) 제거
+            </button>
+
+        </div>
+
+        <div id="MenuProgramManage_RightMain" class="col-3 pl-0">
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>상세정보</p>
+                </div>
+
+                <form id="MenuProgramManageForm" onchange="formEdited('MenuProgramManage')">
+
+                    <div id="MenuProgramManage_MenuDiv">
+                        <div class="menuDiv" id="MenuProgramManage_MenuDiv_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-4">메뉴 <star>*</star></label>
+                                <div class="input-group col-7">
+                                    <input type="text" class="form-control col-12 required" name="display_nm" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">코드 <star>*</star></label>
+                                <div class="input-group col-7">
+                                    <input type="text" class="form-control col-12 required" name="form_cd" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">프로그램순번 <star>*</star></label>
+                                <div class="input-group col-7">
+                                    <input type="number" class="form-control col-12 required" name="form_seq" readonly="readonly" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MenuProgramGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .KeyExpr("form_cd")
+                    .Height(450)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("form_cd").Caption("프로그램코드");
+                        c.Add().DataField("form_nm").Caption("프로그램명");
+                    })
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

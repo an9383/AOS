@@ -1,0 +1,400 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewData["Title"] = "HACCP_FileManage";
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    ViewBag.Title = pagePrefix;
+}
+@{
+    var HACCP_FileManageData = @Html.Raw(Json.Encode(ViewBag.HACCP_FileManageData.Data));
+    var HACCP_FileManageAuth = @Html.Raw(Json.Encode(ViewBag.HACCP_FileManageAuth.Data));
+}
+
+<script id="HACCP_FileManageJs" type="text/javascript">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+
+    //구분값
+    var manGubun = "";
+
+    var HACCP_FileManageData = @HACCP_FileManageData;
+    var _HACCP_FileManageAuth;
+
+    $(function () {
+        //#region 달력 api
+        setDatePicker("#HACCP_FileManage .datepicker");
+        //#endregion
+
+        //#region 설비 목록 그리드 생성
+        if (HACCP_FileManageData.length <= 0) {
+            $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@HACCP_FileManageData));
+            $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        //#endregion
+
+    });
+
+    //검색
+    function HACCP_FileManageSearch() {
+
+        manGubun = "";
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/getFileList',
+            data: {
+                use_yn: "Y",
+                FinalConfirm: "Y"
+            },
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                //$("#HACCP_FileManageMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                HACCP_FileManageMasterGrid_changed();
+            }
+        });
+
+    }
+
+    function HACCP_FileManageInput() {
+        HACCP_FileManageFileAdd();
+    }
+    function HACCP_FileManageDelete() {
+        HACCP_FileManageFileDelete();
+    }
+
+    //#region Focus Row 변경 이벤트
+    function HACCP_FileManageMasterGrid_changed() {
+        var grid = $("#HACCP_FileManageMasterGrid").dxDataGrid("instance");
+
+        if (grid.totalCount()) {
+            var gridData = getGridRowByKey('HACCP_FileManageMasterGrid', grid.option("focusedRowKey"));
+            var sdate = $("#HACCP_FileManageForm input[name=search_sdate]").val();
+            var edate = $("#HACCP_FileManageForm input[name=search_edate]").val();
+            var doc_cd = gridData.doc_cd;
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getFileListDetail',
+                data: {
+                    sdate: sdate,
+                    edate: edate,
+                    doc_cd: doc_cd
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#HACCP_FileManageFileListGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#HACCP_FileManageFileListGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+
+                    $("#HACCP_FileManageFileListGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#HACCP_FileManageFileListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#HACCP_FileManageFileListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            });
+
+        }
+    }
+
+    // 파일 첨부
+    function HACCP_FileManageFileAdd() {
+        //$("#fileUploadData").click();
+
+        var popup = $("#HACCP_FileManagePopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#HACCP_FileManagePopupTemplate"));
+
+        popup.show();
+
+
+        $('#fileSubmitForm .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });
+
+    }
+
+    function HACCP_FileManageFileSave() {
+
+
+        var formData = new FormData($("#fileSubmitForm")[0]);
+
+
+        var grid = $("#HACCP_FileManageMasterGrid").dxDataGrid("instance");
+
+        if (grid.totalCount()) {
+            var gridData = getGridRowByKey('HACCP_FileManageMasterGrid', grid.option("focusedRowKey"));
+
+            formData.set("doc_cd", gridData.doc_cd);
+            formData.set("ccp_emp", gridData.EmpCode);
+            formData.append("uploadfile", $("#fileUploadData")[0].files[0]);
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/FileAdd',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    alert(result);
+
+                    $('#fileSubmitForm')[0].reset();
+
+                    var popup = $("#HACCP_FileManagePopup").dxPopup("instance");
+                    
+                    popup.hide();
+
+                    HACCP_FileManageSearch();
+                }
+            });
+        }
+    }
+
+
+    // 파일 삭제
+    function HACCP_FileManageFileDelete() {
+        // 첨부파일 그리드
+        var fileGrid = $("#HACCP_FileManageFileListGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("삭제할 문서가 없습니다.");
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("HACCP_FileManageFileListGrid", fileGrid.option("focusedRowKey"));
+
+        if (confirm("삭제하시겠습니까?")) {
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/FileDelete',
+                data: {
+                    file_id: fileData.doc_file_id
+                },
+                success: function (result) {
+                    alert(result);
+                    HACCP_FileManageSearch();
+                }
+            });
+        }
+    }
+
+    function HACCP_FileManageFileOpen() {
+
+        var grid = $("#HACCP_FileManageFileListGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("HACCP_FileManageFileListGrid", grid.option("focusedRowKey"));
+
+
+        document.location.assign('/Mont/FileOpen?file_id=' + gridData.doc_file_id);
+
+    }
+
+    //#endregion
+
+</script>
+
+<div id="HACCP_FileManage" autoresize="Y">
+
+    <!--파일업로드 팝업-->
+    <div id="HACCP_FileManagePopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("HACCP_FileManagePopup")
+            .Width(500)
+            .Height(200)
+            .ShowTitle(true)
+            .Title("파일 업로드")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("HACCP_FileManagePopupTemplate"))
+    {
+    <div>
+        <form id="fileSubmitForm" enctype="multipart/form-data">
+            <div class="col-12">
+                <label class="col-2">기준일</label>
+                <input type="text" class="form-control col-3 datepicker" name="doc_base_date" id="doc_base_date" value="@DateTime.Today.ToShortDateString()" />
+                <input type="file" class="col-5" id="fileUploadData" />
+
+                <button type="button" class="btn btn-secondary" onclick="HACCP_FileManageFileSave()">저장</button>
+
+            </div>
+        </form>
+    </div>
+    }
+
+
+    <!--#region 설비 목록 버튼 이벤트-->
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="HACCP_FileManageForm" name="HACCP_FileManageForm">
+                <div class="input-group input-group-sm col-4">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">검색기간</span>
+                    </div>
+                    <input type="text" class="form-control datepicker col-3" name="search_sdate" id="search_sdate" value="@DateTime.Today.AddMonths(-3).ToShortDateString()" />
+                    <Label class="p-1">~</Label>
+                    <input type="text" class="form-control datepicker col-3" name="search_edate" id="search_edate" value="@DateTime.Today.ToShortDateString()" />
+                </div>
+
+            </form>
+        </div>
+        <div class="CRUD-btn col-4">
+            @(Html.DevExtreme().Toolbar()
+            .ID("HACCP_FileManage_Btn")
+            .Items(items =>
+            {
+                items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("HACCP_FileManageSearch")
+                .Icon("search")
+                .Text("조회")
+                .OnClick("HACCP_FileManageSearch")
+                )
+                .Location(ToolbarItemLocation.After);
+            })
+            .Items(items =>
+            {
+                items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("HACCP_FileManageInput")
+                .Icon("plus")
+                .Text("입력")
+                .OnClick("HACCP_FileManageInput")
+                )
+                .Location(ToolbarItemLocation.After);
+            })
+            .Items(items =>
+            {
+                items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("HACCP_FileManageDelete")
+                .Icon("trash")
+                .Text("삭제")
+                .OnClick("HACCP_FileManageDelete")
+                )
+                .Location(ToolbarItemLocation.After);
+            })
+            )
+        </div>
+    </div>
+    <!--#endregion-->
+
+    <div class="row">
+        <!--#region 좌측 그리드(설비분류별 설비 목록)-->
+        <div class="col-4 pr-1">
+
+            <!--#region 설비 목록 그리드-->
+            <div id="HACCP_FileManageMaster" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("HACCP_FileManageMasterGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("doc_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("doc_name").Caption("문서명");
+                        c.Add().DataField("EmpName").Caption("담당자명").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("doc_count").Caption("총 문서개수").Alignment(HorizontalAlignment.Center).Width("15%");
+                        c.Add().DataField("CCP_yn").Caption("CCP").DataType(GridColumnDataType.Boolean).Width("10%")
+                            .CalculateCellValue(@"function(rowData) { return (rowData.CCP_yn == ""Y"" || rowData.CCP_yn == true); }");
+                        //c.Add().DataField("CCP_yn").Caption("CCP여부").DataType(GridColumnDataType.Boolean).Width(80);
+                        c.Add().DataField("BDate").Caption("개정일").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date).Visible(false);
+                        //c.Add().DataField("ChgSerNo").Caption("revision");
+                    })
+                .OnFocusedRowChanged("HACCP_FileManageMasterGrid_changed")
+                )
+            </div>
+            <!--#endregion-->
+
+        </div>
+        <!--#endregion-->
+        <!--#region 우측 그리드(점검표 데이터)-->
+        <div class="col-8 pl-0">
+
+            <div id="HACCP_FileManageFileList" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("HACCP_FileManageFileListGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("doc_input_time")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("doc_base_date").Caption("기준일").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("doc_name").Caption("문서명").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("doc_input_time").Caption("입력시간").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm:ss").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("doc_input_emp_nm").Caption("입력자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("doc_file_id").Visible(false);
+                    })
+                    .OnRowDblClick("HACCP_FileManageFileOpen")
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 개수 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("doc_name").Alignment(HorizontalAlignment.Center)
+                                .ShowInColumn("doc_input_time")
+                                .SummaryType(SummaryType.Count)
+                                .DisplayFormat("검색기간 내 총 문서개수 : [{0}]");
+                    }))
+                )
+            </div>
+
+        </div>
+        <!--#endregion-->
+    </div>
+</div>

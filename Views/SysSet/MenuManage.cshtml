@@ -1,0 +1,455 @@
+﻿@using System.Data
+@using HACCP.Models.SysSet
+@using HACCP.Libs.Views
+
+@model HACCP.Models.SysSet.MenuManage
+@{
+    Layout = null;
+    ViewData["Title"] = "MenuManage";
+
+    var MenuManage_mainDataToJson = @Html.Raw(Json.Encode(ViewBag.mainData.Data));
+
+}
+
+@*메뉴등록*@
+
+<script id="MenuManageJs">
+
+        $(function () {
+
+            if (@MenuManage_mainDataToJson) {
+                $("#MenuManage_Grid").dxTreeList("instance").option("dataSource", JSON.parse(@MenuManage_mainDataToJson));
+            }
+
+            var ds = @MenuManage_mainDataToJson;
+
+            var columns = [
+                { dataField: "module_cd", caption: "모듈코드" },
+                { dataField: "module_nm", caption: "모듈명" }
+            ];
+
+            createPopup("MenuManage_SearchParentCode", "상위 코드 검색", ds, columns);
+        })
+
+        var MenuManage_dataGrid;
+        var MenuManage_selectedRowNum;
+
+        // 페이지 로드시 오른쪽 form, 저장, 취소 버튼 비활성화
+        $(function () {
+            MenuManage_EditCheck(false);
+            MenuManage_dataGrid = $("#MenuManage_Grid").dxTreeList("instance");
+        });
+
+        // 포커스되어있는 row의 데이터 가져오는 함수
+        function MenuManage_getData() {
+            if (MenuManage_dataGrid.totalCount() > 0) {
+                MenuManage_dataGrid.selectRowsByIndexes(MenuManage_dataGrid.option("focusedRowIndex"));
+                var data = MenuManage_dataGrid.getSelectedRowsData();
+                MenuManage_fillData(data[0]);
+            }
+        }
+
+        // 수정중인지 체크
+        function MenuManage_EditCheck(nowEdit) {
+
+            if (nowEdit) {
+                $('#' + "MenuManage" + 'Save,   #' + "MenuManage" + 'Undo').dxButton().parent().parent().removeClass("display-none");
+                $('#' + "MenuManage" + 'Search, #' + "MenuManage" + 'Input,#' + "MenuManage" + 'Edit,#' + "MenuManage" + 'Delete').dxButton().parent().parent().addClass("display-none");
+
+                $("#MenuManage_RightForm :disabled").attr('disabled', false);
+                $("#MenuManage_Grid").dxTreeList("option", "disabled", true);
+            }
+            if (!nowEdit) {
+                $('#' + "MenuManage" + 'Save,#' + "MenuManage" + 'Undo').dxButton().parent().parent().addClass("display-none");
+                $('#' + "MenuManage" + 'Search,#' + "MenuManage" + 'Input,#' + "MenuManage" + 'Edit,#' + "MenuManage" + 'Delete').dxButton().parent().parent().removeClass("display-none");
+
+                $("#MenuManage_RightForm :enabled").attr('disabled', true);
+                $("#MenuManage_Grid").dxTreeList("option", "disabled", false);
+            }
+        }
+
+        // 원료 팝업 생성
+        function MenuManage_Popup1() {
+            var popup = $("#MenuManage_Popup1").dxPopup("instance");
+            popup.option("contentTemplate", $("#MenuManage_List"));
+            popup.show();
+        }
+
+        // 좌측 그리드 선택
+        function MenuManage_Focus_changed(e) {
+
+            if (e.rowIndex === -1) {
+                $("#MenuManage_RightForm")[0].reset();
+                return;
+            }
+
+            MenuManage_fillData(e.row.data);
+        }
+
+        // 좌측 그리드 상세항목 바인딩
+        function MenuManage_fillData(data) {
+
+            $("#MenuManage_RightForm")[0].reset();
+
+            // === 기본정보 ===
+            $("#MenuManage #module_parent").val(data.ParentID);
+            $("#MenuManage #module_parent_nm").val(data.module_parent_nm);
+
+            $("#MenuManage #module_level").val(data.module_level);
+            $("#MenuManage #module_cd").val(data.module_cd);
+            $("#MenuManage #module_nm").val(data.module_nm);
+            $("#MenuManage #module_seq").val(data.module_seq);
+            $("#MenuManage #module_gb").val(data.module_gb);
+        }
+
+        // 조회
+        function MenuManageSearch() {
+            event.preventDefault();
+            var form = $('#MenuManage_SearchParentCode')[0];
+            var data = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/MenuManageSelect',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                   // $("#MenuManage_Grid").dxTreeList("option", "focusedRowIndex", -1);
+
+                    switch ($("#MenuManage_pModuleGubuns").val()) {
+                        case '1':
+                            $("#MenuManage_Grid").dxTreeList("option", "rootValue", "G-00000000");
+                            break;
+                        case '2':
+                            $("#MenuManage_Grid").dxTreeList("option", "rootValue", "C-00000000");
+                            break;
+                        case '3':
+                            $("#MenuManage_Grid").dxTreeList("option", "rootValue", "P00000000");
+                            break;
+                    }
+
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#MenuManage_Grid").dxTreeList("option", "dataSource", JSON.parse(result));
+                    } else {
+                        $("#MenuManage_Grid").dxTreeList("option", "dataSource", []);
+                    }
+
+                    $("#MenuManage_pGubun").val("S");
+                }
+            })
+
+            UtilView.setGridFocus("T", "MenuManage_Grid");
+
+        }
+
+        // 입력
+        function MenuManageInput() {
+            //MenuManage_dataGrid.selectRowsByIndexes(MenuManage_dataGrid.option("focusedRowIndex"));
+            //MenuManage_selectedRowNum = MenuManage_dataGrid.getSelectedRowsData()[0].module_cd;
+            $("#MenuManage_RightForm")[0].reset();
+
+            MenuManage_EditCheck(true);
+
+            MenuManage_input_init();
+            $("#MenuManage_pGubun").val("I");
+            $("#MenuManage_RightForm input[name=module_cd]").attr("readonly", false);
+        }
+        // 입력 초기화
+        function MenuManage_input_init() {
+            var data = MenuManage_dataGrid.getSelectedRowsData();
+            if (data == undefined || data.length < 1) {
+                return;
+            }
+
+            $("#MenuManage #module_gb").val(data[0].module_gb);
+            $("#MenuManage #module_parent").val(data[0].module_cd);
+            $("#MenuManage #module_parent_nm").val(data[0].module_nm);
+            $("#MenuManage #module_level").val(data[0].module_level + 1);
+        }
+
+        // 수정
+        function MenuManageEdit() {
+            //MenuManage_dataGrid.selectRowsByIndexes(MenuManage_dataGrid.option("focusedRowIndex"));
+            //MenuManage_selectedRowNum = MenuManage_dataGrid.getSelectedRowsData()[0].module_cd;
+
+            var grid = $("#MenuManage_Grid").dxTreeList("instance");
+            if (grid.totalCount() > 0) {
+                MenuManage_EditCheck(true);
+                $("#MenuManage_pGubun").val("U");
+
+                $("#MenuManage_RightForm input[name=module_cd]").attr("readonly", true);
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+
+
+        }
+
+        // 저장
+        function MenuManageSave() {
+
+            if (!UtilView.checkValidForm("MenuManage_RightForm")) {
+                return;
+            }
+            //MenuManage_validationCheck();
+
+            event.preventDefault();
+            DisableElements(false);
+            var form = $('#MenuManage_RightForm')[0];
+            var data = new FormData(form);
+            DisableElements(true);
+            MenuManage_selectedRowNum = data.get("module_cd");
+
+            if (form.checkValidity()) {
+                $.ajax({
+                    type: 'POST',
+
+                    url: '/SysSet/MenuManageCRUD',
+                    data: data,
+                    processData: false,
+                    contentType: false,
+                    success: function (result) {
+                        var rstType = "success";
+                        var rstMsg = "";
+                        var rowIdx = 0;
+                        if (result.Ok) {
+                            switch ($("#MenuManage_pGubun").val()) {
+                                case "I":
+                                    MenuManage_dataGrid.option("focusedRowKey", MenuManage_selectedRowNum);
+                                    rstMsg = "입력이 완료 되었습니다";
+                                    break;
+                                case "U":
+                                    rstMsg = "수정이 완료 되었습니다";
+                                    break;
+                                case "D":
+                                    $("#MenuManage_RightForm")[0].reset();
+                                    MenuManage_dataGrid.option("focusedRowIndex", rowIdx);
+
+                                    rowIdx = MenuManage_dataGrid.option("focusedRowIndex");
+                                    rstMsg = "삭제가 완료 되었습니다";
+                                    break;
+                            }
+
+                            MenuManage_EditCheck(false);
+                            //if ($("#MenuManage_pGubun").val() == "D") {
+                            //    MenuManage_dataGrid.deleteRow(MenuManage_dataGrid.option("focusedRowIndex"));
+                            //} else {
+                            //    MenuManage_search();
+                            //}
+                            MenuManageSearch();
+                            complete('MenuManage');
+                        }
+                        else {
+                            rstType = "error";
+                            rstMsg = "데이터 처리 중 오류가 발생 하였습니다";
+                            $("#valdationChk").removeClass("display-none");
+                            $("#valdationChk").text("* : 필수 입력사항입니다.");
+                        }
+                        //ShowResultMessage(rstMsg, rstType)
+                    }
+                })
+            }
+            else {
+                form.reportValidity();
+            }
+        }
+        function DisableElements(flag) {
+            $("#MenuManage #module_cd").attr("disabled", flag);
+            $("#MenuManage #module_gb").attr("disabled", flag);
+            $("#MenuManage #MenuManage_pGubun").attr("disabled", flag);
+        }
+
+        function MenuManage_validationCheck() {
+            $("#valdationChk").addClass("display-none");
+        }
+
+        // 취소
+        function MenuManageUndo() {
+            MenuManage_validationCheck();
+            MenuManage_getData();
+            MenuManage_EditCheck(false);
+            $("#MenuManage_pGubun").val("S");
+            complete('MenuManage');
+        }
+
+        // 삭제
+        function MenuManageDelete() {
+            var curData = MenuManage_dataGrid.getSelectedRowsData()[0].module_nm;
+            if (curData == "")
+                return;
+
+            var result = DevExpress.ui.dialog.confirm("<b>'" + curData + "' 데이터를 삭제 하시겠습니까?</b>", "모듈명");
+            result.done(function (dialogResult) {
+                if (dialogResult) {
+                    $("#MenuManage #MenuManage_pGubun").val("D");
+                    MenuManageSave();
+                }
+            });
+        }
+
+        // 팝업 폼
+        function MenuManage_searchParentCode() {
+            var popup = $("#MenuManage_SearchParentCodePopup").dxPopup("instance");
+
+            popup.show();
+        }
+        // 팝업 선택 이벤트
+        function MenuManage_SearchParentCodeRowDblClick(selectedItems) {
+            $("#module_parent").val(selectedItems.values[0]);
+            $("#module_parent_nm").val(selectedItems.values[1]);
+
+            var popup = $("#MenuManage_SearchParentCodePopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        // 토스트 메세지
+        function ShowResultMessage(rstMsg, rstType) {
+            DevExpress.ui.MenuManage({
+                message: rstMsg,
+                animation: {
+                    show: { type: 'slide', duration: 500, from: { position: { my: 'top', at: 'bottom', of: window } } }, hide: { type: 'slide', duration: 1000, to: { position: { my: 'top', at: 'bottom', of: window } } }
+                }
+            }, rstType, 1000);
+        }
+
+</script>
+
+<div id="MenuManage" autoresize="Y">
+    @* === 팝업 검색 === *@
+    <div id="MenuManage_SearchParentCodePopup" />
+
+    @* === 그리드 상단 검색조건 === *@
+    <div id="MenuManage_Top" class="mainTop row">
+
+        <div class="col-8">
+            <form id="MenuManage_SearchParentCode">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">모듈구분</span>
+                        </div>
+                        <select class="form-control"  name="MenuManage_pModuleGubuns" id="MenuManage_pModuleGubuns">
+                            @foreach (DataRow row in ((DataTable)ViewBag.moduleGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-1">
+
+            @* === 메인 그리드 === *@
+            <fieldset id="MenuManage_LeftMain" class="box mb-0">
+                @(Html.DevExtreme().TreeList()
+                    .ID("MenuManage_Grid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .RootValue("G-00000000")
+                    .KeyExpr("ID")
+                    .ParentIdExpr("ParentID")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("module_cd").Caption("모듈코드");
+                        c.Add().DataField("module_nm").Caption("모듈명");
+                        c.Add().DataField("module_seq").Caption("모듈순서").Alignment(HorizontalAlignment.Left);
+                    })
+                    .SearchPanel(seachPanel => seachPanel
+                        .Visible(true)
+                    )
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .OnFocusedRowChanged("MenuManage_Focus_changed")
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .AutoExpandAll(true)
+                    .ExpandedRowKeys(new[] { 1 })
+                )
+            </fieldset>
+        </div>
+
+        @* === 그리드 우측 DIV === *@
+        <div id="MenuManage_RightMain" class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>상세정보</p>
+                    <span id="valdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <form id="MenuManage_RightForm" onchange="formEdited('MenuManage')">
+
+                    @* === CRUD 구분 정보 === *@
+                    <input type="text" name="MenuManage_pGubun" id="MenuManage_pGubun" hidden="hidden" />
+                    <input type="text" name="module_gb" id="module_gb" hidden="hidden" />
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">상위코드 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" id="module_parent" name="module_parent">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" id="high_module_cd_button" onclick="MenuManage_searchParentCode()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <input type="text" class="col-4 form-control" name="module_parent_nm" id="module_parent_nm" readonly>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모듈레벨 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12 required" asp-for="module_level" name="module_level" id="module_level" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모듈코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="module_cd" id="module_cd" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모듈명</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="module_nm" id="module_nm" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모듈순서 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12 required" asp-for="module_seq" name="module_seq" id="module_seq" required />
+                            </div>
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

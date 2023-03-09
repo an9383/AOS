@@ -1,0 +1,977 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Schedule";
+
+    var scheduleEmp = @Html.Raw(Json.Encode(ViewBag.scheduleEmp.Data));
+    var schedule = @Html.Raw(Json.Encode(ViewBag.schedule.Data));
+    var scheduleDept = @Html.Raw(Json.Encode(ViewBag.scheduleDept.Data));
+
+}
+<script id="ScheduleJs">
+
+    var Schedule_dbState = "init";
+    var Schedule_isEditing = false;
+    var Schedule_focusedRow = null;
+    var ScheduleCellClickEvent;
+
+    // 팝업 그리드에서 호출했는지
+    var Schedule_isGridPopup = false;    //코드 팝업
+    var Schedule_emp_isGridPopup = false;//사원 코드 팝업
+
+    //그리드 입력/수정 유효성체크 변수
+    var Schedule_isValid = false;
+
+    //DB 저장 데이터 변수
+    var Schedule_tempArray = new Array();
+
+    var commonCd = '@ViewBag.commonCd';
+
+    $(function () {
+        setDatePicker("#Schedule .datepicker");
+
+        var columns1 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var columns2 = [
+            { dataField: "standard_cd", caption: "스케줄코드" },
+            { dataField: "standard_nm", caption: "스케줄코드명" }
+        ];
+
+        var columns3 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("ScheduleEmp", "사원 조회", @scheduleEmp, columns1, "emp_cd", 700, 800); //담당자 팝업(상단, 그리드)
+        createPopup("Schedule", "구분 조회", @schedule, columns2, "standard_cd"); //코드 팝업(그리드)
+        createPopup("ScheduleDept", "부서 조회", @scheduleDept, columns3, "dept_cd"); //부서 팝업(상단)
+
+        ScheduleEditCheck(false);
+        ScheduleSearch();
+        //$("#Schedule_Grid").dxDataGrid("option", "dataSource", []);
+         
+    });
+
+    // 수정중인지 체크
+    function ScheduleEditCheck(nowEdit) {
+        Schedule_isEditing = nowEdit;
+
+        if (nowEdit) {
+
+            $("#ScheduleSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleInput").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleDelete").dxButton().parent().parent().addClass("display-none");
+
+        }
+        if (!nowEdit) {
+
+            $("#ScheduleSave").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleDelete").dxButton().parent().parent().removeClass("display-none");
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+            $("#Schedule_Grid").dxDataGrid("option", "editing", editing);
+            Schedule_tempArray = new Array();
+        }
+    }
+
+    //조회
+    function ScheduleSearch() {
+        var form = $('#ScheduleForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/PrevCk/Schedule_GridSelect',
+            data: data,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    //console.log(JSON.parse(JSON.stringify(result)));
+
+                    //$("#Schedule_Grid").dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#Schedule_Grid").dxDataGrid("option", "dataSource", json);
+                    $("#Schedule_Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                } else {
+                    $("#Schedule_Grid").dxDataGrid("option", "dataSource", []);
+                    $("#Schedule_Grid").dxDataGrid("instance").option("focusedRowKey", "");
+                }
+
+            }
+        })
+        Schedule_dbState = "search";
+    }
+
+    //입력
+    function ScheduleInput() {
+        ScheduleEditCheck(true);
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: true,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+        $("#Schedule_Grid").dxDataGrid("option", "editing", editing);
+
+        Schedule_dbState = "insert";
+    }
+
+    //수정
+    function ScheduleEdit() {
+        ScheduleEditCheck(true);
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: true,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+        $("#Schedule_Grid").dxDataGrid("option", "editing", editing);
+
+        Schedule_dbState = "edit";
+    }
+
+    //삭제
+    function ScheduleDelete() {
+        if (Schedule_dbState == "search") {
+
+            var grid = $("#Schedule_Grid").dxDataGrid("instance");
+            if (grid.getDataSource().totalCount() < 0) {
+                return;
+            } else {
+                var ok = confirm("모두 삭제하시겠습니까?");
+                if (ok) {
+                    GridDeleteAll();
+                }
+            }
+        }
+    }
+
+    //저장
+    async function ScheduleSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        await $("#Schedule_Grid").dxDataGrid("instance").saveEditData();
+
+        if (Schedule_tempArray.length > 0) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrevCk/Schedule_TRX',
+                async: false,
+                data: {
+                    paramData: JSON.stringify(Schedule_tempArray)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    //GmpDocManageSearch();
+                }
+            });
+
+            Schedule_dbState = "search";
+            ScheduleEditCheck(false);
+
+            ScheduleSearch();
+        }
+    }
+
+    //취소
+    function ScheduleUndo() {
+        Schedule_dbState = "search";
+        ScheduleEditCheck(false);
+
+        ScheduleSearch();
+
+    }
+
+    //미리보기
+    function SchedulePreview() {
+
+        //var report = new ReportHelper($(event.target));
+
+        //var sdate = $("#ScheduleTop #s_schedule_date1").val();
+        //var edate = $("#ScheduleTop #s_schedule_date2").val();
+
+        //report.addParam({
+        //    objFile: { path: "PrevCk", RptFileName: "SCHEDULE_PRINT" },
+        //    objSp: { SpName: "SCHEDULE_PRINT", gubun: "M", reportParam: "SDATE:" + sdate + ";EDATE:" + edate },
+        //    objEtcInfo: { subParam: "" },
+        //    objTblNm: { tblName: "SCHEDULE_PRINT" }
+        //});
+
+        //report.run();
+    }
+
+    //프린트
+    function SchedulePrint() {
+
+        //var report = new ReportHelper($(event.target));
+
+        //var sdate = $("#ScheduleTop #s_schedule_date1").val();
+        //var edate = $("#ScheduleTop #s_schedule_date2").val();
+
+        //report.addParam({
+        //    objFile: { path: "PrevCk", RptFileName: "SCHEDULE_PRINT" },
+        //    objSp: { SpName: "SCHEDULE_PRINT", gubun: "M", reportParam: "SDATE:" + sdate + ";EDATE:" + edate },
+        //    objEtcInfo: { subParam: "" },
+        //    objTblNm: { tblName: "SCHEDULE_PRINT" }
+        //});
+
+        //report.run();
+
+    }
+
+    //엑셀
+    function ScheduleExcel() {
+        gridExportToExcel("Schedule_Grid", "ScheduleData");
+    }
+
+    //function SetScheduleData() {
+
+    //}
+
+    //계획 생성
+    function ScheduleClick() {
+        var row = Schedule_getFocusedRowData();
+        if (row != null) {
+            var ok = confirm("사전점검 계획을 자동으로 생성하시겠습니까?");
+            if (ok) {
+
+                var form = $('#ScheduleForm')[0];
+                var data = new FormData(form);
+
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    contentType: false,
+                    processData: false,
+                    url: '/PrevCk/Schedule_CreateSchedule',
+                    data: data,
+                    success: function (result) {
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+
+                            if (result.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            //console.log(JSON.parse(JSON.stringify(result)));
+                            alert(json.messege);
+                            ScheduleSearch();
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    //확인버튼 클릭 > 스케줄 확인처리
+    function ScheduleCheckClick() {
+        var row = Schedule_getFocusedRowData();
+        if (row != null) {
+
+            var ok = confirm("스케줄을 확인처리하시겠습니까?");
+            if (ok) {
+                if (row.regist_yn == "Y") {
+                    alert("기록이 필요한 작업입니다. 현장에서 처리하십시오.");
+                    return;
+                }
+
+                var date = new Date(row.schedule_date);
+
+                var year = date.getFullYear();
+                var month = date.getMonth() + 1;
+                var day = date.getDate();
+
+                month = (month < 10) ? ("0" + month) : month;
+                day = (day < 10) ? ("0" + day) : day;
+
+                row.schedule_date = year + "-" + month + "-" + day;
+
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    url: '/PrevCk/Schedule_CheckSchedule',
+                    data: row,
+                    success: function (result) {
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+
+                            if (result.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            //console.log(JSON.parse(JSON.stringify(result)));
+                            alert(json.messege);
+                            ScheduleSearch();
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+
+    // 현재 포커스된 로우의 데이터
+    function Schedule_getFocusedRowData() {
+        var data = null;
+
+        var grid = $("#Schedule_Grid").dxDataGrid("instance");
+        var focusedKey = grid.option("focusedRowKey");
+        if (focusedKey != undefined) {
+            data = getGridRowByKey("Schedule_Grid", grid.option("focusedRowKey"));
+            data = (data != undefined) ? data : null;
+        }
+        return data;
+    }
+
+    //그리드 이벤트
+    //코드 or 사번 셀 클릭시 팝업 표출
+    function ScheduleOnCellClick(e) {
+        ScheduleCellClickEvent = e;
+
+        if (!(Schedule_dbState === "insert" || Schedule_dbState === "edit")) {
+            return;
+        }
+
+        var popup = null;
+
+        //edit가 활성화된 row에 대해서
+        if (e.hasOwnProperty("row") && e.row.hasOwnProperty("isEditing") && e.row.isEditing ) {
+
+            if (e.columnIndex == 5) {
+                if (e.row.hasOwnProperty("isNewRow")) {
+                    popup = $("#SchedulePopup").dxPopup("instance");
+                    Schedule_isGridPopup = true;
+                }
+            } else if (e.columnIndex == 8) {
+                popup = $("#ScheduleEmpPopup").dxPopup("instance");
+                Schedule_emp_isGridPopup = true;
+            } else {
+                return;
+            }
+
+            if (popup != null)
+                popup.show();
+        }
+    }
+
+    function Schedule_OnFocusedRowChanged(e) {
+        //console.log(e);
+    }
+
+    //그리드 에디터 기능 활성화 > 기존 row 일때 수정시 특정컬럼 disable 처리
+    function ScheduleOnEditorPreparing(e) {
+
+        if (e.parentType == "dataRow") {
+            if (!e.row.hasOwnProperty("isNewRow")) {
+
+                if (e.dataField === "schedule_date") {
+                    e.editorOptions.disabled = e.row.data;
+                } else if (e.dataField === "obj_type") {
+                    e.editorOptions.disabled = e.row.data;
+                } else if (e.dataField === "work_type") {
+                    e.editorOptions.disabled = e.row.data;
+                } else if (e.dataField === "schedule_type") {
+                    e.editorOptions.disabled = e.row.data;
+                } else if (e.dataField === "standard_nm") {
+                    e.editorOptions.disabled = e.row.data;
+                } else if (e.dataField === "obj_cd") {
+                    e.editorOptions.disabled = e.row.data;
+                }
+            }
+        }
+        //if (e.parentType == "searchPanel") return;
+
+
+    }
+
+    //그리드 저장버튼 숨기기
+    function ScheduleOnToolbarPreparing(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+
+            if (item.name == "saveButton" || item.name == "exportButton") {
+                item.visible = false;
+            }
+
+            //되돌리기 버튼 클릭시
+            if (item.name == "revertButton") {
+                item.options.onClick = function (args) {
+                    e.component.cancelEditData();
+                    Schedule_tempArray = new Array();
+                };
+            }
+        });
+    }
+
+
+    //그리드 로우 추가시
+    function ScheduleOnInitNewRow(e) {
+        var ds = $("#Schedule_Grid").dxDataGrid("option", "dataSource");
+
+        e.data.schedule_id = (ds.length + 1);//실제 DB에는 반영되지 않음
+    }
+
+    //그리드 로우 데이터 저장시
+    function ScheduleOnRowInserted(e) {
+
+        var data = e.data;
+        data.gubun = "I";
+
+        var date = new Date(data.schedule_date);
+
+        var year = date.getFullYear();
+        var month = date.getMonth() + 1;
+        var day = date.getDate();
+
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        data.schedule_date = year + "-" + month + "-" + day;
+
+        Schedule_tempArray.push(data);
+
+    }
+
+    //그리드 로우 데이터 수정시
+    function ScheduleOnRowUpdated(e) {
+
+        var data = e.data;
+        data.gubun = "U";
+        Schedule_tempArray.push(data);
+    }
+
+    //그리드 로우 데이터 삭제시
+    function ScheduleOnRowRemoved(e) {
+
+        var data = e.data;
+        data.gubun = "D";
+        Schedule_tempArray.push(data);
+    }
+
+    //로우 더블클릭 시, 스케줄 삭제
+    function ScheduleOnRowDblClick(e) {
+
+        if (Schedule_dbState == "search") {
+            if (e.data.work_yn == "Y") {
+                alert("처리된 작업입니다.\n 삭제불가");
+                return;
+            }
+
+            var ok = confirm("삭제하시겠습니까?");
+            if (ok) {
+
+                var data = e.data;
+
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    url: '/PrevCk/Schedule_GridDelete',
+                    data: data,
+                    success: function (result) {
+
+                        if (result != "") {
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            alert(json.messege);
+                        }
+                    }
+                })
+                ScheduleSearch();
+            }
+
+        }
+
+    }
+
+    //그리드 유효성 체크
+    function ScheduleOnRowValidating(e) {
+        //console.log(e);
+        Schedule_isValid = e.isValid;
+    }
+
+    //상단 조회조건에 해당하는 데이터 모두 삭제
+    function GridDeleteAll() {
+        var form = $('#ScheduleForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/PrevCk/Schedule_GridDeleteAll',
+            data: data,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    alert(json.messege);
+                    ScheduleSearch();
+                }
+            }
+        })
+    }
+
+
+    //팝업 이벤트
+    //부서 조회 팝업
+    function Schedule_DeptSearch() {
+        Schedule_isGridPopup = false;
+
+        var popup = $("#ScheduleDeptPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //부서 선택
+    function ScheduleDeptRowDblClick(e) {
+        $("#ScheduleForm #s_dept_cd").val(e.data.dept_cd);
+
+        var popup = $("#ScheduleDeptPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //담당자 조회 팝업
+    //1. 상단 조회조건에서 버튼 클릭
+    function Schedule_EmpSearch() {
+        Schedule_emp_isGridPopup = false;
+
+        var popup = $("#ScheduleEmpPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //담당자 선택
+    function ScheduleEmpRowDblClick(e) {
+
+        if (!Schedule_emp_isGridPopup) {
+            $("#ScheduleForm #s_responsibility_worker").val(e.data.emp_cd);
+        } else {
+            var grid = $("#Schedule_Grid").dxDataGrid("instance");
+            grid.cellValue(ScheduleCellClickEvent.rowIndex, "responsibility_worker", e.data.emp_cd);   //사번
+            grid.cellValue(ScheduleCellClickEvent.rowIndex, "responsibility_worker_nm", e.data.emp_nm);//담당자
+            grid.cellValue(ScheduleCellClickEvent.rowIndex, "dept_cd", e.data.dept_cd);                //부서코드
+            grid.cellValue(ScheduleCellClickEvent.rowIndex, "dept_nm", e.data.dept_nm);                //부서
+        }
+
+        var popup = $("#ScheduleEmpPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //코드 선택
+    function ScheduleRowDblClick(e) {
+
+        var grid = $("#Schedule_Grid").dxDataGrid("instance");
+        grid.cellValue(ScheduleCellClickEvent.rowIndex, "obj_cd", e.data.standard_cd);//코드
+        grid.cellValue(ScheduleCellClickEvent.rowIndex, "standard_nm", e.data.standard_nm);//대상
+
+        var popup = $("#SchedulePopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //그리드 셀 커스텀
+    function Schedule_cellWithButton(container, cellInfo) {
+
+        // 입력 또는 수정이 아닌 경우
+        if (!(Schedule_dbState === "insert" || Schedule_dbState === "edit")) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        if (typeof cellInfo.value === "undefined" || cellInfo.value === null)
+            cellInfo.value = "";
+
+        $("<div>").html("<div style='float:left; padding-top: 4%;'>" + cellInfo.value + "</div><div style='float:right;' class='schedule_icon-plus'></div>")
+            .appendTo(container);
+
+        $(".schedule_icon-plus").dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+</script>
+
+<div id="Schedule" autoresize="Y">
+    @*<h4 class="divTitle">예방점검 스케줄 생성</h4>*@
+
+    <div id="ScheduleEmpPopup"></div><!-- 담당자 팝업 -->
+    <div id="SchedulePopup"></div><!-- 스케줄코드 팝업 -->
+    <div id="ScheduleDeptPopup"></div><!-- 부서 팝업 -->
+
+    <div id="ScheduleTop" class="mainTop row">
+        <div class="col-8">
+            <form id="ScheduleForm">
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="s_schedule_date1" id="s_schedule_date1" value="@DateTime.Today.ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control datepicker text-center" name="s_schedule_date2" id="s_schedule_date2" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">대상</span>
+                        </div>
+                        <select class="form-control" name="s_obj_type" id="s_obj_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.obj_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">주기</span>
+                        </div>
+                        <select class="form-control" name="s_schedule_type" id="s_schedule_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.schedule_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">담당부서</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_dept_cd" id="s_dept_cd" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="Schedule_DeptSearch()"> <i class="fa fa-search"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="ScheduleClick()">계획생성</button>
+
+                </div>
+
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검색</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_obj_cd" id="s_obj_cd" />
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">작업</span>
+                        </div>
+                        <select class="form-control" name="s_work_type" id="s_work_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.work_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">확인</span>
+                        </div>
+                        <select class="form-control" name="s_schedule_execution_ck" id="s_schedule_execution_ck">
+                            <option value="0">전체</option>
+                            <option value="1">확인</option>
+                            <option value="2">미확인</option>
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">담당자</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_responsibility_worker" id="s_responsibility_worker" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="Schedule_EmpSearch()"> <i class="fa fa-search"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="ScheduleCheckClick()">확인</button>
+
+                </div>
+
+            </form>
+        </div>
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Excel;Save;Undo"); }
+            @*@(Html.DevExtreme().Toolbar()
+                .ID("Schedule_Toolbar")
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleSearch")
+                              .Icon("search")
+                              .Text("조회")
+                              .OnClick("ScheduleSearch")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ScheduleInput")
+                          .Icon("plus")
+                          .Text("입력")
+                          .OnClick("ScheduleInput")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ScheduleEdit")
+                          .Icon("edit")
+                          .Text("수정")
+                          .OnClick("ScheduleEdit")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ScheduleDelete")
+                          .Icon("trash")
+                          .Text("삭제")
+                          .OnClick("ScheduleDelete")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ScheduleSave")
+                          .Icon("save")
+                          .Text("저장")
+                          .OnClick("ScheduleSave")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ScheduleUndo")
+                          .Icon("undo")
+                          .Text("취소")
+                          .OnClick("ScheduleUndo")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+        )*@
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+             .ID("Schedule_Grid")
+             .Selection(s => s.Mode(SelectionMode.Single))
+             .SearchPanel(searchPanel => searchPanel.Visible(true))
+             .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+             .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+             .Height(900)
+             .ShowBorders(true)
+             .ShowColumnLines(true)
+             .ShowRowLines(true)
+             .ColumnAutoWidth(true)
+             .AllowColumnResizing(true)
+             .FocusedRowEnabled(true)
+             .FocusedRowIndex(0)
+             //.DataSource(new JS("SetScheduleData"))
+             .KeyExpr("schedule_id")
+             .Columns(c =>
+             {
+                 c.Add().DataField("schedule_date").Caption("일자").DataType(GridColumnDataType.Date).Format("yyyy-MM-dd")
+                 .ValidationRules(vr =>
+                 {
+                     vr.AddRequired().Message("일자는 필수 입력사항입니다.");
+                 });
+
+                 c.Add().DataField("obj_type").Caption("대상구분")
+                 .ValidationRules(vr =>
+                 {
+                     vr.AddRequired().Message("대상구분은 필수 입력사항입니다.");
+                 })
+                 .Lookup(lookup => lookup
+                            .DataSource(d => d.WebApi()
+                            .RouteName("PrevCk")
+                            .LoadAction("Schedule_GetRepository")
+                            .LoadMethod("GET")
+                            .LoadParams(new
+                            {
+                                gubun = "L1"
+                            }
+                            ).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                    ).DataType(GridColumnDataType.String);
+
+                 c.Add().DataField("work_type").Caption("작업구분")
+                 .ValidationRules(vr =>
+                 {
+                     vr.AddRequired().Message("작업구분은 필수 입력사항입니다.");
+                 })
+                 .Lookup(lookup => lookup
+                         .DataSource(d => d.WebApi()
+                         .RouteName("PrevCk")
+                         .LoadAction("Schedule_GetRepository")
+                         .LoadMethod("GET")
+                         .LoadParams(new
+                         {
+                             gubun = "L2"
+                         }
+                         ).Key("keyfield"))
+                     .ValueExpr("keyfield")
+                     .DisplayExpr("displayfield")
+                 ).DataType(GridColumnDataType.String);
+
+                 c.Add().DataField("schedule_type").Caption("주기구분")
+                 .ValidationRules(vr =>
+                 {
+                     vr.AddRequired().Message("주기구분은 필수 입력사항입니다.");
+                 })
+                 .Lookup(lookup => lookup
+                         .DataSource(d => d.WebApi()
+                         .RouteName("PrevCk")
+                         .LoadAction("Schedule_GetRepository")
+                         .LoadMethod("GET")
+                         .LoadParams(new
+                         {
+                             gubun = "L3"
+                         }
+                         ).Key("keyfield"))
+                     .ValueExpr("keyfield")
+                     .DisplayExpr("displayfield")
+                 ).DataType(GridColumnDataType.String);
+
+                 c.Add().DataField("period").Caption("주기(일)").DataType(GridColumnDataType.Number);
+
+                 c.Add().DataField("obj_cd").Caption("대상코드").EditCellTemplate(new JS("Schedule_cellWithButton"))
+                 .ValidationRules(vr =>
+                 {
+                     vr.AddRequired().Message("대상코드는 필수 입력사항입니다.");
+                 });
+
+                 c.Add().DataField("standard_nm").Caption("대상이름").AllowEditing(false);
+                 c.Add().DataField("obj_nm").Caption("부품");
+                 c.Add().DataField("responsibility_worker").Caption("사번").EditCellTemplate(new JS("Schedule_cellWithButton"));
+                 c.Add().DataField("responsibility_worker_nm").Caption("담당자");
+                 c.Add().DataField("dept_cd").Caption("부서코드").AllowEditing(false);
+                 c.Add().DataField("dept_nm").Caption("부서").AllowEditing(false);
+                 c.Add().DataField("auto_create_yn").Caption("자동생성");
+                 c.Add().DataField("regist_yn_nm").Caption("기록").AllowEditing(false);
+                 c.Add().DataField("work_yn").Caption("확인").AllowEditing(false)
+                 .DataType(GridColumnDataType.Boolean)
+                 .CalculateCellValue(@"function(rowData) { return (rowData.work_yn == ""Y""); }");
+
+                 c.Add().DataField("regist_yn").Visible(false);//기록여부코드
+                 c.Add().DataField("sub_cd").Visible(false);
+                 c.Add().DataField("schedule_id").Visible(false);
+                 c.Add().DataField("schedule_input_gb").Caption("스케줄")
+                 .Lookup(lookup => lookup
+                         .DataSource(d => d.WebApi()
+                         .RouteName("PrevCk")
+                         .LoadAction("Schedule_GetRepository")
+                         .LoadMethod("GET")
+                         .LoadParams(new
+                         {
+                             gubun = "L4"
+                         }
+                         ).Key("keyfield"))
+                     .ValueExpr("keyfield")
+                     .DisplayExpr("displayfield")
+                 ).DataType(GridColumnDataType.String)
+                 .Visible(false);
+
+
+             })
+            .OnFocusedRowChanged("Schedule_OnFocusedRowChanged")
+            .OnCellClick("ScheduleOnCellClick")
+            .OnRowDblClick("ScheduleOnRowDblClick")
+            .OnRowUpdated("ScheduleOnRowUpdated")
+            .OnRowInserted("ScheduleOnRowInserted")
+            .OnRowRemoved("ScheduleOnRowRemoved")
+            .OnInitNewRow("ScheduleOnInitNewRow")
+            .OnEditorPreparing("ScheduleOnEditorPreparing")
+            //.OnRowValidating("ScheduleOnRowValidating")
+            .OnToolbarPreparing("ScheduleOnToolbarPreparing")
+            )
+            </div>
+        </div>
+    </div>
+
+</div>

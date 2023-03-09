@@ -1,0 +1,881 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.ProductionMaster.ProcessExam.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var processPopupData = @Html.Raw(Json.Encode(ViewBag.processPopupData.Data));
+    var processexamPopupData = @Html.Raw(Json.Encode(ViewBag.processexamPopupData.Data));
+    var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var le_grand_item = (DataTable)ViewBag.le_grand_item;
+    var le_middle_item = (DataTable)ViewBag.le_middle_item;
+
+}
+
+<script id="@(pagePrefix)Js">
+    var _cellClickEvent;
+    var _ProcessExam_EditCheck = false;           // 수정 상태 여부 체크
+
+    // #region 1. 화면 Load 영역
+    $(function () {
+        // 1.1. Master Grid 바인딩
+        if (@mainGrid) {
+            $("#"+"ProcessExam"+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+            $("#"+"ProcessExam"+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#" + "ProcessExam" + "Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2 팝업 설정
+        var popupColumns = {
+            //"s_process_cd": [{ dataField: "process_cd", caption: "공정" }, { dataField: "process_nm", caption: "공정명" }]
+            "s_process_cd": [{ dataField: "ccp_cd", caption: "ccp코드" }, { dataField: "ccp_nm", caption: "ccp명" }]
+         ,  "processexam":  [{ dataField: "common_part_cd", caption: "검사항목코드" }, { dataField: "common_part_nm", caption: "검사항목" }]
+         ,  "equip":        [{ dataField: "equip_cd", caption: "기계코드" }, { dataField: "equip_nm", caption: "기계명" }]
+        };
+
+        createPopup("ProcessExam" + "Process", "공정 조회",         @processPopupData, popupColumns.s_process_cd);
+        createPopup("ProcessExam" + "ProcessExam", "검사항목 조회", @processexamPopupData, popupColumns.processexam);
+        createPopup("ProcessExam" + "Equip", "기계기구 조회",       @equipPopupData, popupColumns.equip);
+
+
+        // 1.3 툴바 활성/비활성
+        ProcessExamEditCheck(false, 'N');
+
+
+        //1.4 event설정
+        //1.4.1 검색
+        $('input[name=s_process_cd]+div>button', $('#' + "ProcessExamSearchForm")).click(function (event) {
+            ProcessExamHelpPopUpSearch(event);
+        });
+
+        //1.4.2 form
+        $('input[name*=equip_cd]+div>button', $('#' + "ProcessExamWriteForm")).click(function (event) {
+            ProcessExamHelpPopUpSearch(event);
+        });
+
+        // 1.5 화면 resize
+        ProcessExamContentResize();
+    });
+
+    // #endregion
+
+
+    // #region 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var ProcessExamHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function ProcessExamHelpPopUpSearch(e) {
+        //ProcessExamHelpPopUpCurInputName = $(e.target).parent().parent().prev().attr('name');
+        ProcessExamHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (ProcessExamHelpPopUpCurInputName)
+        {
+            case "s_process_cd":
+                popupId = "ProcessExam" + "Process";
+                break;
+            case "equip_cd":
+                popupId = "ProcessExam" + "Equip";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+
+    // 하단 DataGrid 검사항목코드 클릭 시 팝업 창 오픈
+    function ProcessExamDetailPopupShow(e) {
+        if (e.rowType != "data") {
+            return;
+        }
+
+        _cellClickEvent = e;
+
+        var _row_status = $("#ProcessExamWriteForm input[type='hidden'][name='row_status']").val();
+        if (_row_status == "I" || _row_status == "U") {
+            if (e.columnIndex == "0") {
+                $("#ProcessExamProcessExamPopup").dxPopup("instance").show();
+            }
+        } else {
+            return;
+        }
+    }
+
+
+    // 공정코드 검색창 팝업 더블클릭 시
+    function ProcessExamProcessRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (ProcessExamHelpPopUpCurInputName == "s_process_cd") {
+            $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExamSearchForm")).val(data.ccp_cd);
+        }
+        $("#" + "ProcessExam" + "ProcessPopup").dxPopup("instance").hide();
+
+        // 재조회
+        ProcessExamSelect();
+    }
+
+
+    // 공정검사 항목 검사기기 팝업 더블클릭 시
+    function ProcessExamEquipRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExam" + "WriteForm")).val(data.equip_cd);
+        $("input[name=equip_nm]", $('#' + "ProcessExam" + "WriteForm")).val(data.equip_nm);
+
+        $("#" + "ProcessExam" + "EquipPopup").dxPopup("instance").hide();
+    }
+
+
+    // 하단 디테일그리드 검사항목코드 cell 팝업 더블클릭 시
+    function ProcessExamProcessExamRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var dataGrid = $("#ProcessExamDetailGrid").dxDataGrid("instance");
+
+        dataGrid.cellValue(_cellClickEvent.rowIndex, "process_exam_cd", data.common_part_cd);
+        dataGrid.cellValue(_cellClickEvent.rowIndex, "process_exam_nm", data.common_part_nm);
+
+        $("#" + "ProcessExam" + "ProcessExamPopup").dxPopup("instance").hide();
+    }
+
+    // #endregion
+
+
+    // #region 3. 툴바영역
+    //조회
+    function ProcessExamSearch() {
+        ProcessExamSelect();
+    }
+
+
+    //입력
+    function ProcessExamInput() {
+
+        ProcessExamEditCheck(true, 'I');
+        ProcessExamWriteFormClear();
+    }
+
+
+    //수정
+    function ProcessExamEdit() {
+        ProcessExamEditCheck(true, 'U');
+    }
+
+
+    //삭제
+    function ProcessExamDelete() {
+        ProcessExamEditCheck(true, 'D');
+
+        var detailGrid = $("#ProcessExamDetailGrid").dxDataGrid("instance");
+
+        if (detailGrid.totalCount() > 0) {
+            if (confirm("해당 항목의 모든 하위항목들도 함께 삭제됩니다. \n삭제하시겠습니까?")) {
+                ProcessExamMasterTRX("ProcessExamWriteForm", "ProcessExamSearchForm");
+            } else {
+                ProcessExamEditCheck(false, 'N');
+
+                return;
+            }
+        } else {
+            if (confirm("해당 항목을 삭제합니다. \n삭제하시겠습니까?")) {
+                ProcessExamMasterTRX("ProcessExamWriteForm", "ProcessExamSearchForm");
+            } else {
+                ProcessExamEditCheck(false, 'N');
+
+                return;
+            }
+        }
+
+        //ProcessExamTrx("ProcessExamWriteForm", "ProcessExamSearchForm");
+    }
+
+
+    //저장
+    async function ProcessExamSave() {
+        if (await UtilView.checkValidForm("ProcessExamWriteForm")) {
+            await ProcessExamMasterTRX("ProcessExamWriteForm", "ProcessExamSearchForm");
+        }
+        await $("#ProcessExamDetailGrid").dxDataGrid("instance").saveEditData();
+        await ProcessExamUndo();
+        await ProcessExamSelect();
+
+        //if (UtilView.checkValidForm("ProcessExamWriteForm")) {
+        //    ProcessExamTrx("ProcessExamWriteForm", "ProcessExamSearchForm");
+        //}
+    }
+
+
+    //취소
+    function ProcessExamUndo() {
+
+        ProcessExamEditCheck(false, 'N');
+        ProcessExamFocusChanged();
+    }
+
+
+    // 프린트
+    function ProcessExamPrint() {
+        //var btnType;
+        //btnType = $(event.target).closest('.dx-button').attr('id');
+        //btnType = $(event.target).closest('.dx-button').attr('id');
+
+        // report 출력 객체 생성
+        var report = new ReportHelper($(event.target));
+        //var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "test", RptFileName: "PickingRabel" },
+            objSp: { SpName: "SP_PickingManage", gubun: "RPT", reportParam: "order_no:P2000015;input_order_id:9535;process_cd:352;s_gubun:M" },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: "item_nm2=테스트 중", viewerName: "", nCopies: 1 }
+            // dataset(다중테이블)  사용시, 아래주석을 풀어서 사용한다.
+            //objTblNm: { tblName: "Header,TotalRate" },
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+
+        report.addParam({
+            objFile: { path: "test", RptFileName: "StockStatusR" },
+            objSp: { SpName: "SP_StockStatus2", gubun: "R", reportParam: "item:;s_gubun:3" },
+            objEtcInfo: { subParam: "", viewerName:"" }
+        });
+        report.addParam({
+            objFile: { path: "test", RptFileName: "Testing2" },
+            objSp: { SpName: "", gubun: "", reportParam: "" },
+            objEtcInfo: { subParam: "", viewerName:"", nCopies:2 }
+        });
+        // 레포트테스트(생성객체확인)
+        //report.testObj();
+        report.run();
+        //if (btnType.indexOf('Preview') > -1) {
+        //   report.preview();
+        //} else if (btnType.indexOf('Print') >-1) {
+        //    report.print();
+        //}
+    }
+
+
+    // 엑셀다운로드
+    function ProcessExamExcel() {
+
+    }
+
+
+    // 즐겨찾기
+    function ProcessExamFavorite() {
+
+    }
+
+    // #endregion
+
+
+    // #region 4-1. 상단 마스터 데이터 관련
+    // 상단 DataGrid 트랜잭션 관련(입력, 수정, 삭제)
+    function ProcessExamMasterTRX() {
+        var form = $('#' + arguments[0])[0];
+        var formData = new FormData(form);
+        formData.append("gubun", $("#ProcessExamWriteForm input[type='hidden'][name='row_status']").val());
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionMaster/ProcessExamMasterTRX',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                if (result <= 0) {
+                    switch (formData.get("gubun")) {
+                        case "I":
+                            alert("입력에 실패하였습니다.");
+                            break;
+                        case "U":
+                            alert("수정에 실패하였습니다.");
+                            break;
+                        case "D":
+                            alert("삭제에 실패하였습니다.");
+                            break;
+                    }
+
+                    ProcessExamEditCheck(false, 'N');
+
+                    return;
+                }
+
+                if (JSON.parse(result[0]).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                } else {
+                    alert(result);
+                    console.log(result);
+                }
+
+                if ($("#ProcessExamWriteForm input[type='hidden'][name='row_status']").val() != "U") {
+                    ProcessExamSelect();    
+                }
+            }
+        });
+    }
+
+
+    // 상단 DataGrid 조회
+    function ProcessExamSelect() {
+
+        // form claear
+        ProcessExamWriteFormClear();
+        // edit 해제
+        ProcessExamEditCheck(false, 'N');
+        // 메인grid
+        UtilView.dataGridSelect('ProcessExam' + 'Grid', 'ProcessExam' + 'SearchForm');
+    }
+
+
+    // 상단 DataGrid 선택 시
+    function ProcessExamFocusChanged() {
+        // data 객체, 폼에 바인딩
+        UtilView.setDataGridFormBind("ProcessExam" + "Grid", "ProcessExam" + "WriteForm");
+
+        // 하단 gird 조회
+        ProcessExamSelectSub("ProcessExam" + "Grid", "ProcessExam" + "DetailGrid");
+    }
+
+    // #endregion
+
+
+    // #region 4-2. 하단 디테일 데이터 관련
+    // 하단 DataGrid 수정 시
+    async function ProcessExamDetailUpdate(info) {
+
+        await ProcessExamTrx("ProcessExamWriteForm", "U", info.data);
+    }
+
+
+    // 하단 DataGrid 입력 시
+    async function ProcessExamDetailInsert(info) {
+        await ProcessExamTrx("ProcessExamWriteForm", "I", info.data);
+    }
+
+
+    // 하단 DataGrid 삭제 시
+    async function ProcessExamDetailRemove(info) {
+
+        await ProcessExamTrx("ProcessExamWriteForm", "D", info.data);
+    }
+
+
+    // 하단 DataGrid 트랜잭션 관련(입력, 수정, 삭제)
+    function ProcessExamTrx() {
+        if (typeof arguments[2].process_exam_start == 'undefined'
+            || typeof arguments[2].process_exam_period == 'undefined'
+            || typeof arguments[2].process_exam_qty == 'undefined'
+            || typeof arguments[2].process_exam_unit == 'undefined') {
+
+            return;
+        }
+
+
+        var formData = new FormData();
+        formData.append("row_status", arguments[1]);
+        formData.append("process_cd", $("#" + arguments[0] + " input[name='ccp_cd']").val());
+        formData.append("process_exam_cd", arguments[2].process_exam_cd);
+        formData.append("process_exam_period", arguments[2].process_exam_period);        
+        formData.append("process_exam_qty", arguments[2].process_exam_qty);
+        formData.append("process_exam_manu", $("#" + arguments[0] + " input[name='process_exam_manu']").val());
+        formData.append("process_exam_qc", $("#" + arguments[0] + " input[name='process_exam_qc']").val());
+        formData.append("equip_cd", $("#" + arguments[0] + " input[name='equip_cd']").val());
+        formData.append("process_exam_unit", arguments[2].process_exam_unit);
+        formData.append("process_exam_start", arguments[2].process_exam_start);
+        formData.append("grand_item", $("#" + arguments[0] + " select[name='grand_item']").val());
+        formData.append("middle_item", $("#" + arguments[0] + " select[name='middle_item']").val());
+        formData.append("audittrail_id", arguments[2].audittrail_id);
+        if (arguments[2].ccp_yn == true) {
+            formData.append("ccp_yn", "Y");
+        }
+        else {
+            formData.append("ccp_yn", "N");
+        }
+
+        if (typeof arguments[2].item_seq == 'undefined' || arguments[2].item_seq == null) {
+            formData.append("item_seq", 0);
+        } else {
+            formData.append("item_seq", arguments[2].item_seq);
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: UtilView.getActionUrl('TRX'),
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                if (result <= 0) {
+                    switch (formData.get("gubun")) {
+                        case "I":
+                            alert("입력에 실패하였습니다.");
+                            break;
+                        case "U":
+                            alert("수정에 실패하였습니다.");
+                            break;
+                        case "D":
+                            alert("삭제에 실패하였습니다.");
+                            break;
+                    }
+
+                    ProcessExamEditCheck(false, 'N');
+
+                    return;
+                }
+
+                if (JSON.parse(result[0]).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                } else {
+                    //alert(result);
+                    console.log(result);
+                }
+                ProcessExamSelect();
+            }
+        });
+    }
+
+
+    // 하단 DataGrid 조회
+    function ProcessExamSelectSub(sGridId, tGridId) {
+        var sGrid = $('#' + sGridId).dxDataGrid("instance");
+
+        if (sGrid.option("focusedRowIndex") >= 0) {
+            var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+            var data = { s_process_cd: gridData.ccp_cd, Gubun: "S" };
+
+            UtilView.dataGridSimpleSelect(tGridId, data, 'Select');
+        }
+    }
+
+    // #endregion
+
+
+    // #region 5. 기타
+    // 수정중인지 체크
+    function ProcessExamEditCheck(nowEdit, status) {
+
+        if (status != null && status != undefined) {
+            $('input[type=hidden][name=row_status]',$('#'+"ProcessExamWriteForm")).val(status);
+        }
+        if (nowEdit) {
+            // 툴바 활성/비활성
+            $('#' + "ProcessExam" + 'Save,   #' + "ProcessExam" + 'Undo').dxButton().parent().parent().removeClass("display-none");
+            $('#' + "ProcessExam" + 'Search, #' + "ProcessExam" + 'Input, #' + "ProcessExam" + 'Edit, #' + "ProcessExam" + 'Delete').dxButton().parent().parent().addClass("display-none");
+
+            //그리드 활성/비활성
+            $('#' + "ProcessExam" + 'Grid').dxDataGrid("instance").option("disabled", true);
+            $('#' + "ProcessExam" + 'DetailGrid').dxDataGrid("instance").option("disabled", true);
+
+            // 폼 활성/비활성
+            $('input', $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+            $('textarea', $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+            $('select', $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+            $('button', $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+
+            _ProcessExam_EditCheck = true;
+
+            if (status == "U") {
+                $("#ProcessExamWriteForm input[name='ccp_cd']").attr("readonly", true);
+                $('#' + "ProcessExam" + 'DetailGrid').dxDataGrid("instance").option("disabled", false);
+
+                // 그리드 Editing 설정
+                var editing = {
+                    allowUpdating: true,
+                    allowAdding: true,
+                    allowDeleting: true,
+                    mode: 'batch'
+                }
+
+                $("#ProcessExamDetailGrid").dxDataGrid("option", "editing", editing);
+            }
+        }
+        else {
+            // 툴바 활성/비활성
+            $('#' + "ProcessExam" + 'Save,  #' + "ProcessExam" + 'Undo').dxButton().parent().parent().addClass("display-none");
+            $('#' + "ProcessExam" + 'Search,#' + "ProcessExam" + 'Input, #' + "ProcessExam" + 'Edit, #' + "ProcessExam" + 'Delete').dxButton().parent().parent().removeClass("display-none");
+
+            //그리드 활성/비활성
+            $('#' + "ProcessExam" + 'Grid').dxDataGrid("instance").option("disabled", false);
+            $('#' + "ProcessExamDetail" + 'Grid').dxDataGrid("instance").option("disabled", false);
+
+            // 폼 활성/비활성
+            $("input",    $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+            $("textarea", $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+            $('select', $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+            $('button', $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+
+            // ccp_cd 수정방지를 위해 변경된 readonly설정을 false로 변경(ccp_cd 입력을 위함)
+            $("#ProcessExamWriteForm input[name='ccp_cd']").attr("readonly", false);
+
+            _ProcessExam_EditCheck = false;
+
+            // 그리드 Editing 설정
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+
+            $("#ProcessExamDetailGrid").dxDataGrid("option", "editing", editing);
+        }
+    }
+
+
+    // 상단 우측 Form 리셋
+    function ProcessExamWriteFormClear() {
+        $('#'+"ProcessExamWriteForm")[0].reset();
+        $("textarea",$('#'+"ProcessExamWriteForm")).text("");
+    }
+
+
+    // 그리드 높이 resize
+    function ProcessExamContentResize() {
+        var topPoint = document.querySelectorAll("div#ProcessExam div.row")[1].getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint + 1) - 20;
+
+        document.getElementById("ProcessExamDetailGrid").style.height = content_max_height + "px";
+    }
+
+
+    function ProcessExamCellWithButton(container, cellInfo) {
+
+        if (cellInfo.row.data.level === "1") {
+            return;
+        }
+
+        if (_ProcessExam_EditCheck == false) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        $("<div>").html("<div style='float:left; line-height: 2;'>" + (cellInfo.value ? cellInfo.value : "") + "</div><div style='float:right;' class='icon-plus'></div>")
+            .appendTo(container);
+
+        $(".icon-plus").dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+    // #endregion
+
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)ProcessPopup"></div>
+    <div id="@(pagePrefix)ProcessExamPopup"></div>
+    <div id="@(pagePrefix)EquipPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">고장신고 등록</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">고장신고</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm" onsubmit="return false">
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공정코드</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_process_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row pb-1">
+        <!-- $Contets Left-->
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(433)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .KeyExpr("ccp_cd")
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("ccp_cd").Caption("ccp코드");
+                        c.Add().DataField("ccp_nm").Caption("ccp명");
+                        c.Add().DataField("ccp_description").Caption("ccp종류");
+                        c.Add().DataField("equip_nm").Caption("검사기기");
+                        c.Add().DataField("grand_item_nm").Caption("대분류");
+                        c.Add().DataField("middle_item_nm").Caption("중분류");
+                        c.Add().DataField("process_exam_manu").Caption("검사자(제조)").Width("8%");
+                        c.Add().DataField("process_exam_qc").Caption("검사자(품질)").Width("8%");
+                    })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("ProcessExam" + "FocusChanged")
+                   )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4 pl-0">
+            <div class="box">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName">
+                        <p>공정검사 항목</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">CCP 코드</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="ccp_cd">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">CCP명</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="ccp_nm">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">CCP 종류</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="ccp_description">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사기기</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="equip_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" disabled>
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="equip_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">대분류/중분류</label>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="grand_item" value="" disabled>
+                                @foreach (DataRow row in le_grand_item.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="middle_item" value="" disabled>
+                                @foreach (DataRow row in le_middle_item.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사자(제조)</label>
+                        <div class="input-group col-4">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="process_exam_manu1" name="process_exam_manu" checked />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_manu1">Yes</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="process_exam_manu2" name="process_exam_manu" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_manu2">No</label></span>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사자(품질)</label>
+                        <div class="input-group col-4">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="process_exam_qc1" name="process_exam_qc" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_qc1">Yes</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="process_exam_qc2" name="process_exam_qc" checked />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_qc2">No</label></span>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">위해원인</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="cause_harm" id="cause_harm" cols="100" rows="5" style="height: 40px; resize: vertical;" required />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">한계기준</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="limit_standard" id="limit_standard" cols="100" rows="5" style="height: 40px; resize: vertical;" required />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">위해요소</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="element_harm" id="element_harm" cols="100" rows="5" style="height: 40px; resize: vertical;" required />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">모니터링 방법</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="monitoring_way" id="monitoring_way" cols="100" rows="5" style="height: 60px; resize: vertical;" required />
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "DetailGrid")
+                    .KeyExpr("row_num")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(400)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("process_exam_cd").Caption("검사항목코드")
+                            .CellTemplate(new JS("ProcessExamCellWithButton"));
+                        c.Add().DataField("process_exam_nm").Caption("검사항목명")
+                                .AllowEditing(false);
+                        c.Add().DataField("process_exam_start").Caption("검사시기")
+                                .Lookup(lookup => lookup
+                                    .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "공통코드",
+                                        pDiv = "D",
+                                        pStrWhere = "PR002",
+                                        pTableName = "le_process_exam_start"
+                                    })
+                                    .Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                );
+                        c.Add().DataField("process_exam_period").Caption("검사주기(분)");
+                        c.Add().DataField("process_exam_qty").Caption("1회검체수량");
+                        c.Add().DataField("process_exam_unit").Caption("결과유형")
+                                .Lookup(lookup => lookup
+                                    .DataSource(d => d.WebApi()
+                                        .RouteName("Comm")
+                                        .LoadAction("GetCommon")
+                                        .LoadMethod("GET")
+                                        .LoadParams(new
+                                        {
+                                            pGubun = "공통코드",
+                                            pDiv = "D",
+                                            pStrWhere = "PR003",
+                                            pTableName = "le_unit"
+                                        })
+                                    .Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    .DataSourceOptions(o => o.Sort("keyfield", false))
+                                );
+                        c.Add().DataField("item_seq").Caption("순번");
+
+                        c.Add().DataField("ccp_yn").Caption("CCP여부").Alignment(HorizontalAlignment.Center).DataType(GridColumnDataType.Boolean)
+                               .CalculateCellValue(@"function(rowData) { return (rowData.ccp_yn == ""Y"" || rowData.ccp_yn == true); }");
+                        c.Add().DataField("audittrail_id").Visible(false);
+                    })
+                    .OnCellClick("ProcessExamDetailPopupShow")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnRowUpdated("ProcessExamDetailUpdate")
+                    .OnRowInserted("ProcessExamDetailInsert")
+                    .OnRowRemoved("ProcessExamDetailRemove")
+                   )
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,419 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Department";
+
+    var departmentData = @Html.Raw(Json.Encode(ViewBag.departmentData.Data));
+    var departmentPopupData = @Html.Raw(Json.Encode(ViewBag.departmentPopupData.Data));
+}
+
+@*부서관리*@
+
+<script id="DepartmentJs">
+
+        var _departmentCRUDGubun;
+
+        $(function () {
+            var dept_data = @departmentData;
+
+            if (dept_data.length > 0) {
+                $("#DepartmentGrid").dxTreeList("instance").option("dataSource", JSON.parse(@departmentData));
+                $("#DepartmentGrid").dxTreeList("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#DepartmentGrid").dxTreeList("instance").option("dataSource", []);
+            }
+
+            var columns = [
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("Department", "부서조회", @departmentPopupData, columns, "dept_cd");
+
+            departmentEditCheck(false);
+        });
+
+        // 수정중인지 체크
+        function departmentEditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#DepartmentSave").dxButton().parent().parent().removeClass("display-none");
+                $("#DepartmentUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#DepartmentInput").dxButton().parent().parent().addClass("display-none");
+                $("#DepartmentEdit").dxButton().parent().parent().addClass("display-none");
+                $("#DepartmentDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#departmentForm :disabled").attr('disabled', false);
+                $("#DepartmentGrid").dxTreeList("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#DepartmentSave").dxButton().parent().parent().addClass("display-none");
+                $("#DepartmentUndo").dxButton().parent().parent().addClass("display-none");
+                $("#DepartmentInput").dxButton().parent().parent().removeClass("display-none");
+                $("#DepartmentEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#DepartmentDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#departmentForm :enabled").attr('disabled', true);
+                $("#DepartmentGrid").dxTreeList("option", "disabled", false);
+
+                $("#Department input[name=dept_nm]").attr("readonly", false);
+            }
+        }
+
+        function selectDepartment(e) {       
+            if (!e.row || !e.row.data) {
+                $("#departmentForm")[0].reset();
+                return;
+            } else {
+                var data = e.row.data;
+                DepartmentFillData(data);
+            }
+        }
+
+    function DepartmentFillData(data) {
+
+        $("#Department input[name=dept_cd]").val(data.DEPT_CD);
+        $("#Department input[name=dept_nm]").val(data.DEPT_NM);
+        $("#Department select[name=dept_gb]").val(data.DEPT_GB);
+        $("#Department input[name=dept_mcd]").val(data.DEPT_MCD);
+        $("#Department input[name=high_dept_nm]").val(data.HIGH_DEPT_NM);
+        $("#Department input[name=dept_level]").val(data.DEPT_LEVEL);
+        $("#Department select[name=plant_cd]").val(data.PLANT_CD);
+        if (data.DEPT_USE_GB === "Y") {
+            $("#Department input[name=dept_use_gb][value='Y']").prop("checked", true);
+        } else {
+            $("#Department input[name=dept_use_gb][value='N']").prop("checked", true);
+        }
+    }
+
+        function departmentSearchBtn() {
+            $("#DepartmentPopup").dxPopup("instance").show();
+        }
+
+    function DepartmentSearch () {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysCom/selectDepartment',
+                data: {
+                    dept_use_gb: $('#Department input[name="department_use_yn_radio"]:checked').val()
+                },
+                success: function (result) {
+                    //$("#departmentForm")[0].reset();
+
+                    if (!UtilView.isEmpty(result)) {
+                        var jsonData = JSON.parse(result);
+                        $("#DepartmentGrid").dxTreeList("instance").option("dataSource", jsonData);
+                    } else {
+                        $("#DepartmentGrid").dxTreeList("instance").option("dataSource", []);
+                    }
+                }
+            });
+
+            UtilView.setGridFocus("T", "DepartmentGrid");
+    }
+
+        function DepartmentRowDblClick(selectedItems) {
+
+            $("#Department input[name=dept_mcd]").val(selectedItems.data.dept_cd);
+            $("#Department input[name=high_dept_nm]").val(selectedItems.data.dept_nm);
+
+            $("#DepartmentPopup").dxPopup("instance").hide();
+        }
+
+        function DepartmentInput() {
+            _departmentCRUDGubun = "I";
+            $("#departmentForm")[0].reset();
+            $("#Department select[name=plant_cd]").val("PC001");
+
+            $('#departmentForm input[name=dept_cd]').attr('readonly', false);
+            departmentEditCheck(true);
+        }
+
+        function DepartmentEdit() {
+            _departmentCRUDGubun = "U";
+
+            departmentEditCheck(true);
+            $("#Department input[name=dept_nm]").attr("readonly", true);
+            $('#departmentForm input[name=dept_cd]').attr('readonly', true);
+        }
+
+        function DepartmentDelete() {
+
+            if (!confirm("선택된 부서를 삭제하시겠습니까?")) {
+                return;
+            }
+
+            var data = treeListGetFocusedRowData("DepartmentGrid");
+
+            if (data.hasChildren) {
+                alert("하위 부서가 있는 상위부서는 삭제할 수 없습니다.");
+                return;
+            }
+
+            _departmentCRUDGubun = "C";
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/departmentCRUD',
+                data: {
+                    dept_cd: data.DEPT_CD,
+                    gubun: _departmentCRUDGubun
+                },
+                success: function (result) {
+
+                    try {
+                        var jsonData = JSON.parse(result);
+
+                        if (jsonData.sessionLoss) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                    } catch (e) {
+
+                    }
+
+                    _departmentCRUDGubun = "";
+                    DepartmentSearch();
+                }
+            });
+        }
+
+        function DepartmentSave() {
+
+            if (!UtilView.checkValidForm("departmentForm")) {
+                return;
+            }
+
+            var formData = new FormData($("#departmentForm")[0]);
+
+            formData.set("gubun", _departmentCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/departmentCRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result == '') {
+                        alert('동일한 코드의 부서가 존재합니다.\r\n확인 후 다시 시도해주십시오.');
+                    }
+                    else {
+                        alert(result);
+                        departmentEditCheck(false);
+                        _departmentCRUDGubun = "";
+                        DepartmentSearch();
+                    }
+                }
+            });
+        }
+
+        function DepartmentUndo() {
+            departmentEditCheck(false);
+
+            _departmentCRUDGubun = "";
+        }
+
+        function clearHighDept() {
+            $("#Department input[name=dept_mcd]").val("");
+            $("#Department input[name=high_dept_nm]").val("");
+        }
+
+</script>
+
+<div id="Department" autoresize="Y">
+
+    <div id="DepartmentPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="DepartmentSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="department_use_yn_radio" checked="checked" onclick="DepartmentSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="department_use_yn_radio" onclick="DepartmentSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="department_use_yn_radio" onclick="DepartmentSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().TreeList()
+                    .ID("DepartmentGrid")
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .RootValue("")
+                    .KeyExpr("DEPT_CD")
+                    .ParentIdExpr("DEPT_MCD")
+                    .Height(900)
+                    .OnFocusedRowChanged("selectDepartment")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("DEPT_CD").Caption("부서코드");
+                        c.Add().DataField("DEPT_NM").Caption("부서명");
+                        c.Add().DataField("DEPT_USE_GB").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.DEPT_USE_GB == ""Y"" || rowData.DEPT_USE_GB == true); }");
+                        c.Add().DataField("Data_root").Caption("Interface");
+
+                    })
+                    .ShowBorders(true)
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box">
+
+                <div class="divName">
+                    <p>부서 정보</p>
+                    <span id="signSetValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="departmentForm">
+
+                        <div class="input-wrapper">
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-3">부서코드 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12 required" name="dept_cd">
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-3">부서코드</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="dept_cd">
+                                </div>
+                            }
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">부서명칭 <star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="dept_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">부서구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="dept_gb">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.departmentGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">상위부서코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="dept_mcd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="departmentSearchBtn()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="high_dept_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">조직구조레벨</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12" name="dept_level">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업장명칭 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="plant_cd">
+                                    <option value="0"> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.plantGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="dept_use_gb" value="Y" />예 </label>
+                                    <label><input type="radio" name="dept_use_gb" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,879 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "WorkRoom";
+
+    var workRoomData = @Html.Raw(Json.Encode(ViewBag.workRoomData.Data));
+    var workRoomPopupData = @Html.Raw(Json.Encode(ViewBag.workRoomPopupData.Data));
+    var workRoomProductData = @Html.Raw(Json.Encode(ViewBag.workRoomProductData.Data));
+
+}
+
+@*작업실 관리*@
+
+<script id="WorkRoomJs">
+
+        var _workroomCRUDGubun;
+        var _workroomCellClickEvent;
+
+    $(function () {
+
+        if ((@workRoomData).length > 0) {
+
+            $("#WorkRoomGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@workRoomData));
+            $("#WorkRoomGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#WorkRoomGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+            var columns1 = [
+                { dataField: "workroom_cd", caption: "작업실코드" },
+                { dataField: "workroom_nm", caption: "작업실명" },
+                { dataField: "common_part_nm", caption: "팀구분" }
+            ];
+
+            createPopup("WorkRoom1", "작업실 조회", @workRoomPopupData, columns1, "workroom_cd");
+            createPopup("WorkRoom2", "작업실 조회", @workRoomPopupData, columns1, "workroom_cd");
+
+            var columns2 = [
+                { dataField: "item_cd", caption: "품목코드" },
+                { dataField: "item_nm", caption: "품목명" },
+                { dataField: "item_keep_condition_nm", caption: "보관조건" },
+                { dataField: "item_keep_temperature_nm", caption: "온도" },
+                { dataField: "abbreviation_cd", caption: "약식코드" }
+            ];
+
+            createPopup("WorkRoomProduct", "품목조회", @workRoomProductData, columns2, "item_cd");
+
+            workroomEditCheck(false);
+        });
+
+        // 수정중인지 체크
+        function workroomEditCheck(nowEdit) {
+
+            $("#WorkRoom input[name=emp_cd_1]").attr("readonly", false);
+            $("#WorkRoom input[name=emp_cd_2]").attr("readonly", false);
+
+            if (nowEdit) {
+
+                $("#WorkRoomSave").dxButton().parent().parent().removeClass("display-none");
+                $("#WorkRoomUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#WorkRoomSearch").dxButton().parent().parent().addClass("display-none");
+                $("#WorkRoomInput").dxButton().parent().parent().addClass("display-none");
+                $("#WorkRoomEdit").dxButton().parent().parent().addClass("display-none");
+                $("#WorkRoomDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#workroomForm1 :disabled").attr('disabled', false);
+                $("#workroomForm2 :disabled").attr('disabled', false);
+                //$("#workRoomProductGrid").dxDataGrid("option", "disabled", false);
+                $("#WorkRoomGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#WorkRoomSave").dxButton().parent().parent().addClass("display-none");
+                $("#WorkRoomUndo").dxButton().parent().parent().addClass("display-none");
+                $("#WorkRoomSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#WorkRoomInput").dxButton().parent().parent().removeClass("display-none");
+                $("#WorkRoomEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#WorkRoomDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#workroomForm1 :enabled").attr('disabled', true);
+                $("#workroomForm2 :enabled").attr('disabled', true);
+
+                //$("#workRoomProductGrid").dxDataGrid("option", "disabled", true);
+                $("#WorkRoomGrid").dxDataGrid("option", "disabled", false);
+
+                var editing = {
+                    allowUpdating: false,
+                    allowAdding: false,
+                    allowDeleting: false,
+                    selectTextOnEditStart: false,
+                }
+
+                $("#workRoomProductGrid").dxDataGrid("option", "editing", editing);
+            }
+
+        }
+
+        function WorkRoomSelectWorkRoom() {
+
+            let grid = $("#WorkRoomGrid").dxDataGrid("instance");
+
+            let data = getGridRowByKey('WorkRoomGrid', grid.option("focusedRowKey"));
+
+            if (UtilView.isEmpty(data) || !data.workroom_cd) {
+                return;
+            }
+
+            $("#workroomForm1 input[name=workroom_cd]").val(data.workroom_cd);
+            $("#workroomForm1 input[name=workroom_nm]").val(data.workroom_nm);
+            $("#workroomForm1 select[name=plant_cd]").val(data.plant_cd);
+            $("#workroomForm1 select[name=item_type1]").val(data.item_type1);
+            $("#workroomForm1 select[name=item_type2]").val(data.item_type2);
+            $("#workroomForm1 select[name=workroom_type]").val(data.workroom_type);
+
+            if (data.hardware_yn === "Y") {
+                $("#workroomForm1 input[name=hardware_yn][value='Y']").prop("checked", true);
+            } else {
+                $("#workroomForm1 input[name=hardware_yn][value='N']").prop("checked", true);
+            }
+
+            $("#workroomForm1 select[name=cleanness_cd]").val(data.cleanness_cd);
+            $("#workroomForm1 input[name=workroom_mcd]").val(data.workroom_mcd);
+            $("#workroomForm1 input[name=workroom_mcd_nm]").val(data.workroom_mcd_nm);
+            $("#workroomForm1 select[name=warehouse_type]").val(data.warehouse_type);
+            $("#workroomForm1 input[name=use_yn][value=" + data.use_yn + "]").prop("checked", true);
+
+            $("#workroomForm2 input[name=temp_min]").val(data.temp_min);
+            $("#workroomForm2 input[name=temp_max]").val(data.temp_max);
+            $("#workroomForm2 input[name=hum_min]").val(data.hum_min);
+            $("#workroomForm2 input[name=hum_max]").val(data.hum_max);
+            $("#workroomForm2 input[name=Illumination]").val(data.Illumination);
+            $("#workroomForm2 select[name=workroom_area]").val(data.workroom_area);
+            $("#workroomForm2 input[name=workroom_volume]").val(data.workroom_volume);
+            $("#workroomForm2 input[name=workroom_bottomtype]").val(data.workroom_bottomtype);
+            $("#workroomForm2 input[name=workroom_walltype]").val(data.workroom_walltype);
+            $("#workroomForm2 input[name=workroom_toptype]").val(data.workroom_toptype);
+            $("#workroomForm2 input[name=workroom_no]").val(data.workroom_no);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/SelectWorkRoomProduct',
+                data: {
+                    workroom_cd: data.workroom_cd
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#workRoomProductGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#workRoomProductGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            });
+        }
+
+        //function getGridRowByKey(gridID, key) {
+
+        //    let grid = $("#" + gridID).dxDataGrid('instance');
+        //    let rows = grid.getVisibleRows();
+        //    let rowIndex = grid.getRowIndexByKey(key);
+        //    let row = rows[rowIndex];
+
+        //    return row.data;
+        //}
+
+
+        function readExcel() {
+            let input = event.target;
+            let reader = new FileReader();
+            reader.onload = function () {
+                let data = reader.result;
+                let workBook = XLSX.read(data, { type: 'binary' });
+                workBook.SheetNames.forEach(function (sheetName) {
+                    console.log('SheetName: ' + sheetName);
+                    let rows = XLSX.utils.sheet_to_json(workBook.Sheets[sheetName]);
+                    console.log(JSON.parse(JSON.stringify(rows)));
+
+                    $("#workRoomProductGrid").dxDataGrid("instance").option("dataSource", JSON.parse(JSON.stringify(rows)));
+                })
+            };
+            reader.readAsBinaryString(input.files[0]);
+        }
+
+        function workroomSearchWorkroom(num) {
+            $("#WorkRoom" + num + "Popup").dxPopup("instance").show();
+        }
+
+        function WorkRoom1RowDblClick(selectedItems) {
+            $("#workRoomSearchForm input[name=workroom_cd]").val(selectedItems.data.workroom_cd);
+            $("#WorkRoom1Popup").dxPopup("instance").hide();
+        }
+
+        function WorkRoom2RowDblClick(selectedItems) {
+            $("#workroomForm1 input[name=workroom_mcd]").val(selectedItems.data.workroom_cd);
+            $("#workroomForm1 input[name=workroom_mcd_nm]").val(selectedItems.data.workroom_nm);
+
+            $("#WorkRoom2Popup").dxPopup("instance").hide();
+        }
+
+        function WorkRoomSearch() {
+
+            var formData = new FormData($("#workRoomSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                async:false,
+                url: '/SysCom/SelectWorkRoom',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        $("#WorkRoomGrid").dxDataGrid("instance").option("dataSource", json);
+                    } else {
+                        $("#WorkRoomGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#workroomForm1")[0].reset();
+                        $("#workroomForm2")[0].reset();
+                    }
+                }
+            });
+
+            UtilView.setGridFocus("G", "WorkRoomGrid")
+        }
+
+        function WorkRoomInput() {
+            workroomEditCheck(true);
+            _workroomCRUDGubun = "I";
+            $("#workroomForm1")[0].reset();
+            $("#workroomForm2")[0].reset();
+            $("#workroomForm1 select[name=plant_cd]").val("PC001");
+            $("#workroomForm1 input[name=workroom_cd]").attr('readonly', false);
+        }
+
+        function WorkRoomEdit() {
+            workroomEditCheck(true);
+            _workroomCRUDGubun = "U";
+            $("#workroomForm1 input[name=workroom_cd]").attr('readonly', true);
+
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+
+            $("#workRoomProductGrid").dxDataGrid("option", "editing", editing);
+        }
+
+        function WorkRoomDelete() {
+
+            if (!confirm("선택된 작업실을 삭제하시겠습니까?")) {
+                return;
+            }
+
+            _workroomCRUDGubun = "D";
+
+            var grid = $("#WorkRoomGrid").dxDataGrid("instance");
+            var data = getGridRowByKey('WorkRoomGrid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/WorkroomCRUD',
+                data: {
+                    workroom_cd: data.workroom_cd,
+                    gubun: _workroomCRUDGubun
+                },
+                success: function (result) {
+                    WorkRoomSearch();
+                }
+            });
+        }
+
+        async function WorkRoomSave() {
+
+            if (!UtilView.checkValidForm("workroomForm1")) {
+                return;
+            }
+
+            if (!UtilView.checkValidForm("workroomForm2")) {
+                return;
+            }
+
+            let formData = new FormData($("#workroomForm1")[0]);
+            let formDataPrecios = new FormData($("#workroomForm2")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+
+            formData.set("gubun", _workroomCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/WorkroomCRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result == '') {
+                        alert('동일한 코드의 작업실이 존재합니다.\r\n확인 후 다시 시도해주십시오.');
+                    }
+                    else {
+                        alert(result);
+                        WorkroomProduct_Save();
+                    }
+                }
+            });
+        }
+
+        async function WorkroomProduct_Save() {
+            await $("#workRoomProductGrid").dxDataGrid("instance").saveEditData();
+            workroomEditCheck(false);
+            WorkRoomSearch();
+        }
+
+        function WorkRoomUndo() {
+            workroomEditCheck(false);
+
+            WorkRoomSelectWorkRoom();
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false,
+                selectTextOnEditStart: false,
+            }
+
+            $("#workRoomProductGrid").dxDataGrid("option", "editing", editing);
+        }
+
+        function setWorkRommProductData() {
+
+        }
+
+        function workroomEditableColumn(cellElement) {
+
+            if (cellElement.rowType != "data" || !cellElement.isEditing)
+                return;
+            if (cellElement.column.dataField != "item_seq" && !cellElement.row.inserted) {
+                cellElement.element.find('input').prop('readonly', true);
+            }
+        }
+
+        function workroomGetGridPopup(e) {
+
+            _workroomCellClickEvent = e;
+
+            if (e.columnIndex == 1 && e.row.isEditing) {
+
+                $("#WorkRoomProductPopup").dxPopup("instance").show();
+            }
+        }
+
+        function WorkRoomProductRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            var dataGrid = $("#workRoomProductGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "item_cd", data.item_cd);
+            dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "item_nm", data.item_nm);
+            dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "item_keep_condition", data.item_keep_condition_nm);
+            dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "item_keep_temperature", data.item_keep_temperature_nm);
+            dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "abbreviation_cd", data.abbreviation_cd);
+
+            $("#WorkRoomProductPopup").dxPopup("instance").hide();
+        }
+
+        function initItemSeq(e) {
+            //var ds = $("#WorkRoomProductPopup").dxDataGrid("option", "dataSource");
+
+            //e.data.item_seq = (ds.length + 1);
+        }
+
+        function workroomProductInsert(info) {
+
+            var data = info.key;
+
+            console.log(data);
+
+            data.workroom_cd = $("#workroomForm1 input[name=workroom_cd").val();
+            data.gubun = "UC"
+
+            workroomProductCRUD(data);
+        }
+
+        function workroomProductUpdate(info) {
+            var data = info.key;
+
+            console.log(data);
+
+            data.workroom_cd = $("#workroomForm1 input[name=workroom_cd]").val();
+            data.gubun = "UC"
+
+            workroomProductCRUD(data);
+        }
+
+        function workroomProductDelete(info) {
+            var data = info.key;
+
+            console.log(data);
+
+            data.workroom_cd = $("#workroomForm1 input[name=workroom_cd]").val();
+            data.gubun = "DC"
+
+            workroomProductCRUD(data);
+        }
+
+        function workroomProductCRUD(data) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/WorkRommProductCRUD',
+                data: {
+                    workroom_cd: data.workroom_cd,
+                    item_cd: data.item_cd,
+                    item_seq: data.item_seq,
+                    gubun: data.gubun
+                },
+                success: function (result) {
+                
+                }
+            });
+        }
+
+        function workRoomProductGridHideSaveButton(e) {
+            var toolbarItems = e.toolbarOptions.items;
+            $.each(toolbarItems, function (_, item) {
+                if (item.name == "saveButton") {
+                    item.visible = false;
+                }
+            });
+        }
+
+        function WorkRoomExcel() {
+            gridExportToExcel("WorkRoomGrid", "WorkRoomData");
+        }
+
+</script>
+
+<div id="WorkRoom">
+
+    <div id="WorkRoom1Popup"></div>
+    <div id="WorkRoom2Popup"></div>
+    <div id="WorkRoomProductPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="workRoomSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">작업실</span>
+                        </div>
+                        <input type="text" class="form-control" name="workroom_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="workroomSearchWorkroom('1')">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="use_yn" checked="checked" onclick="WorkRoomSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="use_yn" onclick="WorkRoomSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="use_yn" onclick="WorkRoomSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("WorkRoomGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .Height(869)
+                    .KeyExpr("workroom_cd")
+                    .OnFocusedRowChanged("WorkRoomSelectWorkRoom")
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("workroom_cd").Caption("작업실 코드").Width("15%");
+                        c.Add().DataField("item_type2_nm").Caption("팀구분").Width("25%");
+                        c.Add().DataField("workroom_nm").Caption("작업실 명").Width("25%");
+                        c.Add().DataField("workroom_type_nm").Caption("작업실 종류").Width("25%");
+                        c.Add().DataField("workroom_area").Caption("작업장구역")
+                                     .Lookup(lookup => lookup
+                                         .DataSource(d => d.WebApi()
+                                             .RouteName("Comm")
+                                             .LoadAction("GetCommon")
+                                             .LoadMethod("GET")
+                                             .LoadParams(new
+                                             {
+                                                 pGubun = "공통코드"
+                                                 ,
+                                                 pDiv = "D"
+                                                 ,
+                                                 pStrWhere = "workroom_area"
+                                                 ,
+                                                 pTableName = "workroom_area"
+                                             }
+                                         ).Key("keyfield"))
+                                         .ValueExpr("keyfield")
+                                         .DisplayExpr("displayfield")
+                                         );
+                        c.Add().DataField("use_yn").Caption("사용여부")
+                            .Width("10%")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+                    })
+                )
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>기본 정보</p>
+                    <span id="signSetValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="workroomForm1">
+
+                        <div class="input-wrapper">
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-3">작업실 코드 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12 required" name="workroom_cd">
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-3">작업실 코드</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12 required" name="workroom_cd">
+                                </div>
+                            }
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">작업실명 <star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="workroom_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업장 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="plant_cd">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.plantGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">생산동 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="item_type1">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.ProductionBuilding).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">팀 구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="item_type2">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.team).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">작업실 구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="workroom_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.workRoomType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">산업용 PC 설치<star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label style="display: none">산업용 PC 설치</label>
+                                    <input type="radio" class="required" name="hardware_yn" value="Y" /><label>예</label>
+                                    <input type="radio" class="required" name="hardware_yn" value="N" /><label>아니오</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">청정도</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="cleanness_cd">
+                                    <option value="0"> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.cleanliness).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">대표코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="workroom_mcd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="workroomSearchWorkroom('2')">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="workroom_mcd_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">창고 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="warehouse_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.warehouseType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" class="required" name="use_yn" value="Y" />예 </label>
+                                    <label><input type="radio" class="required" name="use_yn" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+                <ul class="nav nav-tabs" id="WorkRoomMenuTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('WorkRoomMenuTab', 'WorkRoomMenuDiv', 1)">관리정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('WorkRoomMenuTab', 'WorkRoomMenuDiv', 2)">제품정보</a>
+                    </li>
+                </ul>
+
+                <div class="menuDiv">
+
+                    <div id="WorkRoomMenuDiv">
+
+                        <div id="WorkRoomMenuDiv_1">
+
+                            <form id="workroomForm2">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">온도기준(℃)</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="temp_min">
+                                    </div>
+                                    <div class="input-group-append">
+                                        <span> ~ </span>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="temp_max">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">습도기준(%)</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="hum_min">
+                                    </div>
+                                    <div class="input-group-append">
+                                        <span> ~ </span>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="hum_max">
+                                    </div>
+                                </div>
+                                <div class="input-wrapper">
+                                    <label class="col-3">차압기준(Pa)</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="press_min">
+                                    </div>
+                                    <div class="input-group-append">
+                                        <span> ~ </span>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="press_max">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">조도기준(Lux)</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="Illumination">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">작업장구역</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="workroom_area">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.workroom_area).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">작업실크기</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="workroom_volume">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">바닥종류</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="workroom_bottomtype">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">벽종류</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="workroom_walltype">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">천장종류</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="workroom_toptype">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">작업실번호</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="workroom_no">
+                                    </div>
+                                </div>
+
+                                @*<div class="input-wrapper">
+                                        <label class="col-3">사업장명칭</label>
+                                        <input type="text" class="col-4 form-control" name="" />
+                                    </div>*@
+
+                            </form>
+
+                        </div>
+
+                        <div id="WorkRoomMenuDiv_2" class="display-none">
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("workRoomProductGrid")
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .DataSource(new JS(""))
+                                .ColumnAutoWidth(true)
+                                .HoverStateEnabled(true)
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .AllowColumnResizing(true)
+                                .Height(400)
+                                .DataSource(new JS("setWorkRommProductData"))
+                                .OnRowInserted("workroomProductInsert")
+                                .OnRowUpdated("workroomProductUpdate")
+                                .OnRowRemoved("workroomProductDelete")
+                                .OnCellPrepared("workroomEditableColumn")
+                                .OnCellClick("workroomGetGridPopup")
+                                .OnToolbarPreparing("workRoomProductGridHideSaveButton")
+                                //.OnInitNewRow("initItemSeq")
+                                //.OnFocusedRowChanged("WorkRoomSelectWorkRoom")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_seq").Caption("순번");
+                                    c.Add().DataField("item_cd").Caption("제품코드");
+                                    c.Add().DataField("item_nm").Caption("제품명");
+                                    c.Add().DataField("item_keep_condition").Caption("보관조건");
+                                    c.Add().DataField("item_keep_temperature").Caption("보관온도");
+                                    c.Add().DataField("abbreviation_cd").Caption("약식기호");
+
+                                })
+                            )
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

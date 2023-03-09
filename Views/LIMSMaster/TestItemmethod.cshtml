@@ -1,0 +1,919 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    var testItemMethodData = @Html.Raw(Json.Encode(ViewBag.testItemMethodData.Data));
+}
+
+@*시험 방법 입력*@
+
+<script id="@(pagePrefix)Js">
+
+    var _testItemmethodTestItemId = "";
+    var _testMethodGetIndex = 0;
+    var _testItemmethodChanges = new Array();
+
+    $(function () {
+
+        if ((@testItemMethodData).length > 0) {
+            $("#TestItemmethodGrid").dxDataGrid("option", "dataSource", JSON.parse(@testItemMethodData));
+            $("#TestItemmethodGrid").dxDataGrid("option", "focusedRowIndex", 0);
+        }
+
+        var TestItemMethodPopupColumns = {
+            "testitemReagent": [{ dataField: "reagent_cd", caption: "품목코드" }
+                , { dataField: "reagent_nm", caption: "품명" }
+                , { dataField: "reagent_sub_nm", caption: "품명2" }
+                , { dataField: "reagent_sub3_nm", caption: "품명3" }
+                , { dataField: "reagent_sub4_nm", caption: "품명4" }]
+        };
+
+        $('input[name=testitem_cd]+div>button', $('#' + "TestItemmethodSearchForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.testitemmaster', '시험항목 조회', 'testitem_cd', $("#TestItemmethodSearchForm input[name=testitem_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=testitem_cd]", $('#' + "TestItemmethodSearchForm")).val(selectedItems.testitem_cd);
+                }
+            );
+        });
+
+        $('input[name=copy_testitem_cd]+div>button', $('#' + "TestItemmethodMasterCopyForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.testitemmaster', '시험항목 조회', 'testitem_cd', $("#TestItemmethodMasterCopyForm input[name=copy_testitem_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=copy_testitem_cd]", $('#' + "TestItemmethodMasterCopyForm")).val(selectedItems.testitem_cd);
+                }
+            );
+        });
+
+        $('input[name=reagent_cd]+div>button', $('#' + "TestItemmethodWriteForm")).click(function (event) {
+
+            createPopup("TestItemmethodReagent", "품목 조회", [], TestItemMethodPopupColumns.testitemReagent, "reagent_cd", function (selectedItems) {
+                console.log(selectedItems);
+                $("input[name=reagent_cd]", $('#' + "TestItemmethodWriteForm")).val(selectedItems.reagent_cd);
+                $("input[name=reagent_nm]", $('#' + "TestItemmethodWriteForm")).val(selectedItems.reagent_nm);
+            }, $('input[name=reagent_cd]', $('#' + "TestItemmethodWriteForm")).val());
+
+            $("#TestItemmethodReagentPopup").dxPopup({
+                onShown: function (e) {
+
+                    var use_gb = $("#TestItemMethodWriteForm input[name=use_gb]").val();
+
+                    $.ajax({
+                        type: 'GET',
+                        url: '/LIMSMaster/TestItemmethodSelectReagentPopupData',
+                        data: {
+                            use_gb: use_gb
+                        },
+                        dataType: "json",
+                        async: false,
+                        success: function (result) {
+
+                            try {
+                                var jsonData = JSON.parse(result);
+                                $("#TestItemmethodReagent_gridContainer").dxDataGrid("option", "dataSource", jsonData);
+                            }
+                            catch (e) {
+                                $("#TestItemmethodReagent_gridContainer").dxDataGrid("option", "dataSource", []);
+                            }
+
+                        }
+                    })
+                }
+            });
+
+            $("#TestItemmethodReagentPopup").dxPopup("instance").show();
+        });
+
+        $('input[name=calculate_formula_master]+div>button', $('#' + "TestItemmethodMasterWriteForm")).click(function (event) {
+            TestItemmethodFomulaCheck(1);
+        });
+
+        $('input[name=calculate_nm]+div>button', $('#' + "TestItemmethodWriteForm")).click(function (event) {
+            var popup = $("#TestItemmethodSpecialCharacterPopup").dxPopup("instance");
+            popup.show();
+        });
+
+        $('input[name=calculate_formula]+div>button', $('#' + "TestItemmethodWriteForm")).click(function (event) {
+            TestItemmethodFomulaCheck(2);
+        });
+
+        TestItemmethodEditCheck(false,'N');
+
+    });
+
+    // 데이커 그리드 빈 데이터 소스
+    function SetEmptyData() {
+
+    }
+
+    // 수정중인지 체크
+    function TestItemmethodEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "TestItemmethodToolbar"
+            , "TestItemmethodGrid"
+            , "TestItemmethodWriteForm"
+            , ""
+        );
+
+        if (nowEdit) {
+            $("#TestItemmethodMasterWriteForm input").prop("disabled", false);
+            $("#TestItemmethodMasterWriteForm button").prop("disabled", false);
+
+            $("#TestItemmethodMasterCopyForm input").prop("disabled", true);
+            $("#TestItemmethodMasterCopyForm button").prop("disabled", true);
+
+            var editing = {
+                allowAdding: true,
+                allowUpdating: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            var grid = $("#TestMethodGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+        } else {
+            $("#TestItemmethodMasterWriteForm input").prop("disabled", true);
+            $("#TestItemmethodMasterWriteForm button").prop("disabled", true);
+
+            $("#TestItemmethodMasterCopyForm input").prop("disabled", false);
+            $("#TestItemmethodMasterCopyForm button").prop("disabled", false);
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false
+            }
+
+            var grid = $("#TestMethodGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+            _testItemmethodChanges = new Array();
+        }
+    }
+
+    // 메인그리드 포커스 변경
+    function TestItemmethodChanged() {
+
+        var grid = $("#TestItemmethodGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemmethodGrid", grid.option("focusedRowKey"));
+
+        _testItemmethodTestItemId = grid.option("focusedRowKey");
+
+        $("#TestItemmethodMasterWriteForm input[name=calculate_nm_master]").val(gridData.calculate_nm);
+        $("#TestItemmethodMasterWriteForm input[name=calculate_formula_master]").val(gridData.calculate_formula);
+
+        $("#TestItemmethodWriteForm")[0].reset();
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestItemmethodSelectTestMethod',
+            dataType: "json",
+            data: {
+                testitem_cd: gridData.testitem_cd
+            },
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#TestMethodGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#TestMethodGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                    $("#TestMethodGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#TestMethodGrid").dxDataGrid("option", "dataSource", []);
+                    $("#TestMethodGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                    $("#TestMethodGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+    }
+
+    // 시험방법 그리드 - 디테일 입력폼에 바인딩
+    function TestMethodFocusChanged() {
+
+        var grid = $("#TestMethodGrid").dxDataGrid("instance");
+        UtilView.setDataGridFormBind("TestMethodGrid", "TestItemmethodWriteForm");
+    }
+
+    // 하단 입력폼 수정(시험방법 그리드의 변경사항으로 적용시키기 위함)
+    function TestMethodChange(e) {
+
+        var tagName = e.target.name;
+        var nodeName = e.target.nodeName;
+        var value = "";
+
+        if (nodeName === "INPUT") {
+            value = $("#TestItemmethodWriteForm input[name=" + tagName + "]").val();
+        }
+        else if (nodeName === "SELECT") {
+            value = $("#TestItemmethodWriteForm select[name=" + tagName + "]").val();
+        }
+
+        var grid = $("#TestMethodGrid").dxDataGrid("instance");
+
+        grid.cellValue(_testMethodGetIndex, tagName, value);
+    }
+
+    // 시험방법 그리드의 셀 클릭이벤트 - 입력중인 로우를 포커스하기 위함
+    function TestMethodCellClick(e) {
+
+        if (!e.row) {
+            return;
+        }
+
+        $("#TestMethodGrid").dxDataGrid("option", "focusedRowKey", e.key);
+
+        TestMethodGetIndex(e);
+    }
+
+    // 시험방법 그리드 포커스 변경 - 가장 최근에 선택된 로우의 인덱스를 얻기 위함
+    function TestMethodGetIndex(e) {
+
+        _testMethodGetIndex = e.row.rowIndex;
+        $("#TestItemmethodWriteForm")[0].reset();
+
+        if (e.row.rowType === "data" && Object.keys(e.row.data).length > 0) {
+
+            var data = e.row.data;
+
+            Object.keys(data).forEach(function (k) {
+                $("#TestItemmethodWriteForm input[name=" + k + "]").val(data[k]);
+                $("#TestItemmethodWriteForm select[name=" + k + "]").val(data[k]);
+            });
+        }
+    }
+
+    // 계산수식 검증
+    function TestItemmethodFomulaCheck(num) {
+
+        var calculate_formula = "";
+
+        switch (num) {
+            case 1:
+
+                calculate_formula = $("#TestItemmethodMasterWriteForm input[name=calculate_formula_master]").val();
+
+                break;
+
+            case 2:
+
+                calculate_formula = $("#TestItemmethodWriteForm input[name=calculate_formula]").val();
+
+                break;
+
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestItemmethodFomulaCheck',
+            dataType: "json",
+            data: {
+                calculate_formula: calculate_formula
+            },
+            async: false,
+            success: function (result) {
+
+                if (result.message === "Y") {
+                   alert("유효한 계산식입니다.");
+                }
+                else if (result.message === "N") {
+                    alert("수정필요. 계산수식이 잘못되었습니다.");
+                }
+            }
+        })
+    }
+
+    // '==>' 버튼을 통해 계산방법('1-1'),계산수식('1-2', '2-2'),기록방법('2-1') 복사
+    function TestItemmethodCopyCalculate(gubun) {
+
+        var calculate_nm = $("#TestItemmethodWriteForm input[name=calculate_nm]").val();
+        var calculate_formula = $("#TestItemmethodWriteForm input[name=calculate_formula]").val();
+
+        var grid = $("#TestMethodGrid").dxDataGrid("instance");
+
+        switch (gubun) {
+            case '1-1':
+                $("#TestItemmethodMasterWriteForm input[name=calculate_nm_master]").val(calculate_nm);
+                break;
+
+            case '1-2':
+                $("#TestItemmethodMasterWriteForm input[name=calculate_formula_master]").val(calculate_formula);
+                break;
+
+            case '2-1':
+                $("#TestItemmethodWriteForm input[name=calculate_nm]").val(grid.cellValue(_testMethodGetIndex, "testmethod_nm"));
+                grid.cellValue(_testMethodGetIndex, "calculate_nm", grid.cellValue(_testMethodGetIndex, "testmethod_nm"));
+                break;
+
+            case '2-2':
+                $("#TestItemmethodWriteForm input[name=calculate_formula]").val(grid.cellValue(_testMethodGetIndex, "testmethod_nm"));
+                grid.cellValue(_testMethodGetIndex, "calculate_formula", grid.cellValue(_testMethodGetIndex, "testmethod_nm"));
+                break;
+        }
+    }
+
+    // 시험방법 복사
+    function TestItemmethodCopy() {
+
+        var copy_testitem_cd = $("#TestItemmethodMasterCopyForm input[name=copy_testitem_cd]").val();
+
+        if (!copy_testitem_cd) {
+            alert("시험항목을 선택하십시요.");
+            return;
+        }
+
+        var grid = $("#TestItemmethodGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("시험항목을 선택하십시요.");
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestItemmethodCopy',
+            dataType: "json",
+            data: {
+                testitem_cd: grid.option("focusedRowKey"),
+                copy_testitem_cd: copy_testitem_cd
+            },
+            async: false,
+            success: function (result) {
+                alert(result.message);
+                TestItemmethodChanged();
+            }
+        })
+
+    }
+
+    //#region 팝업관련
+
+    // 종류 셀렉트박스의 값에 따라 특수문자 팝업 내 그리드 데이터 소스 변경
+    function TestItemmethodSelectSpecialCharacter() {
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestItemmethodSelectSpecialCharacter',
+            dataType: "json",
+            data: {
+                operator_type: $("#TestItemmethodSpecialCharacterPopupContent select[name=operator_type]").val()
+            },
+            async: false,
+            success: function (result) {
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#TestItemmethodSpecialCharacterGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#TestItemmethodSpecialCharacterGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#TestItemmethodSpecialCharacterGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 특수문자 팝업 그리드 로우 선택
+    function TestItemmethodInputSpecialCharacter() {
+
+        var grid = $("#TestItemmethodSpecialCharacterGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestItemmethodSpecialCharacterGrid", grid.option("focusedRowKey"));
+
+        $('#TestItemmethodWriteForm input[name=calculate_nm]').val($('#TestItemmethodWriteForm input[name=calculate_nm]').val() + gridData.common_part_nm);
+
+        $("#TestItemmethodSpecialCharacterPopup").dxPopup("instance").hide();
+    }
+
+    //#endregion
+
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function TestItemmethodSearch() {
+
+        //$.ajax({
+        //    type: 'GET',
+        //    url: '/LIMSMaster/TestItemmethodSelect',
+        //    dataType: "json",
+        //    async: false,
+        //    data: {
+        //        testitem_type: $("#TestItemmethodSearchForm select[name=testitem_type]").val(),
+        //        testitem_cd: $("#TestItemmethodSearchForm input[name=testitem_cd]").val()
+        //    },
+        //    success: function (result) {
+
+        //        try {
+        //            var jsonData = JSON.parse(result);
+
+        //            var grid = $("#TestItemmethodGrid").dxDataGrid("instance");
+
+        //            grid.option("dataSource", jsonData);
+
+        //            console.log("1:", jsonData[3]);
+        //            console.log("2:",  grid.option("dataSource")[3]);
+
+        //            if (!grid.option("focusedRowKey")) {
+        //                grid.option("focusedRowIndex", 0);
+        //            } else {
+        //                console.log("3:", getGridRowByKey("TestItemmethodGrid", grid.option("focusedRowKey")));
+        //                TestItemmethodChanged();
+        //            }
+        //        } catch (e) {
+        //            $("#TestItemmethodGrid").dxDataGrid("option", "dataSource", []);
+        //        }
+        //    }
+        //})
+
+        UtilView.dataGridSelect('TestItemmethodGrid', 'TestItemmethodSearchForm');
+    }
+
+    // 수정
+    function TestItemmethodEdit() {
+        TestItemmethodEditCheck(true, 'U');
+    }
+
+    // 저장
+    async function TestItemmethodSave() {
+
+        await $("#TestMethodGrid").dxDataGrid("instance").saveEditData();
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestItemmethodTRX',
+            dataType: "json",
+            async: false,
+            data: {
+                testMethods: JSON.stringify(_testItemmethodChanges),
+                testitem_cd: _testItemmethodTestItemId,
+                calculate_nm_master: $("#TestItemmethodMasterWriteForm input[name=calculate_nm_master]").val(),
+                calculate_formula_master: $("#TestItemmethodMasterWriteForm input[name=calculate_formula_master]").val()
+            },
+            success: function (result) {
+                TestItemmethodSearch();
+            }
+        })
+
+        TestItemmethodEditCheck(false, 'N');
+    }
+
+    // 취소
+    function TestItemmethodUndo() {
+        TestItemmethodEditCheck(false, 'N');
+        TestItemmethodChanged();
+    }
+
+    //#endregion
+
+
+    //#region 시헙방법 그리드 CRUD 이벤트
+
+    // 입력
+    function TestMethodInsert(info) {
+        var data = info.data;
+
+        data.gubun = "I";
+        data.testitem_cd = _testItemmethodTestItemId;
+
+        _testItemmethodChanges.push(data);
+    }
+
+    // 수정
+    function TestMethodUpdate(info) {
+        var data = info.data;
+
+        data.gubun = "U";
+
+        _testItemmethodChanges.push(data);
+    }
+
+    // 삭제
+    function TestMethodDelete(info) {
+        var data = info.data;
+
+        data.gubun = "D";
+
+        _testItemmethodChanges.push(data);
+    }
+
+    // 시험방법 초기 순서 지정
+    function TestMethodSetSeq(e) {
+
+        var grid = $("#TestMethodGrid").dxDataGrid("instance");
+        grid.option("focusedRowEnabled", true);
+
+        var gridData = grid.getVisibleRows();
+
+        e.data.testmethod_seq = gridData.length + 1;
+    }
+
+    //#endregion
+
+</script>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="TestItemmethodTestItemPopup"></div>
+    <div id="TestItemmethodReagentPopup"></div>
+
+    @(Html.DevExtreme().Popup()
+        .ID("TestItemmethodSpecialCharacterPopup")
+        .Width(450)
+        .Height(650)
+        .Visible(false)
+        .ShowTitle(true)
+        .Title("특수문자")
+        .CloseOnOutsideClick(false)
+        .ContentTemplate(new TemplateName("TestItemmethodSpecialCharacterPopupTemplate"))
+        .OnShown("TestItemmethodSelectSpecialCharacter")
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("TestItemmethodSpecialCharacterPopupTemplate"))
+    {
+        <div class="flex-box-div height-inherit" id="TestItemmethodSpecialCharacterPopupContent">
+            <div class="input-wrapper">
+                <div class="input-group input-group-sm col-6">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">종류</span>
+                    </div>
+                    <select class="form-control" name="operator_type" onchange="TestItemmethodSelectSpecialCharacter()">
+                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC055")).Rows)
+                        {
+                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="float-right">
+                    <button type="button" class="btn btn-secondary" onclick="TestItemmethodInputSpecialCharacter()">확인</button>
+                </div>
+            </div>
+
+            <div class="flex-grow-1 overflow-hidden">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TestItemmethodSpecialCharacterGrid")
+                    .KeyExpr("common_part_nm")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height("100%")
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("common_part_nm").Caption("특수문자");
+                        c.Add().DataField("common_module").Caption("계산수식");
+                        c.Add().DataField("common_remark").Caption("exmaple");
+                    })
+                //.OnFocusedRowChanged("TestItemmethodChanged")
+                )
+            </div>
+
+        </div>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험항목종류</span>
+                        </div>
+                        <select class="form-control" name="testitem_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC003")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험항목</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="testitem_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo");}
+        </div>
+
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TestItemmethodGrid")
+                    .KeyExpr("testitem_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("testitem_cd").Caption("코드").Width("10%");
+                        c.Add().DataField("testitem_nm").Caption("시험항목");
+                        c.Add().DataField("use_yn").Caption("사용").Width("10%")
+                            .DataType(GridColumnDataType.Boolean)
+                            .TrueText("Y")
+                            .FalseText("N")
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+                    })
+                    .OnFocusedRowChanged("TestItemmethodChanged")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName mb-1">
+                    <p>시험방법</p>
+                </div>
+
+                <form id="TestItemmethodMasterWriteForm">
+
+                    <div class="input-wrapper">
+                        <label class="col-2">계산 방법</label>
+                        <div class="input-group col-9">
+                            <div class="input-group-prepend">
+                                <button class="btn btn-outline-secondary" type="button" onclick="TestItemmethodCopyCalculate('1-1')">
+                                    ==>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="calculate_nm_master">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">계산 수식</label>
+                        <div class="input-group col-9">
+                            <div class="input-group-prepend">
+                                <button class="btn btn-outline-secondary" type="button" onclick="TestItemmethodCopyCalculate('1-2')">
+                                    ==>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="calculate_formula_master">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    검증
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+                <div class="mb-1">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("TestMethodGrid")
+                        .KeyExpr("testmethod_id")
+                        .DataSource(new JS("SetEmptyData"))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(485)
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .OnToolbarPreparing("HideToolbarButton")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("testmethod_seq").Caption("순서").Width("15%")
+                                .ValidationRules(vr =>
+                                {
+                                    vr.AddRequired().Message("순서는 필수 입력사항입니다.");
+                                }).AllowEditing(false);
+
+                            c.Add().DataField("testmethod_nm").Caption("시험 방법")
+                                .ValidationRules(vr =>
+                                {
+                                    vr.AddRequired().Message("시험 방법은 필수 입력사항입니다.");
+                                }).AllowEditing(false);
+
+                            c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드",
+                                         pDiv = "D",
+                                         pStrWhere = "QC012",
+                                         pTableName = "data_type"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("test_parameter_cd")
+                                 .Caption("변수").Width("15%")
+                                 .AllowEditing(false);
+
+                            c.Add().DataField("data_type").Visible(false);
+                            c.Add().DataField("data_min_manage").Visible(false);
+                            c.Add().DataField("data_max_manage").Visible(false);
+                            c.Add().DataField("test_parameter_cd").Visible(false);
+                            c.Add().DataField("tester_parameter_cd").Visible(false);
+                            c.Add().DataField("calculate_nm").Visible(false);
+                            c.Add().DataField("calculate_formula").Visible(false);
+                            c.Add().DataField("use_gb").Visible(false);
+                            c.Add().DataField("reagent_cd").Visible(false);
+
+                        })
+                        .OnRowInserted("TestMethodInsert")
+                        .OnRowUpdated("TestMethodUpdate")
+                        .OnRowRemoved("TestMethodDelete")
+                        .OnCellClick("TestMethodCellClick")
+                        //.OnFocusedCellChanged("TestMethodGetIndex")
+                        .OnFocusedRowChanged("TestMethodGetIndex")
+                        .OnInitNewRow("TestMethodSetSeq")
+                    )
+                </div>
+
+                <div class="mb-1">
+                    <form id="@(pagePrefix)WriteForm" onchange="TestMethodChange(event)">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">순서</label>
+                            <div class="input-group col-2">
+                                <input type="number" class="form-control" name="testmethod_seq" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">시험방법</label>
+                            <div class="input-group col-9">
+                                <input type="text" class="form-control" name="testmethod_nm" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">입력유형</label>
+                            <div class="input-group col-2">
+                                <select class="form-control" name="data_type">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC020")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <label class="col-2">관리범위</label>
+                            <div class="input-group col-2">
+                                <input type="number" class="form-control" name="data_min_manage" />
+                            </div>
+                            ~
+                            <div class="input-group col-2">
+                                <input type="number" class="form-control" name="data_max_manage" />
+                            </div>
+
+                        </div>
+                        <div class="input-wrapper">
+
+                            <label class="col-2">변수</label>
+                            <div class="input-group col-2">
+                                <select class="form-control" name="test_parameter_cd">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC012")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">파라미터</label>
+                            <div class="input-group col-5">
+                                <select class="form-control" name="tester_parameter_cd">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC067")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">기록방법</label>
+                            <div class="input-group col-9">
+                                <div class="input-group-prepend">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="TestItemmethodCopyCalculate('2-1')">
+                                        ==>
+                                    </button>
+                                </div>
+                                <input type="text" class="form-control" name="calculate_nm">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        특수문자
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">계산수식</label>
+                            <div class="input-group col-9">
+                                <div class="input-group-prepend">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="TestItemmethodCopyCalculate('2-2')">
+                                        ==>
+                                    </button>
+                                </div>
+                                <input type="text" class="form-control" name="calculate_formula">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        검증
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">소모품</label>
+                            <div class="input-group col-2">
+                                <select class="form-control" name="use_gb">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC011")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control searchPopupInput" name="reagent_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                                <input type="text" class="form-control" name="reagent_nm" readonly>
+                            </div>
+
+                        </div>
+
+                    </form>
+                </div>
+
+                <div class="divName">
+                    <p>복사</p>
+                </div>
+
+                <form id="TestItemmethodMasterCopyForm">
+
+                    <div class="input-wrapper menuDiv">
+                        <label class="col-2">시험항목</label>
+                        <div class="input-group col-9">
+                            <input type="text" class="form-control searchPopupInput" name="copy_testitem_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="TestItemmethodCopy()">
+                                    복사해오기
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

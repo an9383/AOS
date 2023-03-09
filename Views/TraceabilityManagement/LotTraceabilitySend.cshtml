@@ -1,0 +1,736 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var gmo_yn_ds = new[] {
+        new { keyfield = "", displayfield = "해당없음" },
+        new { keyfield = "Y", displayfield = "GMO" },
+        new { keyfield = "N", displayfield = "NONGMO" }
+    };
+
+}
+<style>
+
+    /*데이터생성*/
+    #LotTraceabilitySend .darksalmon {
+        background-color: darksalmon;
+        color: black;
+    }
+
+    /*전송준비*/
+    #LotTraceabilitySend .limegreen {
+        background-color: limegreen;
+        color: black;
+    }
+
+    /*전송완료*/
+    #LotTraceabilitySend .dodgerblue {
+        background-color: dodgerblue;
+        color: black;
+    }
+
+    /*전송실패*/
+    #LotTraceabilitySend .red {
+        background-color: red;
+        color: black;
+    }
+
+    /*재전송대기*/
+    #LotTraceabilitySend .lightgrey {
+        background-color: lightgrey;
+        color: black;
+    }
+
+    /* 필수값 입력안되어있을때*/
+    #LotTraceabilitySend .danger {
+        background-color: red;
+        opacity: 0.5;
+        color: black;
+    }
+</style>
+
+@* 제품 로트 정보 전송*@
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var LotTraceabilitySend_FocusedRowData = null;
+    var LotTraceabilitySendDetail_FocusedRowData = null;
+
+    var LotTraceabilitySend_signChk = "";
+
+    $(function () {
+        setDatePicker("#LotTraceabilitySend .datepicker");
+
+        // 그리드 데이터 조회
+        LotTraceabilitySendSearch();
+
+    })
+
+
+    //로트정보 조회
+    function LotTraceabilitySendSearch() {
+
+        var formData = new FormData($("#LotTraceabilitySendSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/TraceabilityManagement/LotTraceabilitySendSearch',
+            async: false,
+            data: {
+                start_date_S: formData.get("start_date_S"),
+                end_date_S: formData.get("end_date_S"),
+                send_status_S: formData.get("send_status")
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#LotTraceabilitySendGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#LotTraceabilitySendGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#LotTraceabilitySendDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    LotTraceabilitySend_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "LotTraceabilitySendGrid");
+
+    }
+
+    //로트 원료정보 상세조회
+    function LotTraceabilitySendDetailSearch() {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/LotTraceabilitySendDetailSearch',
+            data: {
+                gms_pdtlot_seq: LotTraceabilitySend_FocusedRowData.gms_seq
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#LotTraceabilitySendDetailGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#LotTraceabilitySendDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    LotTraceabilitySendDetail_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "LotTraceabilitySendDetailGrid", true);
+
+    }
+
+    //로트 정보 엑셀다운
+    function LotTraceabilitySendExcel() {
+        gridExportToExcel("LotTraceabilitySendGrid", "LotTraceabilitySendData");
+    }
+
+    //변경
+    //정보실패나 재전송준비 상태만 선택한 콤보박스의 상태로 변경
+    function LotStatusChange() {
+        var changeVal = $("#LotTraceabilitySend #send_status_change").val();
+        if (UtilView.isEmpty(changeVal)) {
+            alert("다른 상태로 변경해주세요.");
+            return;
+        }
+
+        var data = $("#LotTraceabilitySendGrid").dxDataGrid("instance").getSelectedRowsData(); 
+        
+        if (UtilView.isEmpty(data)) {
+            alert("체크된 데이터가 없습니다"); return;
+        } else {
+            var check_send = false;
+
+            $.map(data, function (value, index) {
+                if (value.send_status == "3" || value.send_status == "4") {
+                    check_send = true;
+                } else {
+                    check_send = false;
+                }
+            });
+
+            if (!check_send) {
+                alert("체크된 항목 중에 정보실패/재전송준비 상태가 아닌 것이 있습니다."); 
+                return;
+            }
+
+            $.map(data, function (value, index) {
+
+                //정보실패나 재전송준비 상태만 상태변경
+                if (value.send_status == "3" || value.send_status == "4") {
+
+                    $.ajax({
+                        type: 'POST',
+                        async: false,
+                        url: '/TraceabilityManagement/LotStatusChange',
+                        data: {
+                            gms_pdtlot_seq: value.gms_seq,
+                            send_status: $("#LotTraceabilitySend #send_status_change").val()
+                        },
+                        success: function (result) {
+                        }
+                    })
+
+                }
+            });
+
+            LotTraceabilitySendSearch();
+        }
+    }
+
+    //동일로트변경
+    //동일 생산정보에 대한 추가 생산량 처리
+    function LotSameUpdate() {
+
+        if (UtilView.isEmpty(LotTraceabilitySend_FocusedRowData)) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/LotSameUpdate',
+            data: {
+                gms_seq: LotTraceabilitySend_FocusedRowData.gms_seq
+            },
+            success: function (result) {
+            }
+        })
+
+        LotTraceabilitySendSearch();
+
+    }
+
+    //동일로트기본값
+    //동일로트변경 후 초기화시
+    function LotSameRefresh() {
+
+        if (UtilView.isEmpty(LotTraceabilitySend_FocusedRowData)) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/LotSameRefresh',
+            data: {
+                gms_seq: LotTraceabilitySend_FocusedRowData.gms_seq
+            },
+            success: function (result) {
+            }
+        })
+
+        LotTraceabilitySendSearch();
+    }
+
+    //로트정보 api 전송
+    function LotSend() {
+
+        var selectedRowsData = $("#LotTraceabilitySendGrid").dxDataGrid("instance").getSelectedRowsData(); 
+        var check_send = false;
+
+        //체크된 값이 없으면 return
+        if (UtilView.isEmpty(selectedRowsData)) {
+            alert("체크된 항목이 없습니다."); 
+            return;
+        } else {
+
+            $.map(selectedRowsData, function (value, index) {
+                if (value.send_status != "1") {
+                    check_send = true;
+                    alert("체크된 항목 중에 전송준비 상태가 아닌 것이 있습니다."); return;
+                } 
+            });
+
+        }
+      
+        if (!check_send) {
+            LotTraceabilitySend_signChk = "All";
+
+            //전자서명 팝업
+            var popup = $("#LotTraceabilitySend_SignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#LotTraceabilitySend_SignPopupTemplate"));
+            popup.show();
+        }
+    }
+
+    //원료 데이터만 전송
+    function LotMaterialSend() {
+
+        var selectedRowsData = $("#LotTraceabilitySendDetailGrid").dxDataGrid("instance").getSelectedRowsData();
+        if (UtilView.isEmpty(selectedRowsData)) {
+            alert("체크된 항목이 없습니다");
+            return;
+        }
+
+        var check_send = false;
+
+        $.map(selectedRowsData, function (value, index) {
+            if (value.send_status == "1") {
+                check_send = true;
+            } else {
+                check_send = false;
+                return;
+            }
+        });
+
+        if (!check_send) {
+            alert("선택된 항목 중에 전송준비 상태가 아닌것이 있습니다.");
+            return;
+        }
+
+        LotTraceabilitySend_signChk = "Material";
+
+        //전자서명 팝업
+        var popup = $("#LotTraceabilitySend_SignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#LotTraceabilitySend_SignPopupTemplate"));
+        popup.show();
+     
+    }
+
+    //그리드 이벤트
+
+    //로트 정보 포커스 변경
+    function LotTraceabilitySendGrid_FocusedRowChanged(e) {
+
+        //서명자, 서명시간 초기화
+        $("#LotTraceabilitySendSearchForm input[name=send_confirm_emp_nm]").val("");
+        $("#LotTraceabilitySendSearchForm input[name=send_confirm_emp_time]").val("");
+
+        if (!e.row || !e.row.data) {
+            LotTraceabilitySend_FocusedRowData = null;
+
+        } else {
+            LotTraceabilitySend_FocusedRowData = e.row.data;
+
+            //서명자, 서명시간 설정
+            var confirm_time = new Date(LotTraceabilitySend_FocusedRowData.send_confirm_emp_time).format("yyyy-MM-dd HH:mm");
+            $("#LotTraceabilitySendSearchForm input[name=send_confirm_emp_nm]").val(LotTraceabilitySend_FocusedRowData.send_confirm_emp_nm);
+            $("#LotTraceabilitySendSearchForm input[name=send_confirm_emp_time]").val(confirm_time);
+
+            //원료정보 조회
+            LotTraceabilitySendDetailSearch();
+        }
+    }
+
+
+    //로트 원료정보 포커스 변경
+    function LotTraceabilitySendDetailGrid_FocusedRowChanged(e) {
+        if (!e.row || !e.row.data) {
+            LotTraceabilitySendDetail_FocusedRowData = null;
+        } else {
+            LotTraceabilitySendDetail_FocusedRowData = e.row.data;
+        }
+    }
+
+    //로트 정보 상태컬럼 배경설정
+    function LotTraceabilitySendGrid_CellPrepared(e) {
+        //상태 컬럼
+        if (e.rowType == "data" && e.column.dataField === "send_status_nm") {
+            if (e.data.send_status == "0") {              //데이터생성
+                e.cellElement.addClass('darksalmon');
+            } else if (e.data.send_status == "1") {       //전송준비
+                e.cellElement.addClass('limegreen');
+            } else if (e.data.send_status == "2") {       //전송완료
+                e.cellElement.addClass('dodgerblue');
+            } else if (e.data.send_status == "3") {       //전송실패
+                e.cellElement.addClass('red');
+            } else if (e.data.send_status == "4") {       //재전송대기
+                e.cellElement.addClass('lightgrey');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "food_histrace_num") {
+            if (UtilView.isEmpty(e.data.food_histrace_num)) {
+                e.cellElement.addClass('danger');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "reg_num") {
+            if (UtilView.isEmpty(e.data.reg_num)) {
+                e.cellElement.addClass('danger');
+            }
+        }
+    }
+
+    function LotTraceabilitySendDetailGrid_CellPrepared(e) {
+
+        if (e.rowType == "data" && e.column.dataField === "orm_std_cd") {
+            if (UtilView.isEmpty(e.data.orm_std_cd)) {
+                e.cellElement.addClass('danger');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "sup_business_reg_no") {
+            if (UtilView.isEmpty(e.data.sup_business_reg_no)) {
+                e.cellElement.addClass('danger');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "sup_psn") {
+            if (UtilView.isEmpty(e.data.sup_psn)) {
+                e.cellElement.addClass('danger');
+            }
+        }
+    }
+
+
+    //전자서명
+
+    //서명 폼 초기화
+    function LotTraceabilitySend_SignFormReset() {
+        $('#LotTraceabilitySendSignForm')[0].reset();
+    }
+
+    //서명자 확인 -> 유효한 사용자 -> 로트정보 준비상태로 변경
+    function LotTraceabilitySend_SignSubmit() {
+        var signChk = LotTraceabilitySend_signChk;
+        LotTraceabilitySend_signChk = "";
+
+        setTimeout(function () {
+            var popup = $("#LotTraceabilitySend_SignPopup").dxPopup("instance");
+            popup.hide();
+        }, 1000);
+
+        //유효한 사용자인지 확인
+        var validate_emp_cd = LotTraceabilitySend_SignIDValidation();
+        if (validate_emp_cd == "") return;
+
+        var selectedRowsData = null;
+
+        //로트정보전송인지, 원료만 전송인지 
+        if ("All" == signChk) {
+            selectedRowsData = $("#LotTraceabilitySendGrid").dxDataGrid("instance").getSelectedRowsData();
+        } else {
+            selectedRowsData = $("#LotTraceabilitySendDetailGrid").dxDataGrid("instance").getSelectedRowsData();
+        }
+
+        if (UtilView.isEmpty(selectedRowsData)) return;
+
+        $.map(selectedRowsData, function (value, index) {
+
+            //전송자 서명 저장
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/TraceabilityManagement/LotSendSign',
+                data: {
+                    emp_cd: validate_emp_cd,
+                    gms_pdtlot_seq: value.gms_seq
+                },
+                success: function (result) {
+
+                }
+            })
+
+        });
+
+        //로트정보전송인지, 원료만 전송인지 
+        if ("All" == signChk) {
+            CallPDT_PROC(selectedRowsData, null, "All");
+        } else {
+            CallPDT_PROC(null, selectedRowsData, "Material");
+        }
+    }
+
+    function CallPDT_PROC(lotData, materialData, signChk) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/CallPDT_PROC',
+            data: {
+                lotData: JSON.stringify(lotData),
+                materialData: JSON.stringify(materialData),
+                gubun: signChk
+            },
+            //dataType: 'json',
+            success: function (result) {
+                console.log(result); //식품이력추적 api 호출 응답데이터
+                alert(result);
+            }
+        })
+
+        LotTraceabilitySendSearch();
+    }
+
+    //유효 사용자 확인
+    function LotTraceabilitySend_SignIDValidation() {
+        var emp_cd = "";
+
+        var data = new FormData($('#LotTraceabilitySendSignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (!result) {
+                    alert("잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                emp_cd = data.get("txt_ID");
+
+                var json = JSON.parse(result)[0];
+
+                //로그인폼 부서, 사원명 설정
+                $("#LotTraceabilitySendSignForm input[name='dept_nm']").val(json.dept_nm);
+                $("#LotTraceabilitySendSignForm input[name='emp_nm']").val(json.emp_nm);
+            }
+        });
+
+        return emp_cd;
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @* 전자서명 공통 팝업*@
+    @using (Html.DevExtreme().NamedTemplate("LotTraceabilitySend_SignPopupTemplate"))
+    {
+        @*<h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>*@
+
+        <form id="LotTraceabilitySendSignForm">
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+            <br />
+            <div class="input-wrapper">
+                <label class="col-3">부서</label>
+                <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+                <label class="col-3">성명</label>
+                <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+            </div>
+        </form>
+
+        <div class="align-center margin-top">
+            <button class="btn btn-secondary" onclick="LotTraceabilitySend_SignSubmit()">확인</button>
+        </div>
+    }
+
+    @(Html.DevExtreme().Popup()
+        .ID("LotTraceabilitySend_SignPopup")
+        .Width(500)
+        .Height(230)
+        .ShowTitle(true)
+        .Title("전자서명 - 수기서명과 동일한 효력을 갖습니다.")
+        .OnHidden("LotTraceabilitySend_SignFormReset")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+    @* 전자서명 공통 팝업*@
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date_S" value="@DateTime.Now.ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date_S" value="@DateTime.Now.AddDays(7).ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control col-12" name="send_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "MF001")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태변경</span>
+                        </div>
+                        <select class="form-control col-12" name="send_status_change" id="send_status_change">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "MF001")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="LotStatusChange()">변경</button>
+
+                    <div class="input-group input-group-sm col-1"></div>
+
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="LotSameUpdate()">동일로트변경</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="LotSameRefresh()">동일로트기본값</button>
+
+                    <button type="button" class="btn btn-sm btn-secondary btn-danger col-1" onclick="LotSend()">전송</button>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">전송자</span>
+                        </div>
+                        <input type="text" class="form-control text-center" name="send_confirm_emp_nm" readonly>
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <input type="text" class="form-control text-center" name="send_confirm_emp_time" readonly>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>제품Lot 정보</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("LotTraceabilitySendGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always).AllowSelectAll(false))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(false)
+                    .KeyExpr("gms_seq")
+                    .Height(350)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("LotTraceabilitySendGrid_CellPrepared")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("send_status_nm").Caption("상태");
+                        c.Add().DataField("gms_item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("gms_receipt_date").Caption("입고일자");
+                        c.Add().DataField("reg_num").Caption("식품이력추적등록번호");
+                        c.Add().DataField("food_histrace_num").Caption("식품이력추적관리번호");
+                        c.Add().DataField("mnft_day").Caption("제조일자");
+                        c.Add().DataField("lot_num").Caption("로트번호");
+                        c.Add().DataField("crcl_prd_day").Caption("유통기한");
+                        c.Add().DataField("prod_qty").Format("#,##0").Caption("생산수량");
+                        c.Add().DataField("prod_qty_unt").Caption("생산수량 단위");
+                        c.Add().DataField("mnft_fact").Caption("제조공장");
+                        c.Add().DataField("mnft_fact_addr").Caption("제조공장 주소");
+                        c.Add().DataField("mnft_prv").Caption("제조국");
+                        c.Add().DataField("gmo_yn").Caption("GMO여부")
+                            .Lookup(
+                                lookup => lookup
+                                .DataSource(gmo_yn_ds)
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            );
+                        c.Add().DataField("remark").Caption("비고");
+                        c.Add().DataField("temp_1").Caption("임시필드1");
+                        c.Add().DataField("temp_2").Caption("임시필드2");
+                        c.Add().DataField("temp_3").Caption("임시필드3");
+                        c.Add().DataField("confirm_emp_nm").Caption("준비자");
+                        c.Add().DataField("confirm_emp_time").Caption("준비시간");
+                        c.Add().DataField("send_confirm_emp_nm").Caption("전송자");
+                        c.Add().DataField("send_confirm_emp_time").Caption("전송시간");
+
+                    })
+                    .OnFocusedRowChanged("LotTraceabilitySendGrid_FocusedRowChanged")
+                )
+
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <button type="button" class="btn btn-sm btn-secondary right" onclick="LotMaterialSend()">원료 데이터만 전송</button>
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("LotTraceabilitySendDetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always).AllowSelectAll(false))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(false)
+                    .KeyExpr("gms_seq")
+                    .Height(470)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("LotTraceabilitySendDetailGrid_CellPrepared")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("reg_num").Caption("식품이력추적등록번호");
+                        c.Add().DataField("food_histrace_num").Caption("식품이력추적관리번호");
+                        c.Add().DataField("orm_std_cd").Caption("표준코드");
+                        c.Add().DataField("orm_nm").Caption("표준명");
+                        c.Add().DataField("orm_nm_eng").Caption("표준영문명");
+                        c.Add().DataField("prv_natn_cd").Caption("국가코드");
+                        c.Add().DataField("sup_business_reg_no").Caption("사업자번호");
+                        c.Add().DataField("sup_psn").Caption("공급처명");
+                        c.Add().DataField("sup_psn_zipc").Caption("우편번호");
+                        c.Add().DataField("sup_psn_addr1").Caption("공급자주소1");
+                        c.Add().DataField("sup_psn_addr2").Caption("공급자주소2");
+                        c.Add()
+                            .Lookup(
+                                lookup => lookup
+                                .DataSource(gmo_yn_ds)
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            )
+                        .DataField("gmo_yn").Caption("GMO여부");
+                        c.Add().DataField("remark").Caption("비고");
+                        c.Add().DataField("temp_1").Caption("임시필드1");
+                        c.Add().DataField("temp_2").Caption("임시필드2");
+                        c.Add().DataField("temp_3").Caption("임시필드3");
+                    })
+                    .OnFocusedRowChanged("LotTraceabilitySendDetailGrid_FocusedRowChanged")
+                //.OnRowUpdated("LotTraceabilitySendDetail_OnRowUpdated")
+                )
+
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -1,0 +1,621 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var WorkResult = Html.Raw(Json.Encode(ViewBag.WorkResult.Data));
+    var Item = Html.Raw(Json.Encode(ViewBag.Item.Data));
+}
+
+
+@*생산공수현황*@
+
+<script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+        var _workResultJsonData;
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            _workResultJsonData = JSON.parse(@WorkResult);
+
+            console.log(_workResultJsonData);
+
+            if (_workResultJsonData.Table) {
+                $("#" + PagePrefix + "Grid1").dxDataGrid("option", "dataSource", _workResultJsonData.Table);
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "품목코드" },
+                { dataField: "item_nm", caption: "품목명" }
+            ];
+
+            createPopup(PagePrefix + "Item", "품목 조회", @Item, popupColumns);
+
+            var month = new Date().getMonth() + 1;
+
+            //$("#" + FormNmSearch + " select[name=month]").val((month >= 10 ? month : "0" + month));
+            $("#" + FormNmSearch + " select[name=month]").val("08");
+
+        });
+
+        // 검색용 제조제품 팝업
+        function WorkResultSelectItem() {
+            $("#WorkResultItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업 선택
+        function WorkResultItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#WorkResultSearchForm input[name=item_cd]").val(data.item_cd);
+
+            $("#WorkResultItemPopup").dxPopup("instance").hide();
+        }
+
+        // 조회
+        function WorkResultSearch() {
+
+            var formData = $("#WorkResultSearchForm").serialize();
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/WorkResultSelect',
+                data: formData,
+                dataType: 'json',
+                success: function (result) {
+
+                    _workResultJsonData = JSON.parse(result);
+
+                    WorkResultChangeTab();
+                }
+            })
+
+        }
+
+        // 탭 변경
+        function WorkResultChangeTab() {
+
+            var tabIndex = $("#WorkResultTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+            switch (tabIndex) {
+                case 0:
+                    $("#WorkResultGrid1").dxDataGrid("option", "dataSource", _workResultJsonData.Table);
+                    break;
+
+                case 1:
+                    $("#WorkResultGrid2").dxDataGrid("option", "dataSource", _workResultJsonData.Table1);
+                    break;
+
+                case 2:
+                    $("#WorkResultGrid3").dxDataGrid("option", "dataSource", _workResultJsonData.Table2);
+                    break;
+
+                case 3:
+                    $("#WorkResultGrid4").dxDataGrid("option", "dataSource", _workResultJsonData.Table3);
+                    break;
+
+            }
+
+        }
+
+    </script>
+
+<div id="@(pagePrefix)"page-ctrl-name="@(pageControllerNm)">
+
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">년도</span>
+                        </div>
+                        <input type="number" class="form-control" name="year" value="@DateTime.Now.Year.ToString()">
+                        <select class="form-control" name="month">
+                            @{
+                                for (int i = 1; i <= 12; i++)
+                                {
+                                    <option value="@((i < 10) ? "0" + i.ToString() : i.ToString())">@i</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().TabPanel()
+                    .ID(pagePrefix+"TabPanel")
+                    .SelectedIndex(0)
+                    .Loop(false)
+                    .Height(869)
+                    .AnimationEnabled(false)
+                    .SwipeEnabled(false)
+                    .OnTitleClick(pagePrefix + "ChangeTab")
+                    .Items(config =>
+                    {
+                        config.Add().Title("작업자공수").Template(new JS("$('#"+ pagePrefix + "TabContent1')"));
+                        config.Add().Title("설비가동시간").Template(new JS("$('#" + pagePrefix + "TabContent2')"));
+                        config.Add().Title("공정수율").Template(new JS("$('#" + pagePrefix + "TabContent3')"));
+                        config.Add().Title("공정진행현황").Template(new JS("$('#" + pagePrefix + "TabContent4')"));
+                    })
+                )
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent1"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Grid1")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(830)
+                        //.KeyExpr("order_proc_id")
+                        .ShowBorders(true)
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .FocusedRowEnabled(true)
+                        .AllowColumnResizing(true)
+                        .KeyExpr("lot_no")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("품목코드");
+                            c.Add().DataField("item_nm").Caption("제품명");
+                            c.Add().DataField("lot_no").Caption("LOT");
+                            c.Add().DataField("start_date").Caption("제조일자");
+                            c.Add().DataField("order_qty").Caption("제조수량");
+
+
+
+                            c.Add().DataField("H3_work_time").Caption("선혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("H_work_time").Caption("연합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("GZ_work_time").Caption("건조")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("GZ2_work_time").Caption("과립")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("JR_work_time").Caption("정립")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("H2_work_time").Caption("후혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("T_work_time").Caption("타정")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("C_work_time").Caption("코팅")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            //c.Add().DataField("S_work_time").Caption("선별")
+                            //    .DataType(GridColumnDataType.Number)
+                            //    .Format("#,###");
+                            c.Add().DataField("P_work_time").Caption("포장")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+
+                            c.Add().DataField("order_proc_enter_time").Caption("작업일자");
+                            c.Add().DataField("order_proc_real_ea_qty").Caption("입고수량");
+                            c.Add().DataField("order_proc_rate").Caption("생산수율");
+                            c.Add().DataField("tot_work_time").Caption("작업자공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("tot_equip_time").Caption("설비공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                        })
+                        .Summary(s => s.TotalItems(items =>
+                        {
+                            items.Add()
+                                .Column("H3_work_time")
+                                .ShowInColumn("H3_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("H_work_time")
+                                .ShowInColumn("H_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("GZ_work_time")
+                                .ShowInColumn("GZ_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("GZ2_work_time")
+                                .ShowInColumn("GZ2_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("JR_work_time")
+                                .ShowInColumn("JR_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("H2_work_time")
+                                .ShowInColumn("H2_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("T_work_time")
+                                .ShowInColumn("T_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("C_work_time")
+                                .ShowInColumn("C_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            //items.Add()
+                            //    .Column("S_work_time")
+                            //    .ShowInColumn("S_work_time")
+                            //    .ValueFormat("#,###")
+                            //    .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("P_work_time")
+                                .ShowInColumn("P_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("tot_work_time")
+                                .ShowInColumn("tot_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("tot_equip_time")
+                                .ShowInColumn("tot_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                        }))
+                    )
+                }
+
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent2"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Grid2")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(830)
+                        //.KeyExpr("order_proc_id")
+                        .ShowBorders(true)
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .FocusedRowEnabled(true)
+                        .AllowColumnResizing(true)
+                        .KeyExpr("lot_no")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("품목코드");
+                            c.Add().DataField("item_nm").Caption("제품명");
+                            c.Add().DataField("lot_no").Caption("LOT");
+                            c.Add().DataField("start_date").Caption("제조일자");
+                            c.Add().DataField("order_qty").Caption("제조수량");
+
+                            c.Add().DataField("H3_equip_time").Caption("선혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("H_equip_time").Caption("연합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("GZ_equip_time").Caption("건조")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("GZ2_equip_time").Caption("과립")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("JR_equip_time").Caption("정립")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("H2_equip_time").Caption("후혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("T_equip_time").Caption("타정")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("C_equip_time").Caption("코팅")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            //c.Add().DataField("S_equip_time").Caption("선별")
+                            //    .DataType(GridColumnDataType.Number)
+                            //    .Format("#,###");
+                            c.Add().DataField("P_equip_time").Caption("포장")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+
+                            c.Add().DataField("order_proc_enter_time").Caption("작업일자");
+                            c.Add().DataField("order_proc_real_ea_qty").Caption("입고수량");
+                            c.Add().DataField("order_proc_rate").Caption("생산수율");
+                            c.Add().DataField("tot_work_time").Caption("작업자공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("tot_equip_time").Caption("설비공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                        })
+                        .Summary(s => s.TotalItems(items =>
+                        {
+                            items.Add()
+                                .Column("H3_equip_time")
+                                .ShowInColumn("H3_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("H_equip_time")
+                                .ShowInColumn("H_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("GZ_equip_time")
+                                .ShowInColumn("GZ_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("GZ2_equip_time")
+                                .ShowInColumn("GZ2_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("JR_equip_time")
+                                .ShowInColumn("JR_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("H2_equip_time")
+                                .ShowInColumn("H2_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("T_equip_time")
+                                .ShowInColumn("T_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("C_equip_time")
+                                .ShowInColumn("C_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            //items.Add()
+                            //    .Column("S_equip_time")
+                            //    .ShowInColumn("S_equip_time")
+                            //    .ValueFormat("#,###")
+                            //    .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("P_equip_time")
+                                .ShowInColumn("P_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+
+
+                            items.Add()
+                                .Column("tot_work_time")
+                                .ShowInColumn("tot_work_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+                            items.Add()
+                                .Column("tot_equip_time")
+                                .ShowInColumn("tot_equip_time")
+                                .ValueFormat("#,###")
+                                .SummaryType(SummaryType.Sum);
+
+                        }))
+                    )
+                }
+
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent3"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Grid3")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(830)
+                        //.KeyExpr("order_proc_id")
+                        .ShowBorders(true)
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .FocusedRowEnabled(true)
+                        .AllowColumnResizing(true)
+                        .KeyExpr("lot_no")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("품목코드");
+                            c.Add().DataField("item_nm").Caption("제품명");
+                            c.Add().DataField("lot_no").Caption("LOT");
+                            c.Add().DataField("start_date").Caption("제조일자");
+                            c.Add().DataField("order_qty").Caption("제조수량");
+
+                            c.Add().DataField("H3_rate").Caption("선혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.H3_rate <= 0 ? null : rowData.H3_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("H_rate").Caption("연합")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.H_rate <= 0 ? null : rowData.H_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("GZ_rate").Caption("건조")
+                              .DataType(GridColumnDataType.Number)
+                              .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.GZ_rate <= 0 ? null : rowData.GZ_rate);
+                                }")
+                              .Format("#,###.##0");
+                            c.Add().DataField("GZ2_rate").Caption("과립")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.GZ2_rate <= 0 ? null : rowData.GZ2_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("JR_rate").Caption("정립")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.JR_rate <= 0 ? null : rowData.JR_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("H2_rate").Caption("후혼합")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.H2_rate <= 0 ? null : rowData.H2_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("T_rate").Caption("타정")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.T_rate <= 0 ? null : rowData.T_rate);
+                                }")
+                                .Format("#,###.##0");
+                            c.Add().DataField("C_rate").Caption("코팅")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.C_rate <= 0 ? null : rowData.C_rate);
+                                }")
+                                .Format("#,###.##0");
+                            //c.Add().DataField("S_rate").Caption("선별")
+                            //    .DataType(GridColumnDataType.Number)
+                            //    .CalculateCellValue(@"function(rowData)
+                            //    {   
+                            //        return (rowData.S_rate <= 0 ? null : rowData.S_rate);
+                            //    }")
+                            //    .Format("#,###.##0");
+                            c.Add().DataField("P_rate").Caption("포장")
+                                .DataType(GridColumnDataType.Number)
+                                .CalculateCellValue(@"function(rowData)
+                                {   
+                                    return (rowData.P_rate <= 0 ? null : rowData.P_rate);
+                                }")
+                                .Format("#,###.##0");
+
+                            c.Add().DataField("order_proc_enter_time").Caption("작업일자");
+                            c.Add().DataField("order_proc_real_ea_qty").Caption("입고수량");
+                            c.Add().DataField("order_proc_rate").Caption("생산수율");
+                            c.Add().DataField("tot_work_time").Caption("작업자공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("tot_equip_time").Caption("설비공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                        })
+                    )
+                }
+
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent4"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Grid4")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(830)
+                        //.KeyExpr("order_proc_id")
+                        .ShowBorders(true)
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .FocusedRowEnabled(true)
+                        .AllowColumnResizing(true)
+                        .KeyExpr("lot_no")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("품목코드");
+                            c.Add().DataField("item_nm").Caption("제품명");
+                            c.Add().DataField("lot_no").Caption("LOT");
+                            c.Add().DataField("start_date").Caption("제조일자");
+                            c.Add().DataField("order_qty").Caption("제조수량");
+
+                            c.Add().DataField("H3_work_date").Caption("선혼합");
+                            c.Add().DataField("H_work_date").Caption("연합");
+                            c.Add().DataField("GZ_work_date").Caption("건조");
+                            c.Add().DataField("GZ2_work_date").Caption("과립");
+                            c.Add().DataField("JR_work_date").Caption("정립");
+                            c.Add().DataField("H2_work_date").Caption("후혼합");
+                            c.Add().DataField("T_work_date").Caption("타정");
+                            c.Add().DataField("C_work_date").Caption("코팅");
+                            c.Add().DataField("S_work_date").Caption("선별");
+                            c.Add().DataField("P_work_date").Caption("포장");
+
+                            c.Add().DataField("order_proc_enter_time").Caption("작업일자");
+                            c.Add().DataField("order_proc_real_ea_qty").Caption("입고수량");
+                            c.Add().DataField("order_proc_rate").Caption("생산수율")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                            c.Add().DataField("tot_equip_time").Caption("설비공수")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,###");
+                        })
+                    )
+                }
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

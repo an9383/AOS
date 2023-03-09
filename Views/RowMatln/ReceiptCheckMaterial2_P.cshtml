@@ -1,0 +1,1008 @@
+﻿@using System.Data
+@{
+    Layout = null;
+    ViewBag.Title = "ReceiptCheckMaterial2_P";
+}
+
+@{
+    var ReceiptCheckMaterial2_PData = @Html.Raw(Json.Encode(ViewBag.ReceiptCheckMaterial2_PData.Data));
+
+    var RCMP_WorkerJson = @Html.Raw(Json.Encode(ViewBag.RCMP_Worker.Data));
+    var RCMP_CheckerJson = @Html.Raw(Json.Encode(ViewBag.RCMP_Checker.Data));
+}
+
+@{
+    var RCMP_SelectBox = new[] {
+        new { keyfield = "", displayfield = "" },
+        new { keyfield = "O", displayfield = "O" },
+        new { keyfield = "X", displayfield = "X" }
+    };
+}
+
+    <script type="text/javascript" id="ReceiptCheckMaterial2_PJs">
+
+    // SP 구문, gubun 변수
+    var RCMP_Gubun = "@ViewBag.RCMP_Gubun";
+
+    var RCMP_validation_submit = false;
+
+    //검수번호 중복 체크 값
+    var RCMP_overlap_check_no = false;
+
+    var RCMP_purchase_status = "";
+
+    //체크 결과 담는 array
+    var RCMP_checkList = new Array();
+
+    //검수 순번
+    var RCMP_purchase_order_seq_seq = "";
+
+    $(function () {
+
+        // 아래 그리드 셋팅
+        if ((@Html.Raw(Json.Encode(Model.Data))).length > 0) {
+            $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@Html.Raw(Json.Encode(Model.Data))));
+        }
+
+        // 수정중인지 체크
+        ReceiptCheckMaterial2_P_EditCheck(false);
+
+        // 상단 폼 데이터 셋팅
+        var _ReceiptCheckMaterial2_PData = JSON.parse(@ReceiptCheckMaterial2_PData)[0];
+
+        if (RCMP_Gubun == "I") {
+            RCMP_purchase_order_seq_seq = $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").totalCount() + 1;
+
+            var purchase_order_seq = RCM_P_leadingZeros(_ReceiptCheckMaterial2_PData.purchase_order_seq, 2);
+            var receipt_check_seq = RCM_P_leadingZeros(RCMP_purchase_order_seq_seq, 2);
+
+            var _receipt_check_no = _ReceiptCheckMaterial2_PData.purchase_order_no + purchase_order_seq + receipt_check_seq;
+
+            $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_receipt_check_no);               // 검수번호
+        } else {
+            RCMP_purchase_order_seq_seq = _ReceiptCheckMaterial2_PData.receipt_check_rpt_id;
+            $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_no);
+        }
+
+        $("#ReceiptCheckMaterial2_P input[name=purchase_order_seq]").val(_ReceiptCheckMaterial2_PData.purchase_order_seq);            //발주순서
+
+        $("#ReceiptCheckMaterial2_P input[name=purchase_order_no]").val(_ReceiptCheckMaterial2_PData.purchase_order_no);                //발주번호
+        $("#ReceiptCheckMaterial2_P input[name=item_cd]").val(_ReceiptCheckMaterial2_PData.item_cd);                                    //원자재코드
+        $("#ReceiptCheckMaterial2_P input[name=item_nm]").val(_ReceiptCheckMaterial2_PData.item_nm);                                    //원자재명
+        $("#ReceiptCheckMaterial2_P input[name=cust_cd]").val(_ReceiptCheckMaterial2_PData.cust_cd);                                    //거래처코드
+        $("#ReceiptCheckMaterial2_P input[name=cust_nm]").val(_ReceiptCheckMaterial2_PData.cust_nm);                                    //거래처명
+        $("#ReceiptCheckMaterial2_P input[name=purchase_order_qty]").val(_ReceiptCheckMaterial2_PData.purchase_order_qty);              //발주수량
+        $("#ReceiptCheckMaterial2_P input[name=purchase_order_unit]").val(_ReceiptCheckMaterial2_PData.purchase_order_unit);            //발주단위
+        $("#ReceiptCheckMaterial2_P input[name=possible_qty]").val(_ReceiptCheckMaterial2_PData.possible_qty);                          //입고가능수량
+
+        $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val(_ReceiptCheckMaterial2_PData.purchase_status);                    //입고구분
+        $("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val(_ReceiptCheckMaterial2_PData.receipt_check_state);            //검수결과
+        $("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_dt);            //검수일자
+        $("#ReceiptCheckMaterial2_P input[name=receipt_check_pack_form]").val(_ReceiptCheckMaterial2_PData.pack_form);                  //포장수량
+        $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_qty);            //검수수량
+        $("#ReceiptCheckMaterial2_P input[name=receipt_check_unit_wt]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_net_qty);    //표시된중량
+        $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val(_ReceiptCheckMaterial2_PData.worker_emp_cd);                            //점검자코드
+        $("#ReceiptCheckMaterial2_P input[name=worker_nm]").val(_ReceiptCheckMaterial2_PData.worker_emp_nm);                            //점검자명
+        $("#ReceiptCheckMaterial2_P input[name=checker_cd]").val(_ReceiptCheckMaterial2_PData.checker_emp_cd);                          //확인자코드
+        $("#ReceiptCheckMaterial2_P input[name=checker_nm]").val(_ReceiptCheckMaterial2_PData.checker_emp_nm);                          //확인자명
+        $("#ReceiptCheckMaterial2_P input[name=remark]").val(_ReceiptCheckMaterial2_PData.receipt_check_remark);                        //비고
+
+        setDatePicker("#ReceiptCheckMaterial2_P .datepicker");
+
+        // 팝업 셋팅
+        /* 점검자 팝업 */
+        var RCMP_Worker_Data = @RCMP_WorkerJson;
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("RCMP_Worker", "사원 조회", RCMP_Worker_Data, columns, "emp_cd");
+
+        /* 점검자 팝업 */
+        var RCMP_Checker_Data = @RCMP_CheckerJson;
+
+        createPopup("RCMP_Checker", "사원 조회", RCMP_Checker_Data, columns, "emp_cd");
+
+    });
+
+    //0자리수 적용시키기
+    function RCM_P_leadingZeros(n, digits) {
+        var zero = '';
+        n = n.toString();
+
+        if (n.length < digits) {
+            for (var i = 0; i < digits - n.length; i++)
+                zero += '0';
+        }
+        return zero + n;
+    }
+
+    // 점검자 팝업
+    function SearchWorker_P() {
+
+        var popup = $("#RCMP_WorkerPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 점검자 더블클릭
+    function RCMP_WorkerRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val(data.emp_cd);
+        $("#ReceiptCheckMaterial2_P input[name=worker_nm]").val(data.emp_nm);
+
+        var popup = $("#RCMP_WorkerPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+
+    // 확인자 팝업
+    function SearchChecker_P() {
+
+        var popup = $("#RCMP_CheckerPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 확인자 더블클릭
+    function RCMP_CheckerRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ReceiptCheckMaterial2_P input[name=checker_cd]").val(data.emp_cd);
+        $("#ReceiptCheckMaterial2_P input[name=checker_nm]").val(data.emp_nm);
+
+        var popup = $("#RCMP_CheckerPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    // 수정(입력)중인지 체크
+    function ReceiptCheckMaterial2_P_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#ReceiptCheckMaterial2_PSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiptCheckMaterial2_PUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiptCheckMaterial2_PInput").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckMaterial2_PEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckMaterial2_PDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ReceiptCheckMaterial2_P_Up_form :disabled").attr('disabled', false);
+        }
+        if (!nowEdit) {
+            $("#ReceiptCheckMaterial2_PSave").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckMaterial2_PUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckMaterial2_PInput").dxButton().parent().parent().removeClass("display-none");
+
+            //상태값에 따라 툴바 영역 차이
+            if (RCMP_Gubun == "I") {
+                $("#ReceiptCheckMaterial2_PInput").dxButton().parent().parent().removeClass("display-none");
+                $("#ReceiptCheckMaterial2_PEdit").dxButton().parent().parent().addClass("display-none");
+                $("#ReceiptCheckMaterial2_PDelete").dxButton().parent().parent().addClass("display-none");
+            } else if (RCMP_Gubun == "U") {
+                $("#ReceiptCheckMaterial2_PEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#ReceiptCheckMaterial2_PDelete").dxButton().parent().parent().removeClass("display-none");
+                $("#ReceiptCheckMaterial2_PInput").dxButton().parent().parent().addClass("display-none");
+            } else if (RCMP_Gubun == "D") {
+                $("#ReceiptCheckMaterial2_PDelete").dxButton().parent().parent().removeClass("display-none");
+                $("#ReceiptCheckMaterial2_PInput").dxButton().parent().parent().addClass("display-none");
+                $("#ReceiptCheckMaterial2_PEdit").dxButton().parent().parent().addClass("display-none");
+            }
+
+            $("#ReceiptCheckMaterial2_P_Up_form :enabled").attr('disabled', true);
+
+        }
+    }
+
+    /* CRUD */
+
+    // 입력
+    function ReceiptCheckMaterial2_PInput() {
+
+        ReceiptCheckMaterial2_P_EditCheck(true);
+
+        //점검자 수정 가능
+        $("#RCMP_worker_cd_btn").attr('disabled', false);
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: true,
+            mode: 'batch'
+        }
+
+        $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("option", "editing", editing);
+
+    }
+
+    //수정
+    function ReceiptCheckMaterial2_PEdit() {
+
+        ReceiptCheckMaterial2_P_EditCheck(true);
+
+        //검수번호 수정 불가능
+        $("#ReceiptCheckMaterial2_P_Up_form input[name=receipt_check_no]").attr('disabled', true);
+        //점검자 수정 불가능
+        $("#RCMP_worker_cd_btn").attr('disabled', true);
+
+        var editing = {
+            allowUpdating: true,
+            mode: 'batch'
+        }
+
+        $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    //삭제
+    function ReceiptCheckMaterial2_PDelete() {
+        RCMP_Gubun = "D";
+        var receipt_check_no = $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val();
+        var purchase_order_no = $("#ReceiptCheckMaterial2_P_Up_form input[name=purchase_order_no]").val();      //발주번호
+        var purchase_order_seq = $("#ReceiptCheckMaterial2_P_Up_form input[name=purchase_order_seq]").val();    //발주번호seq
+
+        var formData = new FormData($("#ReceiptCheckMaterial2_P_Up_form")[0]);
+
+        formData.set("gubun", RCMP_Gubun);
+        formData.set("receipt_check_no", receipt_check_no);
+        formData.set("purchase_order_no", purchase_order_no);
+        formData.set("purchase_order_seq", purchase_order_seq);
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheckMaterial2_TRX',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                alert(JSON.parse(result).message);
+
+                RCMP_Gubun = "";
+
+                var popup = $("#ReceiptCheckMaterial2_PPopup").dxPopup("instance");
+                popup.hide();
+
+                ReceiptCheck2_PSearch();
+            }
+        })
+
+    }
+
+    // 취소
+    function ReceiptCheckMaterial2_PUndo() {
+
+        ReceiptCheckMaterial2_P_EditCheck(false);
+
+        // 에디트 모드로 옵션 변경
+        var editing = {
+            allowUpdating: false
+        }
+
+        $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("option", "editing", editing);
+        RCMP_purchase_order_seq_seq = "";
+        if (RCMP_Gubun == "I") {
+            ReceiptCheckMaterial2_PGridSearch();
+        } else {
+            ReceiptCheckMaterial2_P_EDGridSearch();
+        }
+    }
+
+    //하단 Grid 체크결과 변경값 수정
+    function RCMP_resultUpdate(info) {
+        var data = info.data;
+
+        data.purchase_order_no = $("#ReceiptCheckMaterial2_P_Up_form input[name=purchase_order_no]").val();
+        data.receipt_check_no = $("#ReceiptCheckMaterial2_P_Up_form input[name=receipt_check_no]").val();
+        data.purchase_order_seq = $("#ReceiptCheckMaterial2_P_Up_form input[name=purchase_order_seq]").val();
+
+        RCMP_checkList.push(data);
+    }
+
+    //검수번호 중복 체크
+    function overlap_check_no() {
+
+        var receipt_check_no = $("#ReceiptCheckMaterial2_P_Up_form input[name=receipt_check_no]").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/overlap_check_no',
+            async: false,
+            data: {
+                receipt_check_no: receipt_check_no
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    RCMP_overlap_check_no = true;
+                } else {
+                    RCMP_overlap_check_no = false;
+                }
+            }
+        });
+    }
+
+    // 저장
+    async function ReceiptCheckMaterial2_PSave() {
+
+        //#region 검수번호 중복 체크
+        if (RCMP_Gubun == "I") {
+            overlap_check_no();
+            if (!RCMP_overlap_check_no) {
+                alert("검수번호가 중복되었습니다.\n검수번호를 수정하시오.");
+                return;
+            }
+        }
+        //#endregion
+
+        RCMP_validationCheck();
+
+        if (RCMP_validation_submit) {
+
+            await $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").saveEditData();
+
+            var formData = new FormData($("#ReceiptCheckMaterial2_P_Up_form")[0]);
+            var purchase_order_seq = $("#ReceiptCheckMaterial2_P_Up_form input[name=purchase_order_seq]").val();
+            var receipt_check_no = $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val();
+
+            formData.set("gubun", RCMP_Gubun);
+            formData.set("purchase_order_seq", purchase_order_seq);
+            formData.set("receipt_check_no", receipt_check_no);
+            formData.set("receipt_check_rpt_id", RCMP_purchase_order_seq_seq);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/ReceiptCheckMaterial2_TRX',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    RCMP_validation_submit = false;
+
+                    if (result.length <= 0) {
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    ReceiptCheckMaterial2_P_CHK_Save(RCMP_checkList);
+
+                }
+            });
+
+        }
+
+    }
+
+    function ReceiptCheckMaterial2_P_CHK_Save(data) {
+
+        // 구분 값
+        if (RCMP_Gubun == "I") {
+            RCMP_Gubun = "ICHK";
+        } else {
+            RCMP_Gubun = "UCHK";
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheckMaterial2_batch',
+            async: false,
+            data: {
+                receiptCheckMaterial2: JSON.stringify(data),
+                gubun: RCMP_Gubun,
+                receipt_check_rpt_id: RCMP_purchase_order_seq_seq
+            },
+            dataType: 'json',
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("저장되었습니다.");
+                RCMP_checkList = new Array();
+                RCMP_purchase_order_seq_seq = "";
+
+                ReceiptCheckMaterial2_P_EditCheck(false);
+
+                var editing = {
+                    allowUpdating: false,
+                }
+
+                $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("option", "editing", editing);
+
+                RCMP_Gubun = "";
+
+                var popup = $("#ReceiptCheckMaterial2_PPopup").dxPopup("instance");
+                popup.hide();
+
+                ReceiptCheck2_PSearch();
+            }
+        });
+
+    }
+
+    /* CRUD 끝 */
+
+    // validation check
+    function RCMP_validationCheck() {
+
+        var datagrid = $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance");
+        var gridData = datagrid.option("dataSource");
+
+        if ($("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val() === "" || $("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val() === null
+            || typeof $("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val() === "undefined") {
+            alert('검수결과를 선택 해주세요.');
+            return;
+        }
+
+        if ($("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val() === "" || $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val() === null
+            || $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val() <= 0 || typeof $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val() === "undefined") {
+            alert('검수수량을 입력 해주세요.');
+            return;
+        }
+
+        if ($("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val() >= parseFloat($("#ReceiptCheckMaterial2_P input[name=possible_qty]").val().replace(",", ""))) {
+            //alert("입고가능수량을 초과했습니다.");
+            //return;
+            if ($("#ReceiptCheckMaterial2_P select[name=purchase_status]").val() == "2") {
+                if (confirm("입고가능수량보다 같거나 많습니다. 입고완료로 변경하시겠습니까?")) {
+                    $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val("3");
+                }
+            }
+        }
+
+        if ($("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val() === "" || $("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val() === null
+            || typeof $("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val() === "undefined") {
+            alert('검수일자를을 선택 해주세요.');
+            return;
+        }
+
+        if ($("#ReceiptCheckMaterial2_P select[name=purchase_status]").val() === "" || $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val() === null
+            || typeof $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val() === "undefined") {
+            alert('입고구분을 선택 해주세요.');
+            return;
+        }
+
+        if ($("#ReceiptCheckMaterial2_P input[name=worker_cd]").val() === "" || $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val() === null
+            || typeof $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val() === "undefined") {
+            alert('점검자를 선택 해주세요.');
+            return;
+        }
+
+        // receipt_check_unit_wt
+        if (isNaN($("#ReceiptCheckMaterial2_P input[name=receipt_check_unit_wt]").val())) {
+            alert('표시된중량은 숫자만 기입 가능합니다.');
+            return;
+        }
+
+        //체크결과 Grid validation
+        var grid = $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance");
+
+        for (var i = 0; i < grid.totalCount(); i++) {
+            if (grid.cellValue(i, "receipt_check_result") == null || grid.cellValue(i, "receipt_check_result") == "") {
+                alert(grid.cellValue(i, "receipt_check_seq") + "번 체크결과를 입력해주시오.");
+                return;
+            }
+        }
+
+        RCMP_validation_submit = true;
+    }
+
+    // 클릭 이벤트 제한
+    function RCMP_EditableColumn(cellElement, cellInfo) {
+
+        if (cellElement.column.dataField === 'receipt_check_seq')
+            cellElement.element.find('input').prop('readonly', true);
+        if (cellElement.column.dataField === 'receipt_check_contents')
+            cellElement.element.find('input').prop('readonly', true);
+    }
+
+    //#region 구분값에 따른 재조회
+
+        //#region 입력상태일 때 재조회
+        function ReceiptCheckMaterial2_PGridSearch() {
+
+            var formData = new FormData($("#ReceiptCheckMaterial2_P_Up_form")[0]);
+
+            // 초기화
+            $("#ReceiptCheckMaterial2_P_Up_form")[0].reset();
+            $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", []);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/ReceiptCheckMaterial2_P_Search',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    // 검색 결과가 없을 경우
+                    if (result.length <= 0) {
+                        $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", []);
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    // 상단 폼 데이터 셋팅
+                    var _ReceiptCheckMaterial2_PData = JSON.parse(@ReceiptCheckMaterial2_PData)[0];
+                    if (RCMP_Gubun == "I") {
+                        RCMP_purchase_order_seq_seq = $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").totalCount() + 1;
+
+                        var purchase_order_seq = RCM_P_leadingZeros(_ReceiptCheckMaterial2_PData.purchase_order_seq, 2);
+
+                        var receipt_check_seq = RCM_P_leadingZeros(RCMP_purchase_order_seq_seq, 2);
+
+                        var _receipt_check_no = _ReceiptCheckMaterial2_PData.purchase_order_no + purchase_order_seq + receipt_check_seq;
+
+                        $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_receipt_check_no);               // 검수번호
+                    } else {
+                        $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_no);
+                    }
+
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_seq]").val(_ReceiptCheckMaterial2_PData.purchase_order_seq);
+
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_no]").val(_ReceiptCheckMaterial2_PData.purchase_order_no);                //발주번호
+                    $("#ReceiptCheckMaterial2_P input[name=item_cd]").val(_ReceiptCheckMaterial2_PData.item_cd);                                    //원자재코드
+                    $("#ReceiptCheckMaterial2_P input[name=item_nm]").val(_ReceiptCheckMaterial2_PData.item_nm);                                    //원자재명
+                    $("#ReceiptCheckMaterial2_P input[name=cust_cd]").val(_ReceiptCheckMaterial2_PData.cust_cd);                                    //거래처코드
+                    $("#ReceiptCheckMaterial2_P input[name=cust_nm]").val(_ReceiptCheckMaterial2_PData.cust_nm);                                    //거래처명
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_qty]").val(_ReceiptCheckMaterial2_PData.purchase_order_qty);              //발주수량
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_unit]").val(_ReceiptCheckMaterial2_PData.purchase_order_unit);            //발주단위
+                    $("#ReceiptCheckMaterial2_P input[name=possible_qty]").val(_ReceiptCheckMaterial2_PData.possible_qty);                          //입고가능수량
+
+                    $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val(_ReceiptCheckMaterial2_PData.purchase_status);                    //입고구분
+                    $("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val(_ReceiptCheckMaterial2_PData.receipt_check_state);            //검수결과
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_dt);            //검수일자
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_pack_form]").val(_ReceiptCheckMaterial2_PData.pack_form);                  //포장수량
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_qty);            //검수수량
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_unit_wt]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_net_qty);    //표시된중량
+                    $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val(_ReceiptCheckMaterial2_PData.worker_emp_cd);                            //점검자코드
+                    $("#ReceiptCheckMaterial2_P input[name=worker_nm]").val(_ReceiptCheckMaterial2_PData.worker_emp_nm);                            //점검자명
+                    $("#ReceiptCheckMaterial2_P input[name=checker_cd]").val(_ReceiptCheckMaterial2_PData.checker_emp_cd);                          //확인자코드
+                    $("#ReceiptCheckMaterial2_P input[name=checker_nm]").val(_ReceiptCheckMaterial2_PData.checker_emp_nm);                          //확인자명
+                    $("#ReceiptCheckMaterial2_P input[name=remark]").val(_ReceiptCheckMaterial2_PData.receipt_check_remark);                        //비고
+
+                    $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+        }
+    //#endregion
+
+        //#region 수정상태일 때 재조회
+        function ReceiptCheckMaterial2_P_EDGridSearch() {
+
+            var receipt_check_no = $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val();
+
+            var formData = new FormData($("#ReceiptCheckMaterial2_P_Up_form")[0]);
+
+            // 초기화
+            $("#ReceiptCheckMaterial2_P_Up_form")[0].reset();
+            $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", []);
+
+            formData.set("receipt_check_no", receipt_check_no);
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatln/ReceiptCheckMaterial2_P_ED_Search',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    // 검색 결과가 없을 경우
+                    if (result.length <= 0) {
+                        $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", []);
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    // 상단 폼 데이터 셋팅
+                    var _ReceiptCheckMaterial2_PData = JSON.parse(@ReceiptCheckMaterial2_PData)[0];
+                    if (RCMP_Gubun == "I") {
+                        RCMP_purchase_order_seq_seq = $("#ReceiptCheck2_P_DownRightGrid").dxDataGrid("instance").totalCount() + 1;
+
+                        var purchase_order_seq = RCM_P_leadingZeros(_ReceiptCheckMaterial2_PData.purchase_order_seq, 2);
+                        var receipt_check_seq = RCM_P_leadingZeros(RCMP_purchase_order_seq_seq, 2);
+
+                        var _receipt_check_no = _ReceiptCheckMaterial2_PData.purchase_order_no + purchase_order_seq + receipt_check_seq;
+
+                        $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_receipt_check_no);               // 검수번호
+                    } else {
+                        $("#ReceiptCheckMaterial2_P input[name=receipt_check_no]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_no);
+                    }
+
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_seq]").val(_ReceiptCheckMaterial2_PData.purchase_order_seq);              //발주순서
+
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_no]").val(_ReceiptCheckMaterial2_PData.purchase_order_no);                //발주번호
+                    $("#ReceiptCheckMaterial2_P input[name=item_cd]").val(_ReceiptCheckMaterial2_PData.item_cd);                                    //원자재코드
+                    $("#ReceiptCheckMaterial2_P input[name=item_nm]").val(_ReceiptCheckMaterial2_PData.item_nm);                                    //원자재명
+                    $("#ReceiptCheckMaterial2_P input[name=cust_cd]").val(_ReceiptCheckMaterial2_PData.cust_cd);                                    //거래처코드
+                    $("#ReceiptCheckMaterial2_P input[name=cust_nm]").val(_ReceiptCheckMaterial2_PData.cust_nm);                                    //거래처명
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_qty]").val(_ReceiptCheckMaterial2_PData.purchase_order_qty);              //발주수량
+                    $("#ReceiptCheckMaterial2_P input[name=purchase_order_unit]").val(_ReceiptCheckMaterial2_PData.purchase_order_unit);            //발주단위
+                    $("#ReceiptCheckMaterial2_P input[name=possible_qty]").val(_ReceiptCheckMaterial2_PData.possible_qty);                          //입고가능수량
+
+                    $("#ReceiptCheckMaterial2_P select[name=purchase_status]").val(_ReceiptCheckMaterial2_PData.purchase_status);                    //입고구분
+                    $("#ReceiptCheckMaterial2_P select[name=receipt_check_state]").val(_ReceiptCheckMaterial2_PData.receipt_check_state);            //검수결과
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_date]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_dt);            //검수일자
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_pack_form]").val(_ReceiptCheckMaterial2_PData.pack_form);                  //포장수량
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_qty]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_qty);            //검수수량
+                    $("#ReceiptCheckMaterial2_P input[name=receipt_check_unit_wt]").val(_ReceiptCheckMaterial2_PData.receipt_check_rpt_net_qty);    //표시된중량
+                    $("#ReceiptCheckMaterial2_P input[name=worker_cd]").val(_ReceiptCheckMaterial2_PData.worker_emp_cd);                            //점검자코드
+                    $("#ReceiptCheckMaterial2_P input[name=worker_nm]").val(_ReceiptCheckMaterial2_PData.worker_emp_nm);                            //점검자명
+                    $("#ReceiptCheckMaterial2_P input[name=checker_cd]").val(_ReceiptCheckMaterial2_PData.checker_emp_cd);                          //확인자코드
+                    $("#ReceiptCheckMaterial2_P input[name=checker_nm]").val(_ReceiptCheckMaterial2_PData.checker_emp_nm);                          //확인자명
+                    $("#ReceiptCheckMaterial2_P input[name=remark]").val(_ReceiptCheckMaterial2_PData.receipt_check_remark);                        //비고
+
+                    $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+        }
+        //#endregion
+    //#endregion
+
+    // 셀 가운데 정렬
+    function RCMP_Style(container, cellInfo) {
+
+        $("<div style='text-align: center;'>").html(cellInfo.value)
+            .appendTo(container);
+    }
+
+    // 체크 ALL
+    function checkAll_P() {
+
+        var datagrid = $("#ReceiptCheckMaterial2_PGrid").dxDataGrid("instance");
+        var gridData = datagrid.option("dataSource");
+
+        if ($("#ReceiptCheckMaterial2_P input:checkbox[name='check_All']").prop("checked")) {
+
+            for (var i = 0; i < gridData.length; i++) {
+
+                datagrid.cellValue(i, "receipt_check_result", "O");
+
+            }
+
+            $("#ReceiptCheckMaterial2_P input[name=check_All]").val("Y");
+
+        } else {
+
+            for (var i = 0; i < gridData.length; i++) {
+
+                datagrid.cellValue(i, "receipt_check_result", "");
+
+            }
+
+            $("#ReceiptCheckMaterial2_P input[name=check_All]").val("N");
+        }
+
+    }
+
+    //SOP Grid 결과 저장 디스크 버튼 비활성화
+    function RCMP_toolbar_HideBtn(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+    </script>
+
+<div id="ReceiptCheckMaterial2_P">
+
+    @* 팝업 *@
+    <div id="RCMP_WorkerPopup"></div>
+    <div id="RCMP_CheckerPopup"></div>
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8"></div>
+
+        <div class="CRUD-btn col-4">
+
+            @(Html.DevExtreme().Toolbar()
+                .ID("ReceiptCheckMaterial2_PToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckMaterial2_PInput")
+                        .Icon("plus")
+                        .Text("입력")
+                        .OnClick("ReceiptCheckMaterial2_PInput")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckMaterial2_PEdit")
+                        .Icon("edit")
+                        .Text("수정")
+                        .OnClick("ReceiptCheckMaterial2_PEdit")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckMaterial2_PDelete")
+                        .Icon("trash")
+                        .Text("삭제")
+                        .OnClick("ReceiptCheckMaterial2_PDelete")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckMaterial2_PSave")
+                        .Icon("save")
+                        .Text("저장")
+                        .OnClick("ReceiptCheckMaterial2_PSave")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckMaterial2_PUndo")
+                        .Icon("undo")
+                        .Text("취소")
+                        .OnClick("ReceiptCheckMaterial2_PUndo")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12" style="height:220px;">
+
+            <div class="box">
+
+                <form id="ReceiptCheckMaterial2_P_Up_form">
+
+                    <div class="divName margin-bottom">
+                        <p>입고 검수 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-1">검수번호</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control col-12" name="receipt_check_no"/>
+                        </div>
+
+                        <label class="col-1">검수결과<star>*</star></label>
+                        <select class="col-1 form-control required" name="receipt_check_state" style="margin-left: -2px;">
+                            @foreach (DataRow row in ((DataTable)ViewBag.sp_receipt_check_state).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+
+                        <label class="col-1">입고가능수량</label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-12" name="possible_qty" readonly="readonly" />
+                        </div>
+
+                        <label class="col-1">점검자<star>*</star></label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control required" name="worker_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="RCMP_worker_cd_btn" onclick="SearchWorker_P()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control required" name="worker_nm" readonly />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-1">발주번호</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control col-12" name="purchase_order_no" readonly="readonly" />
+                        </div>
+
+                        <label class="col-1">검수일자<star>*</star></label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-12 required datepicker" name="receipt_check_date" value="" />
+                        </div>
+
+                        <label class="col-1">포장수량</label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-12" name="receipt_check_pack_form" />
+                        </div>
+
+                        <label class="col-1">확인자</label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" name="checker_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="SearchChecker_P()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" name="checker_nm" readonly />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-1">원자재</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control col-6" name="item_cd" readonly="readonly" />
+                            <input type="text" class="form-control col-6" name="item_nm" readonly="readonly" />
+                        </div>
+
+                        <label class="col-1">검수수량<star>*</star></label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-12 required" name="receipt_check_qty" />
+                        </div>
+
+                        <label class="col-1">표시된중량</label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-12" name="receipt_check_unit_wt" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-1">거래처</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control col-6" name="cust_cd" readonly="readonly" />
+                            <input type="text" class="form-control col-6" name="cust_nm" readonly="readonly" />
+                        </div>
+
+                        <label class="col-1">발주수량</label>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control col-6" name="purchase_order_qty" readonly="readonly" />
+                            <input type="text" class="form-control col-6" name="purchase_order_unit" readonly="readonly" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-1">입고구분<star>*</star></label>
+                        <select class="col-2 form-control required" name="purchase_status" style="margin-left: -2px;">
+                            @foreach (DataRow row in ((DataTable)ViewBag.sp_purchase_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+
+                        <label class="col-1">비고</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12" name="remark" />
+                        </div>
+
+                    </div>
+
+                    <br /><br />
+
+                    <div class="input-wrapper">
+
+                        <label class="col-1">전체 PASS (O)</label>
+                        <label class="p-1"></label>
+                        <input type="checkbox" name="check_All" value="N" onclick="checkAll_P()" style="position: absolute; margin-left: -1.25rem;" />
+
+                    </div>
+
+                    <!-- hidden 값 -->
+                    <input type="hidden" name="purchase_order_seq" value="" />
+
+                </form>
+
+            </div>
+
+            <br />
+
+            <!-- 아래 그리드 -->
+            <div class="box" style="height: 530px;">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiptCheckMaterial2_PGrid")
+                    .ShowBorders(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr("receipt_check_seq")
+                    .Height(500)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_check_seq").Caption("순번");
+                        c.Add().DataField("receipt_check_contents").Caption("체크사항");
+                        c.Add()
+                            .Lookup(lookup => lookup
+                                .DataSource(RCMP_SelectBox)
+                                .ValueExpr("keyfield")
+                                .DisplayExpr("displayfield")
+                            )
+                            .DataField("receipt_check_result").Caption("체크결과")
+                            .CellTemplate(new JS("RCMP_Style"));
+                        c.Add().DataField("receipt_check_fix").Caption("조치사항");
+                    })
+                    .OnCellPrepared("RCMP_EditableColumn")
+                    .OnRowUpdated("RCMP_resultUpdate")
+                    .OnToolbarPreparing("RCMP_toolbar_HideBtn")
+                 )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,1443 @@
+﻿@using System.Data
+@using HACCP.Libs;
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Packing_Item";
+
+    var itemData = @Html.Raw(Json.Encode(ViewBag.items.Data));
+    var makeItemPopupData = @Html.Raw(Json.Encode(ViewBag.makeItemPopupData.Data));
+    var Packing_ItemAuth = @Html.Raw(Json.Encode(ViewBag.Packing_ItemAuth.Data));
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+
+}
+
+@*제품관리*@
+
+    <script id="Packing_ItemJs">
+
+    var _packing_ItemCRUDGubun;
+    var _packing_ItemDuplicatedCheck = false;
+    var _packing_ItemIsOtherLicenseUsing = false;
+    var _packingItemImageSeq;
+    var _packingItemImageCnt = 0;
+
+    $(function () {
+        setDatePicker("#Packing_Item .datepicker");
+
+        if ((@itemData).length > 0) {
+            $("#Packing_ItemGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@itemData));
+            $("#Packing_ItemGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#Packing_ItemGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        var columns = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("Packing_ItemMakeItem", "품목 조회", @makeItemPopupData, columns);
+
+        Packing_ItemEditCheck(false);
+
+        $($("#Packing_ItemUploadBtn1")).click(function (event) {
+            var fileUploader = $('#Packing_ItemUpperImageUploader').dxFileUploader('instance');
+
+            _packingItemImageSeq = 1;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#Packing_ItemUploadBtn2")).click(function (event) {
+            var fileUploader = $('#Packing_ItemMiddleImageUploader').dxFileUploader('instance');
+
+            _packingItemImageSeq = 2;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#Packing_ItemUploadBtn3")).click(function (event) {
+            var fileUploader = $('#Packing_ItemLowerImageUploader').dxFileUploader('instance');
+
+            _packingItemImageSeq = 3;
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#Packing_ItemDeleteBtn1")).click(function (event) {
+            Packing_ItemDeleteImage(1);
+        });
+
+        $($("#Packing_ItemDeleteBtn2")).click(function (event) {
+            Packing_ItemDeleteImage(2);
+        });
+
+        $($("#Packing_ItemDeleteBtn3")).click(function (event) {
+            Packing_ItemDeleteImage(3);
+        });
+
+    });
+
+    function Packing_ItemSearchMakeItem() {
+        $("#Packing_ItemMakeItemPopup").dxPopup("instance").show();
+    }
+
+    function Packing_ItemMakeItemRowDblClick(selectedItems) {
+
+        $("#Packing_ItemForm input[name=item_make_cd]").val(selectedItems.data.item_cd);
+        $("#Packing_ItemForm input[name=item_make_nm]").val(selectedItems.data.item_nm);
+
+        $("#Packing_ItemMakeItemPopup").dxPopup("instance").hide();
+
+    }
+
+    // 수정중인지 체크
+    function Packing_ItemEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "@(pagePrefix)Grid"
+            , "@(pagePrefix)Form"
+            , "Packing_ItemLicenseGrid"
+        );
+
+    }
+
+    // 수정중인지 체크
+    /*
+    function Packing_ItemEditCheck(nowEdit) {
+
+        //$("#Packing_ItemForm input[name=item_cd]").prop("readonly", false);
+        $("#Packing_ItemDuplicateCheckBtn").prop("disabled", false);
+        $("#Packing_ItemForm input[name=item_license_start_date]").prop("readonly", false);
+        $("#Packing_ItemForm input[name=item_permission_date]").prop("readonly", false);
+        $("#Packing_ItemForm input[name=item_write_date]").prop("readonly", false);
+
+        $("#Packing_ItemForm .datepicker").datepicker('option', 'disabled', false);
+
+        if (nowEdit) {
+            $("#Packing_ItemSave").dxButton().parent().parent().removeClass("display-none");
+            $("#Packing_ItemUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#Packing_ItemInput").dxButton().parent().parent().addClass("display-none");
+            $("#Packing_ItemEdit").dxButton().parent().parent().addClass("display-none");
+            $("#Packing_ItemDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#Packing_ItemForm :disabled").prop('disabled', false);
+
+            var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('Packing_ItemLicenseGrid', grid.option("focusedRowKey"));
+
+                if (data.prod_end === "Y") {
+                    $('#Packing_ItemForm select[name=break_type]').prop('disabled', true);
+                }
+                else {
+                    $('#Packing_ItemForm select[name=break_type]').prop('disabled', false);
+                    }
+            }
+
+            $("#Packing_ItemGrid").dxDataGrid("option", "disabled", true);
+            $("#Packing_ItemLicenseGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#Packing_ItemSave").dxButton().parent().parent().addClass("display-none");
+            $("#Packing_ItemUndo").dxButton().parent().parent().addClass("display-none");
+            $("#Packing_ItemInput").dxButton().parent().parent().removeClass("display-none");
+            $("#Packing_ItemEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#Packing_ItemDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#Packing_ItemForm :enabled").prop('disabled', true);
+            $("#Packing_ItemGrid").dxDataGrid("option", "disabled", false);
+            $("#Packing_ItemLicenseGrid").dxDataGrid("option", "disabled", false);
+
+            //_packing_ItemDuplicatedCheck = false;
+        }
+    }
+    */
+
+    // 제품 그리드 로우 선택
+    function Packing_ItemSelectItem() {
+
+        var grid = $("#Packing_ItemGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('Packing_ItemGrid', grid.option("focusedRowKey"));
+        if (UtilView.isEmpty(gridData)) return;
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/SelectItemDetail',
+            data: {
+                item_cd: gridData.item_cd
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#Packing_ItemLicenseGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                    UtilView.setGridFocus("G", "Packing_ItemLicenseGrid");
+                } else {
+                    $("#Packing_ItemLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+                    Packing_ItemClearForm();
+                    return;
+                }
+
+                setPacking_ItemLicenseSelectBoxOption(JSON.parse(result[1]));
+                Packing_ItemFillForm(JSON.parse(result[0])[0]);
+                reLoadPacking_ItemImage();
+            }
+        })
+    }
+
+    // 제품 개정번호 그리드 로우 선택
+    function Packing_ItemSelectLicenseNo() {
+
+        var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+        if (grid.totalCount()) {
+            var data = getGridRowByKey('Packing_ItemLicenseGrid', grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(data)) return;
+
+            Packing_ItemFillForm(data);
+        }
+    }
+
+    // 개정번호 셀렉트박스 옵션 삽입
+    function setPacking_ItemLicenseSelectBoxOption(data) {
+
+        $("#Packing_ItemLicenseNo").empty();
+
+        if (data.length > 0) {
+            for (var count = 0; count < data.length; count++) {
+                var option = $("<option value='" + data[count].item_license_no + "'>" + data[count].item_license_no_nm + "</option>");
+                $('#Packing_ItemLicenseNo').append(option);
+            }
+        }
+    }
+
+    // 우측 폼 비움
+    function Packing_ItemClearForm() {
+        $("#Packing_ItemForm")[0].reset();
+        $("#Packing_ItemForm textarea").text("");
+    }
+
+    // 우측 폼에 디테일 데이터 삽입
+    function Packing_ItemFillForm(data) {
+
+        Packing_ItemClearForm();
+
+        if ($("#Packing_ItemLicenseNo").val() !== data.item_license_no) {
+            $("#Packing_ItemLicenseNo").val(data.item_license_no);
+        }
+
+
+        // === 개정상세정보 ===
+        $("#Packing_ItemForm input[name=item_license_no]").val(data.item_license_no);
+        $("#Packing_ItemForm input[name=item_license_start_date]").val(data.item_license_start_date);
+        $("#Packing_ItemForm textarea[name=revision_remark]").text(data.revision_remark);
+
+        // === 허가정보 ===
+        $("#Packing_ItemForm input[name=item_permission_no]").val(data.item_permission_no);
+        $("#Packing_ItemForm input[name=item_permission_date]").val(data.item_permission_date);
+        $("#Packing_ItemForm input[name=item_class]").val(data.item_class);
+        $("#Packing_ItemForm input[name=item_write_date]").val(data.item_write_date);
+        $("#Packing_ItemForm input[name=item_proc_no]").val(data.item_proc_no);
+
+        // === 기본정보 ===
+        $("#Packing_ItemForm input[name=item_cd]").val(data.item_cd);
+        $("#Packing_ItemForm select[name=item_gb]").val(data.item_gb);
+        $("#Packing_ItemForm input[name=item_nm]").val(data.item_nm);
+        $("#Packing_ItemForm input[name=abbreviation_cd]").val(data.abbreviation_cd);
+        $("#Packing_ItemForm input[name=item_s_nm]").val(data.item_s_nm);
+
+        if (data.prod_end == "Y") {
+            $('#Packing_ItemForm input[name="prod_end"]').prop("checked", true);
+        } else {
+            $('#Packing_ItemForm input[name="prod_end"]').prop("checked", false);
+        }
+
+        $("#Packing_ItemForm select[name=break_type]").val(data.break_type);
+        $("#Packing_ItemForm input[name=vender_item_cd]").val(data.vender_item_cd);
+
+        if (data.traceability_ck == "Y") {
+            $('#Packing_ItemForm input[name="traceability_ck"]').prop("checked", true);
+        } else {
+            $('#Packing_ItemForm input[name="traceability_ck"]').prop("checked", false);
+        }       
+        $("#Packing_ItemForm input[name=traceability_reg_num]").val(data.traceability_reg_num);
+        
+        // === 주요정보 ===
+        $("#Packing_ItemForm input[name=item_content]").val(data.item_content);
+        $("#Packing_ItemForm select[name=item_content_unit]").val(data.item_content_unit);
+        $("#Packing_ItemForm input[name=item_error_range]").val(data.item_error_range);
+        $("#Packing_ItemForm input[name=item_packunit]").val(data.item_packunit);
+        $("#Packing_ItemForm input[name=item_input_content]").val(data.item_input_content);
+        $("#Packing_ItemForm input[name=item_content_unit]").val(data.item_content_unit);
+        $("#Packing_ItemForm input[name=item_content2]").val(data.item_content2);
+        $("#Packing_ItemForm input[name=item_content3]").val(data.item_content3);
+        $("#Packing_ItemForm input[name=item_exchangerate]").val(data.item_exchangerate);
+        
+
+        // === 분류정보 ===
+        $("#Packing_ItemForm select[name=item_form_cd]").val(data.item_form_cd);
+        $("#Packing_ItemForm select[name=item_packunit]").val(data.item_packunit);
+        $("#Packing_ItemForm select[name=item_type1]").val(data.item_type1);
+        if (data.in_out_ck != "") {
+            $('#Packing_ItemForm input[name="in_out_ck"][value=' + data.in_out_ck + ']').prop("checked", true);
+        }
+        $("#Packing_ItemForm select[name=plant_cd]").val(data.plant_cd);
+        if (data.outer_process != "") {
+            $('#Packing_ItemForm input[name="outer_process"][value=' + data.outer_process + ']').prop("checked", true);
+        }
+        if (data.concentrate_yn != "") {
+            $('#Packing_ItemForm input[name="concentrate_yn"][value=' + data.concentrate_yn + ']').prop("checked", true);
+        }
+        $("#Packing_ItemForm select[name=abc_gubun]").val(data.abc_gubun);
+
+        // === 구매정보 ===
+        $("#Packing_ItemForm input[name=item_safety_day]").val(data.item_safety_day);
+        if (data.taxfree_yn == "Y") {
+            $('#Packing_ItemForm input[name="taxfree_yn"]').attr("checked", true);
+        }
+        else {
+            $('#Packing_ItemForm input[name="taxfree_yn"]').attr("checked", false);
+        }
+
+
+        // === 포장제품 정보 ===
+        $("#Packing_ItemForm input[name=item_make_cd]").val(data.item_make_cd);
+        $("#Packing_ItemForm input[name=item_make_nm]").val(data.item_make_nm);
+        $("#Packing_ItemForm input[name=item_pack_size]").val(data.item_pack_size);
+        $("#Packing_ItemForm input[name=item_packunit]").val(data.item_packunit);
+        $("#Packing_ItemForm select[name=item_packunit2]").val(data.item_packunit2);
+        $("#Packing_ItemForm input[name=second_pack_qt]").val(data.second_pack_qt);
+        $("#Packing_ItemForm input[name=item_pack_barcode]").val(data.item_pack_barcode);
+
+    }
+
+    // 제품코드 중복체크
+    function Packing_ItemItemCdDuplicateCheck() {
+
+        if ($('#Packing_ItemForm input[name=item_cd]').val() == "" || $('#Packing_ItemForm input[name=item_cd]').val() == null) {
+
+            _packing_ItemDuplicatedCheck = false;
+
+            $("#Packing_ItemForm text[name=checkResText]").text("빈 문자열 입니다.");
+            $("#Packing_ItemForm text[name=checkResText]").css("color", "red");
+
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/Item_StandardDuplicateCheck',
+            data: {
+                item_cd: $('#Packing_ItemForm input[name=item_cd]').val()
+            },
+            success: function (result) {
+                $("#Packing_ItemForm text[name=checkResText]").text(result[1]);
+
+                if (result[0] == "0") {
+                    _packing_ItemDuplicatedCheck = false;
+                    $("#Packing_ItemForm text[name=checkResText]").css("color", "red");
+                }
+                else if (result[0] == "1") {
+                    _packing_ItemDuplicatedCheck = true;
+                    $("#Packing_ItemForm text[name=checkResText]").css("color", "green");
+                }
+            }
+        })
+    }
+
+    // 제품코드 수정시
+    function rewritePacking_ItemItemCd() {
+        _packing_ItemDuplicatedCheck = false;
+        $("#Packing_ItemForm text[name=checkResText]").text("");
+    }
+
+    // 제품 조회
+    function Packing_ItemSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/Item_StandardSelectItem',
+            data: {
+                prod_end: $("#Packing_ItemSearchForm select[name=prod_end]").val(),
+                item_gb: $("#Packing_ItemSearchForm select[name=item_gb]").val()
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#Packing_ItemGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#Packing_ItemGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 제품 입력
+    function Packing_ItemInput() {
+        Packing_ItemEditCheck(true);
+        _packing_ItemCRUDGubun = "I";
+        Packing_ItemClearForm();
+        $("#Packing_ItemLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+
+
+        $("#Packing_ItemForm select[name=plant_cd]").val("PC001");
+        $("#Packing_ItemForm input:radio[name='in_out_ck']:radio[value='Y']").prop('checked', true);
+        $("#Packing_ItemForm input:radio[name='outer_process']:radio[value='1']").prop('checked', true);
+        $("#Packing_ItemForm input:radio[name='concentrate_yn']:radio[value='N']").prop('checked', true);
+
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#Packing_ItemForm input[name=item_cd]").attr("readonly", false);
+        }
+    }
+
+    // 제품 수정
+    function Packing_ItemEdit() {
+
+        var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+        var data = JSON.parse(JSON.stringify(grid.option("dataSource")));
+
+        data.splice(grid.option("focusedRowIndex"), 1);
+
+        for (var i = 0; i < data.length; i++) {
+            if (data[i].prod_end === "Y") {
+                _packing_ItemIsOtherLicenseUsing = true;
+            }
+        }
+
+        Packing_ItemEditCheck(true);
+        _packing_ItemCRUDGubun = "U";
+        $("#Packing_ItemForm .datepicker").datepicker('option', 'disabled', true);
+        $("#Packing_ItemForm input[name=item_license_start_date]").prop("readonly", true);
+        $("#Packing_ItemForm input[name=item_permission_date]").prop("readonly", true);
+        $("#Packing_ItemForm input[name=item_write_date]").prop("readonly", true);
+        $("#Packing_ItemDuplicateCheckBtn").prop("disabled", true);
+
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#Packing_ItemForm input[name=item_cd]").prop("readonly", true);
+        }
+    }
+
+    // 제품 삭제
+    function Packing_ItemDelete() {
+
+        var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('Packing_ItemLicenseGrid', grid.option("focusedRowKey"));
+        var ds = grid.option("dataSource");
+
+        if (ds.length <= 0) {
+            return;
+        }
+
+        var deleteMsg = "";
+
+        if (ds.length === 1) {
+            _packing_ItemCRUDGubun = "D";
+            deleteMsg = data.item_license_no + "번의 개정정보와 품목정보가 모두 삭제됩니다. \n 삭제하시겠습니까?";
+        } else {
+            _packing_ItemCRUDGubun = "DR";
+            deleteMsg = "개정번호 '" + data.item_license_no + "' 을(를) 삭제하시겠습니까?";
+        }
+
+        var isOK = confirm(deleteMsg);
+
+        if (!isOK) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/Item_StandardCRUD',
+            data: {
+                gubun: _packing_ItemCRUDGubun,
+                item_cd: data.item_cd,
+                item_gb: data.item_gb,
+                item_license_no: data.item_license_no
+            },
+            success: function (result) {
+
+                if (_packing_ItemCRUDGubun === "D") {
+
+                    Packing_ItemSearch();
+                    _packing_ItemIsOtherLicenseUsing = false;
+
+                    return;
+                }
+
+                if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                    $("#Packing_ItemForm text[name=checkResText]").text("");
+                }
+                Packing_ItemSearch();
+                _packing_ItemIsOtherLicenseUsing = false;
+            }
+        })
+
+    }
+
+    // 저장
+    function Packing_ItemSave() {
+
+        //var formID = "Packing_ItemForm";
+        //var cols = [
+        //    { name: "item_cd", text: "제제코드", type: "input" },
+        //    { name: "item_nm", text: "제제명", type: "input" },
+        //    { name: "item_license_no", text: "개정번호", type: "input" },
+        //    { name: "item_packunit", text: "제제단위", type: "select" },
+        //    { name: "item_packunit2", text: "제품단위", type: "select" }
+        //]
+
+        //var isValid = validationCk(formID, cols);
+
+        //if (!isValid) {
+        //    return;
+        //}
+
+        if (!UtilView.checkValidForm("Packing_ItemForm")) {
+            return;
+        }
+
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            if (!_packing_ItemDuplicatedCheck && _packing_ItemCRUDGubun === "I") {
+                alert("제품 코드 중복확인을 진행해주십시오.");
+                return;
+            }
+        }
+
+        var form = $('#Packing_ItemForm')[0];
+        var data = new FormData(form);
+        data.set("gubun", _packing_ItemCRUDGubun);
+
+        if ($('#Packing_ItemForm input[name=prod_end]').is(":checked")) {
+            data.set("prod_end", "Y");
+        } else {
+            data.set("prod_end", "N");
+        }
+
+        if ($('#Packing_ItemForm input[name=traceability_ck]').is(":checked")) {
+            data.set("traceability_ck", "Y");
+        } else {
+            data.set("traceability_ck", "");
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/Item_StandardCRUD',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                Packing_ItemEditCheck(false);
+                if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                    _itemStandardDuplicatedCheck = false;
+                    $("#Packing_ItemForm text[name=checkResText]").text("");
+                }
+
+                Packing_ItemSearch();
+                _packing_ItemIsOtherLicenseUsing = false;
+            }
+        })
+
+    }
+
+    // 취소
+    function Packing_ItemUndo() {
+        Packing_ItemEditCheck(false);
+        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+            $("#Packing_ItemForm text[name=checkResText]").text("");
+        }
+
+        Packing_ItemSelectItem();
+        _packing_ItemIsOtherLicenseUsing = false;
+    }
+
+    // 제품 이미지 로드
+    function reLoadPacking_ItemImage() {
+        selectPacking_ItemImage($("#Packing_ItemForm input[name=item_cd]").val());
+    }
+
+    function selectPacking_ItemImage(item_cd) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/SelectItemImage',
+            data: {
+                item_cd: item_cd
+            },
+            success: function (result) {
+
+                try {
+
+                    var jsonData = JSON.parse(result);
+
+                    _packingItemImageCnt = jsonData.length;
+
+                    $("#Packing_ItemUpperImage").attr('src', jsonData[0].upper_image);
+
+                    $("#Packing_ItemiddleImage").attr('src', jsonData[0].middle_image);
+
+                    $("#Packing_ItemLowerImage").attr('src', jsonData[0].lower_image);
+
+                } catch (e) {
+
+                    _packingItemImageCnt = 0;
+
+                    $("#Packing_ItemForm img").attr('src', '/Content/image/defaultSign.png');
+                }
+
+
+                //if (result.length <= 0) {
+                //    $("#Packing_ItemForm img").attr('src', '/img/defaultSign.png');
+                //    return;
+                //}
+
+                //for (var i = 0; i < result.length; i++) {
+
+                //    var tmpArr = new Array("packing_item_upper_image", "packing_item_middle_image", "packing_item_lower_image");
+
+                //    if (result[i] === "" || result[i] == null) {
+                //        $("#" + tmpArr[i]).attr('src', '/img/defaultSign.png');
+                //    } else {
+                //        $("#" + tmpArr[i]).attr('src', result[i]);
+                //    }
+
+                //}
+
+            }
+        })
+    }
+
+    // 제품 코드 수정했을시
+    function rewritePacking_ItemItemCd() {
+        _Packing_ItemdDuplicatedCheck = false;
+        $("#Packing_ItemForm text[name=checkResText]").text("");
+    }
+
+    // 사용여부 체크에 따른 중지사유 셀렉트 박스 제어
+    function Packing_ItemProdEndCk() {
+
+        if (_packing_ItemIsOtherLicenseUsing) {
+            alert("이미 사용중인 개정번호가 있습니다.");
+            $('#Packing_ItemForm input[name="prod_end"]').prop("checked", false);
+            return;
+        }
+
+        if ($('#Packing_ItemForm input[name=prod_end]').is(":checked") == true) {
+
+            $('#Packing_ItemForm select[name=break_type]').val("1");
+            $('#Packing_ItemForm select[name=break_type]').prop('disabled', true);
+        } else {
+            $('#Packing_ItemForm select[name=break_type]').prop('disabled', false);
+        }
+    }
+
+    // 개정번호 사용
+    function Packing_ItemUseCk() {
+
+        if (!confirm("해당 개정을 사용 하시겠습니까?")) {
+            return;
+        }
+
+        var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+        var data = JSON.parse(JSON.stringify(grid.option("dataSource")));
+
+        data.splice(grid.option("focusedRowIndex"), 1);
+
+        for (var i = 0; i < data.length; i++) {
+            if (data[i].prod_end === "Y") {
+                alert("이미 사용중인 개정번호가 있습니다.");
+                return;
+            }
+        }
+
+        Packing_ItemEditCheck(true);
+
+        _packing_ItemCRUDGubun = "U";
+        $('#Packing_ItemForm input[name="prod_end"]').prop("checked", true);
+
+        Packing_ItemSave();
+    }
+
+    // 개정번호 사용 해제
+    function Packing_ItemUseUnck() {
+        Packing_ItemEditCheck(true);
+
+        _packing_ItemCRUDGubun = "U";
+        $('#Packing_ItemForm input[name="prod_end"]').prop("checked", false);
+
+        Packing_ItemSave();
+    }
+
+    // 단위중량 단위 변경
+    function packingItemContentUnitSelectChange() {
+        $("#Packing_ItemForm input[name=item_content_unit]").val($("#Packing_ItemForm select[name=item_content_unit]").val());
+    }
+
+    // 제제단위 변경
+    function packingItemPackUnitSelectChange() {
+        $("#Packing_ItemForm input[name=item_packunit]").val($("#Packing_ItemForm select[name=item_packunit]").val());
+    }
+
+    // 신규개정생성
+    function Packing_ItemInputNewLicense() {
+
+        var grid = $("#Packing_ItemGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('Packing_ItemGrid', grid.option("focusedRowKey"));
+
+        var isOK = confirm("제조제품 '" + data.item_nm + "' 의 신규개정을 생성하시겠습니까?");
+
+        if (!isOK) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/Item_StandardGetLicenseNo',
+            data: {
+                item_cd: data.item_cd
+            },
+            success: function (result) {
+                if (UtilView.isEmpty(result)) return;
+
+                var grid = $("#Packing_ItemLicenseGrid").dxDataGrid("instance");
+                var data = grid.option("dataSource");
+
+                for (var i = 0; i < data.length; i++) {
+                    if (data[i].prod_end === "Y") {
+                        _packing_ItemIsOtherLicenseUsing = true;
+                    }
+                }
+
+                var today = new Date();
+
+                var year = today.getFullYear();
+                var month = ((today.getMonth() + 1) < 10 ? "0" + (today.getMonth() + 1) : (today.getMonth() + 1));
+                var date = (today.getDate() < 10 ? "0" + today.getDate() : today.getDate());
+
+                $("#Packing_ItemForm input[name=item_license_no]").val(result);
+                $("#Packing_ItemForm input[name=item_license_start_date]").val(year + '-' + month + '-' + date);
+                Packing_ItemEditCheck(true);
+                _packing_ItemCRUDGubun = "IR";
+                $('#Packing_ItemForm input[name="prod_end"]').prop("checked", false);
+                //$("#Packing_ItemForm input[name=item_cd]").prop("readonly", true);
+            }
+        })
+
+    }
+
+    // 제품 사진 업로드
+    function Packing_ItemUploadImage(e) {
+
+        if (_packing_ItemCRUDGubun === "I") {
+            alert("입력을 완료한 후에 이용해주세요.");
+            return;
+        }
+
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "item_cd", $("#Packing_ItemForm input[name=item_cd]").val());
+        url = updateQueryStringParameter(url, "gubun", _packingItemImageSeq);
+        url = updateQueryStringParameter(url, "imageCnt", _packingItemImageCnt);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 제품 사진 삭제
+    function Packing_ItemDeleteImage(num) {
+
+        var isOK = confirm("제품 이미지를 삭제하시겠습니까?");
+
+        if (!isOK) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysItem/DeleteItemImage',
+            data: {
+                item_cd: $("#Packing_ItemForm input[name=item_cd]").val(),
+                fGubun: num
+            },
+            success: function (result) {
+                Packing_ItemSelectItem();
+            }
+        })
+    }
+
+    function Packing_ItemSelectRevision(e) {
+
+        $("#Packing_ItemLicenseGrid").dxDataGrid("option", "focusedRowKey", $("#Packing_ItemLicenseNo").val());
+    }
+
+    function Packing_ItemExcel() {
+        gridExportToExcel("Packing_ItemGrid", "PackingItemData");
+    }
+
+    </script>
+
+<div id="Packing_Item">
+
+    <div id="Packing_ItemMakeItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="Packing_ItemSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용구분</span>
+                        </div>
+                        <select class="form-control" name="prod_end" onchange="Packing_ItemSearch()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.usedGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control col-8" name="item_gb" onchange="Packing_ItemSearch()">
+                            <option value="1,4">전체</option>
+                            <option value="1">완제품</option>
+                            <option value="4">상품</option>
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Packing_ItemGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(869)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .KeyExpr("item_cd")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface").Width(75);
+                        c.Add().DataField("item_cd").Caption("제품코드").Width(100);
+                        c.Add().DataField("item_nm").Caption("제품명");
+
+                        c.Add().DataField("item_content3").Visible(false); /* 피막단위량 or 기타중량*/
+
+                    })
+                .FocusedRowEnabled(true)
+                .OnFocusedRowChanged("Packing_ItemSelectItem")
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-8 pl-0">
+
+            <div class="input-wrapper">
+
+                <label class="col-1">개정번호</label>
+                <div class="input-group col-2">
+                    <select class="form-control col-12" name="license_no" id="Packing_ItemLicenseNo" onchange="Packing_ItemSelectRevision()">
+                    </select>
+                </div>
+
+                <div class="license-CRUD-Btn">
+
+                    <button class="btn btn-secondary" onclick="Packing_ItemInputNewLicense()">신규개정 생성</button>
+                    <button class="btn btn-secondary" onclick="Packing_ItemUseCk()">사용 확인</button>
+                    <button class="btn btn-secondary" onclick="Packing_ItemUseUnck()">해제</button>
+
+                </div>
+
+            </div>
+
+            <form id="Packing_ItemForm">
+
+                <div class="box-height-auto pl-0 mb-1">
+
+                    <div class="divName">
+                        <p>개정내역</p>
+                        <span class="text-danger display-none col-8"></span>
+                    </div>
+
+                    <div class="row ml-0">
+
+                        <div class="col-6 pl-0 pr-0">
+                            @(Html.DevExtreme().DataGrid()
+                                    .ID("Packing_ItemLicenseGrid")
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .ColumnAutoWidth(true)
+                                    .AllowColumnResizing(true)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                    .Height(240)
+                                    .HoverStateEnabled(true)
+                                    .FocusedRowEnabled(true)
+                                    .KeyExpr("item_license_no")
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("item_license_no").Caption("개정번호").Width(100);
+                                        c.Add().DataField("item_license_start_date").Caption("발효일자").Width(100);
+                                        c.Add().DataField("prod_end").Caption("사용여부").DataType(GridColumnDataType.Boolean)
+                                            .CalculateCellValue(@"function(rowData) { return rowData.prod_end == ""Y""; }");
+                                        c.Add().DataField("item_safety_day").Caption("안전재고일");
+                                        c.Add().DataField("concentrate_yn").Caption("농축액추출").DataType(GridColumnDataType.Boolean)
+                                            .CalculateCellValue(@"function(rowData) { return rowData.concentrate_yn == ""Y""; }");
+
+                                    })
+                                    .OnFocusedRowChanged("Packing_ItemSelectLicenseNo")
+                            )
+                        </div>
+
+                        <div class="col-6 pl-0">
+
+                            <ul class="nav nav-tabs" id="Packing_Item1MenuDiv">
+                                <li class="nav-item">
+                                    <a class="nav-link active" onclick="menutab('Packing_Item1MenuDiv', 'Packing_Item1MenuDiv', 1)">개정상세정보</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" onclick="menutab('Packing_Item1MenuDiv', 'Packing_Item1MenuDiv', 2)">허가정보</a>
+                                </li>
+                            </ul>
+
+                            <div id="Packing_Item1MenuDiv">
+
+                                <div class="menuDiv" id="Packing_Item1MenuDiv_1">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">개정번호 <star>*<star></label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12 required" name="item_license_no">
+                                        </div>
+                                        <label class="col-2">발효일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_license_start_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">개정사유 <star>*<star></label>
+                                        <div class="input-group col-9">
+                                            <textarea rows="4" class="col-12 form-control required" name="revision_remark" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div class="menuDiv display-none" id="Packing_Item1MenuDiv_2">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">허가번호</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12" name="item_permission_no">
+                                        </div>
+                                        <label class="col-2">허가일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_permission_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">분류코드</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12" name="item_class">
+                                        </div>
+                                        <label class="col-2">작성일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_peritem_write_datemission_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제조제품표준서번호</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control col-12" name="item_proc_no">
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="box-height-auto pl-0 mb-1">
+
+                    <div class="divName">
+                        <p>기본정보</p>
+                        <span class="text-danger display-none col-8"></span>
+                    </div>
+
+                    <div class="menuDiv">
+
+
+                        @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                        {
+                            <div class="input-wrapper">
+                                <label class="col-2">제품코드 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12 required" name="item_cd" onchange="rewritePacking_ItemItemCd()">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="Packing_ItemDuplicateCheckBtn" onclick="Packing_ItemItemCdDuplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <text name="checkResText"></text>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제품명 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12 required" name="item_nm">
+                                </div>
+
+                                <label class="col-2">제품구분</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="item_gb" id="item_gb">
+                                        <option value="1">완제품</option>
+                                        <option value="4">상품</option>
+                                    </select>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="input-wrapper">
+                                <label class="col-2">제품코드</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="item_cd" readonly="readonly" @*onchange="rewritePacking_ItemItemCd()"*@>
+                                    @*<div class="input-group-append">
+                        <button class="btn btn-outline-secondary" type="button" id="Packing_ItemDuplicateCheckBtn" onclick="Packing_ItemItemCdDuplicateCheck()">
+                            중복확인
+                        </button>
+                    </div>*@
+                                </div>
+                                @*<div class="col-5">
+                    <text name="checkResText"></text>
+                </div>*@
+
+                                <label class="col-2">제품구분</label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-12" name="item_gb" id="item_gb">
+                                        <option value="1">완제품</option>
+                                        <option value="4">상품</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제품명 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12 required" name="item_nm">
+                                </div>
+                            </div>
+                        }
+
+                        <div class="input-wrapper">
+                            <label class="col-2">약식코드</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="abbreviation_cd">
+                            </div>
+                            <label class="col-2">약식품명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_s_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사용여부</label>
+                            <div class="input-group col-3">
+                                <input type="checkbox" name="prod_end" onclick="Packing_ItemProdEndCk()" />
+                            </div>
+                            <label class="col-2">사용중지사유</label>
+                            <div class="input-group col-3">
+                                <select class="col-12 form-control" name="break_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.retiredReason).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">업체제조코드</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="vender_item_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">식품이력추적여부</label>
+                            <div class="input-group col-3">
+                                <input type="checkbox" name="traceability_ck" />
+                            </div>
+                            <label class="col-2">식품이력추적등록번호</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="traceability_reg_num">
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="box-height-auto pl-0 mb-0" style="height:342px;">
+
+                    <ul class="nav nav-tabs" id="Packing_Item2MenuDiv">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('Packing_Item2MenuDiv', 'Packing_Item2MenuDiv', 1)">주요정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Packing_Item2MenuDiv', 'Packing_Item2MenuDiv', 2)">분류정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Packing_Item2MenuDiv', 'Packing_Item2MenuDiv', 3)">구매정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Packing_Item2MenuDiv', 'Packing_Item2MenuDiv', 4)">포장제품 정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Packing_Item2MenuDiv', 'Packing_Item2MenuDiv', 5)">제품 이미지</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv" id="Packing_Item2MenuDiv">
+
+                        <div id="Packing_Item2MenuDiv_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">단위중량 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control required" name="item_content" />
+                                    <select class="form-control col-3 required" name="item_content_unit" onchange="packingItemContentUnitSelectChange()">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                    &nbsp;/&nbsp;
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                                <label class="col-2">오차범위(±)</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-3 form-control" name="item_error_range" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-2">실충전량</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_input_content" />
+                                    <input type="text" class="col-3 form-control" name="item_content_unit" readonly="readonly" />
+                                    &nbsp;/&nbsp;
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">피막단위량1</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_content2" />
+                                </div>
+
+                                @if (Public_Function.selectedDB.Equals("RTEGMS_CHEBIGEN"))
+                                {
+                                    <label class="col-2">기타중량</label>
+                                    <div class="input-group col-3">
+                                        <input type="number" class="col-3 form-control" name="item_content3" />
+                                        <input type="text" class="col-3 form-control" name="" value="g" readonly="readonly" />
+                                    </div>
+                                }
+                                else if (Public_Function.selectedDB.Equals("RTEGMS_AOS"))
+                                {
+                                    <label class="col-2">피막단위량2</label>
+                                    <div class="input-group col-3">
+                                        <input type="number" class="col-3 form-control" name="item_content3" />
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">함량</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_exchangerate" />
+                                    <input type="text" class="col-3 form-control" name="item_content_unit" readonly="readonly" />
+                                    &nbsp;/&nbsp;
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div id="Packing_Item2MenuDiv_2" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제형</label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control" name="item_form_cd">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.fomulation).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">제제단위 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <select class="col-12 form-control" name="item_packunit" onchange="packingItemPackUnitSelectChange()">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">생산동</label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control" name="item_type1">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.productionBuildingGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">국내외구분</label>
+                                <div class="input-group col-3">
+                                    <div class="radioDiv">
+                                        <input type="radio" name="in_out_ck" value="Y" /> 국내
+                                        <input type="radio" name="in_out_ck" value="N" /> 국외
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">사업장 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control required" name="plant_cd">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.workplaceGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">외주구분 <star>*</star></label>
+                                <div class="input-group col-3 required">
+                                    <div class="radioDiv">
+                                        <input type="radio" name="outer_process" value="1" /> N/A
+                                        <input type="radio" name="outer_process" value="2" /> 수탁
+                                        <input type="radio" name="outer_process" value="3" /> 위탁
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">ABC 구분</label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control" name="abc_gubun">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.abcGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">농축액구분</label>
+                                <div class="input-group col-3">
+                                    <div class="radioDiv">
+                                        <input type="radio" name="concentrate_yn" value="Y" /> Y
+                                        <input type="radio" name="concentrate_yn" value="N" /> N
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="Packing_Item2MenuDiv_3" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">안전재고일</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-12 form-control" name="item_safety_day" /> 일
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">면세대상</label>
+                                <div class="input-group col-4">
+                                    <input type="checkbox" value="Y" name="taxfree_yn" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div id="Packing_Item2MenuDiv_4" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제조제품</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="item_make_cd">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="Packing_ItemSearchMakeItem()">찾기</button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <input type="text" name="item_make_nm" class="form-control" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">포장단위량</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="col-8 form-control" name="item_pack_size" />
+                                    <input type="text" class="col-4 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제품단위 <star>*</star></label>
+                                <div class="input-group col-1">
+                                    <select class="col-12 form-control required" name="item_packunit2">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-1">지함적재량</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control required" name="second_pack_qt" />
+                                </div>
+                                <label class="col-1">제품 바코드</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control" name="item_pack_barcode" />
+                                </div>
+                            </div>
+
+
+                        </div>
+
+                        <div id="Packing_Item2MenuDiv_5" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(상)</label>
+                                <div class="input-group col-6">
+                                    <img id="Packing_ItemUpperImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Packing_ItemUploadBtn1" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Packing_ItemDeleteBtn1" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Packing_ItemUpperImageUploader")
+                                .Name("upper_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Packing_ItemUploadImage")
+                            .OnUploaded("Packing_ItemSearch")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(중)</label>
+                                <div class="input-group col-6">
+                                    <img id="Packing_ItemMiddleImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Packing_ItemUploadBtn2" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Packing_ItemDeleteBtn2" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Packing_ItemMiddleImageUploader")
+                                .Name("middle_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Packing_ItemUploadImage")
+                            .OnUploaded("Packing_ItemSearch")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(하)</label>
+                                <div class="input-group col-6">
+                                    <img id="Packing_ItemLowerImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Packing_ItemUploadBtn3" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Packing_ItemDeleteBtn3" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Packing_ItemLowerImageUploader")
+                                .Name("lower_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Packing_ItemUploadImage")
+                            .OnUploaded("Packing_ItemSearch")
+                            )
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>

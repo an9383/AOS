@@ -1,0 +1,403 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "SignSet_Input";
+
+    var electronicSignitureJson = @Html.Raw(Json.Encode(ViewBag.electronicSigniture.Data));
+
+}
+
+@*전자서명 등록*@
+
+<script id="SignSet_InputJs">
+
+    var _signSetCRUDState;
+
+    $(function () {
+
+        if (@electronicSignitureJson) {
+            $("#ElectronocSignitureDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@electronicSignitureJson));
+        }
+        else {
+            $("#ElectronocSignitureDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        SignSet_Input_EditCheck(false);
+
+    });
+
+    // 전자서명 그리드 로우 클릭
+    function selectElectronicSigniture() {
+
+        var datagrid = $("#ElectronocSignitureDataGrid").dxDataGrid("instance");
+        if (datagrid.totalCount() > 0) {
+            var data = getGridRowByKey("ElectronocSignitureDataGrid", datagrid.option("focusedRowKey"));
+            fillSignitureInfo(data);
+        }
+
+    }
+
+    // 오른쪽 폼에 데이터 입력
+    function fillSignitureInfo(data) {
+
+        $("#SignSet_Input input[name=sign_set_cd]").val(data.sign_set_cd);
+        $("#SignSet_Input input[name=sign_set_nm]").val(data.sign_set_nm);
+        $("#SignSet_Input input[name=sign_set_nm_dis]").val(data.sign_set_nm_dis);
+        $("#SignSet_Input textarea[name=sign_set_content]").text(data.sign_set_content);
+        $("#SignSet_Input input:radio[name='test_module_yn']:radio[value='" + data.test_module_yn + "']").prop('checked', true);
+        $("#SignSet_Input input:radio[name='doc_module_yn']:radio[value='" + data.doc_module_yn + "']").prop('checked', true);
+        $("#SignSet_Input select[name=link_point]").val(data.link_point);
+        $("#SignSet_Input select[name=linked_module]").val(data.linked_module);
+        $("#SignSet_Input input[name=linked_table]").val(data.linked_table);
+        $("#SignSet_Input textarea[name=linked_remark]").text(data.linked_remark);
+        $("#SignSet_Input input[name=linked_value1]").val(data.linked_value1);
+        $("#SignSet_Input input[name=linked_value2]").val(data.linked_value2);
+        $("#SignSet_Input input[name=linked_value3]").val(data.linked_value3);
+        $("#SignSet_Input input:radio[name='use_yn']:radio[value='" + data.use_yn + "']").prop('checked', true);
+    }
+
+    // 전자서명 조회
+    function searchSignSet() {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            enctype: 'multipart/form-data',
+            url: '/SysOp/SelectSignSet',
+            data: {
+                useYN: $("#SignSet_InputSearchForm input[name=use_yn]").val()
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#ElectronocSignitureDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#ElectronocSignitureDataGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "ElectronocSignitureDataGrid");
+
+    }
+
+    // 수정중인지 체크
+    function SignSet_Input_EditCheck(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#SignSet_InputSave").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputEdit").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputDelete").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputInput").dxButton().parent().parent().addClass("display-none");
+
+            $("#signSetForm :disabled").attr('disabled', false);
+        }
+        if (!nowEdit) {
+
+            $("#SignSet_InputSave").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputUndo").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputInput").dxButton().parent().parent().removeClass("display-none");
+
+            $("#signSetForm :enabled").attr('disabled', true);
+            $("#SignSet_Input input[name=sign_set_cd]").prop("readonly", false);
+        }
+
+    }
+    function SignSet_InputSearch() {
+
+        searchSignSet();
+    }
+
+    // 입력버튼 클릭
+    function SignSet_InputInput() {
+        SignSet_Input_EditCheck(true);
+        $("#signSetForm")[0].reset();
+        $("#SignSet_Input textarea").text("");
+        _signSetCRUDState = "I";
+
+        $("#SignSet_Input input:radio[name='test_module_yn']:radio[value='Y']").prop('checked', true);
+        $("#SignSet_Input input:radio[name='doc_module_yn']:radio[value='Y']").prop('checked', true);
+        $("#SignSet_Input input:radio[name='use_yn']:radio[value='Y']").prop('checked', true);
+    }
+
+    // 수정버튼 클릭
+    function SignSet_InputEdit() {
+        var grid = $("#ElectronocSignitureDataGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            SignSet_Input_EditCheck(true);
+            _signSetCRUDState = "U";
+
+            $("#SignSet_Input input[name=sign_set_cd]").prop("readonly", true);
+        }
+        else {
+            alert("선택된 데이터가 없습니다.");
+        }
+    }
+
+    // 삭제버튼 클릭
+    function SignSet_InputDelete() {
+        var grid = $("#ElectronocSignitureDataGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("선택된 데이터가 없습니다.");
+            return;
+        }
+
+        if (!confirm("선택된 전자서명코드를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        SignSet_Input_EditCheck(true);
+        _signSetCRUDState = "D";
+
+        SignSet_InputSave();
+    }
+
+    // 저장버튼 클릭
+    function SignSet_InputSave() {
+
+        if (!UtilView.checkValidForm("signSetForm")) {
+            return;
+        }
+
+        var form = $('#signSetForm')[0];
+        var data = new FormData(form);
+        data.set("gubun", _signSetCRUDState);
+
+        $.ajax({
+            type: 'POST',
+            enctype: 'multipart/form-data',
+            url: '/SysOp/SignSetCRUD',
+            data: data,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                SignSet_Input_EditCheck(false);
+                _signSetCRUDState = "";
+                searchSignSet();
+            }
+        })
+    }
+
+    // 취소버튼 클릭
+    function SignSet_InputUndo() {
+        SignSet_Input_EditCheck(false);
+        $("#signSetForm")[0].reset();
+        selectElectronicSigniture();
+        _signSetCRUDState = "";
+    }
+
+</script>
+
+
+<div id="SignSet_Input" autoresize="Y">
+
+    <div id="MenuUserTop" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="SignSet_InputSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" name="use_yn" checked="checked" onchange="searchSignSet()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체보기</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" name="use_yn" onchange="searchSignSet()" />
+                        </div>
+                        <span class="form-control-sm"><label>사용중인 것 보기</label></span>
+
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ElectronocSignitureDataGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .KeyExpr("sign_set_cd")
+                    .OnFocusedRowChanged("selectElectronicSigniture")
+                    //.OnSelectionChanged("selectUserMenuProgramList")
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("sign_set_cd")
+                            .Caption("코드");
+                        columns.Add()
+                            .DataField("sign_set_nm")
+                            .Caption("이름");
+                    })
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>서명정보</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="signSetForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">서명코드<star>*</star></label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12 required" name="sign_set_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">서명이름<star>*</star></label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12 required" name="sign_set_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">DISPLAY<star>*</star></label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12 required" name="sign_set_nm_dis">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">서명내용</label>
+                            <div class="input-group col-7">
+                                <textarea type="text" class="form-control col-12 required" rows="2" name="sign_set_content"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">시험관리 사용여부<star>*</star></label>
+                            <div class="input-group col-4">
+                                <label><input type="radio" value="Y" name="test_module_yn" class="required" />사용</label>
+                                <label><input type="radio" value="N" name="test_module_yn" class="required" />사용안함</label>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">문서관리 사용여부<star>*</star></label>
+                            <div class="input-group col-4">
+                                <label><input type="radio" value="Y" name="doc_module_yn" class="required" />사용</label>
+                                <label><input type="radio" value="N" name="doc_module_yn" class="required" />사용안함</label>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">연결시점</label>
+                            <div class="input-group col-7">
+                                <select class="form-control col-7" name="link_point">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.connectionPoint).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사용모듈</label>
+                            <div class="input-group col-7">
+                                <select class="form-control col-7" name="linked_module">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.moduleGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사용테이블</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12" name="linked_table">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">연결방법</label>
+                            <div class="input-group col-7">
+                                <textarea type="text" class="form-control col-12 required" rows="2" name="linked_remark"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">연결값1</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12" name="linked_value1">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">연결값2</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12" name="linked_value2">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">연결값3</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control col-12" name="linked_value3">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사용여부<star>*</star></label>
+                            <div class="input-group col-4">
+                                <label><input type="radio" value="Y" name="use_yn" class="required" />사용</label>
+                                <label><input type="radio" value="N" name="use_yn" class="required" />사용안함</label>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

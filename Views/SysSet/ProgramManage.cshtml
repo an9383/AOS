@@ -1,0 +1,565 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ProgramManage";
+
+    var programData = @Html.Raw(Json.Encode(ViewBag.programData.Data));
+
+}
+@{
+    string[] ProgramManageParam_gridKey = { "form_cd", "parameter_cd" };
+}
+
+@*프로그램 등록*@
+<script id="ProgramManageJs">
+
+    var _programManageParamChanges = new Array();
+
+    $(function () {
+
+        if (@programData) {
+            $("#ProgramManageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@programData));
+            $("#ProgramManageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        programManageEditCheck(false);
+
+        //자동채번 사용여부 변경시 
+        $("#ProgramManageForm input[name='form_seq_yn']").change(function (e) {
+
+            var value = e.target.value;
+            if (value == "Y") {
+                $("#ProgramManageForm input[name=form_seq_prefix]").addClass("required");
+                $("#ProgramManageForm select[name=form_seq_type]").addClass("required");
+                $("#ProgramManageForm input[name=form_seq_size]").addClass("required");
+                $("#ProgramManageForm select[name=form_seq_type]").val("YMD");
+                $("#seq_display_yn").show();
+            }
+            else if (value == "N") {
+                $("#ProgramManageForm input[name=form_seq_prefix]").removeClass("required");
+                $("#ProgramManageForm select[name=form_seq_type]").removeClass("required");
+                $("#ProgramManageForm input[name=form_seq_size]").removeClass("required");
+                $("#ProgramManageForm input[name=form_seq_prefix]").val("");
+                $("#ProgramManageForm select[name=form_seq_type]").val("");
+                $("#ProgramManageForm input[name=form_seq_size]").val("");
+                $("#seq_display_yn").hide();
+            }
+
+
+        })
+
+
+
+    })
+
+    // SP 구문, gubun 변수
+    var _programManageCRUDGubun = "";
+
+    // 수정중인지 체크
+    function programManageEditCheck(nowEdit) {
+
+        $("#ProgramManageForm input[name=form_cd]").attr("readonly", false);
+
+        if (nowEdit) {
+            $("#ProgramManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramManageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramManageSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramManageInput").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramManageDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ProgramManageForm :disabled").attr('disabled', false);
+            $("#ProgramManageGrid").dxDataGrid("option", "disabled", true);
+
+            var editing = {
+                allowAdding: true,
+                allowUpdating: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+            $("#ProgramManageParamGrid").dxDataGrid("option", "editing", editing);
+        }
+        if (!nowEdit) {
+            $("#ProgramManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramManageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramManageSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramManageInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramManageDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ProgramManageForm :enabled").attr('disabled', true);
+            $("#ProgramManageGrid").dxDataGrid("option", "disabled", false);
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false
+            }
+            $("#ProgramManageParamGrid").dxDataGrid("option", "editing", editing);
+
+            _programManageParamChanges = new Array();
+        }
+
+    }
+
+    // 그리드 선택변경시 처리
+    function programManageSelectProgram() {
+
+        var grid = $("#ProgramManageGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('ProgramManageGrid', grid.option("focusedRowKey"));
+
+        if (UtilView.isEmpty(data)) return;
+
+        $("#ProgramManageForm input[name=form_cd]").val(data.form_cd);
+        $("#ProgramManageForm input[name=form_nm]").val(data.form_nm);
+        $("#ProgramManageForm input[name=form_url]").val(data.form_url);
+
+        if (data.form_main_ck === "Y") {
+            $("#ProgramManageForm input[name=form_main_ck][value='Y']").prop("checked", true);
+        }
+        else {
+            $("#ProgramManageForm input[name=form_main_ck][value='N']").prop("checked", true);
+        }
+
+        $("#ProgramManageForm input[name=form_security]").val(data.form_security);
+        $("#ProgramManageForm input[name=form_doc]").val(data.form_doc);
+        $("#ProgramManageForm textarea[name=form_remark]").text(data.form_remark);
+
+
+        //interface 여부
+        if (data.form_interface == "1") {
+            $("#ProgramManageForm input[name=form_interface]").prop("checked", true);
+        }
+        else {
+            $("#ProgramManageForm input[name=form_interface]").prop("checked", false);
+        }
+
+        //자동채번 
+        if (UtilView.isEmpty(data.form_seq_yn) || "N" == data.form_seq_yn) {
+            $("#seq_use_n").prop("checked", true);
+            $("#ProgramManageForm input[name=form_seq_prefix]").val("");
+            $("#ProgramManageForm select[name=form_seq_type]").val("");
+            $("#ProgramManageForm input[name=form_seq_size]").val("");
+            $("#ProgramManageForm input[name=form_seq_prefix]").removeClass("required");
+            $("#ProgramManageForm select[name=form_seq_type]").removeClass("required");
+            $("#ProgramManageForm input[name=form_seq_size]").removeClass("required");
+            $("#seq_display_yn").hide();
+        } else {
+            $("#seq_use_y").prop("checked", true);
+            $("#ProgramManageForm input[name=form_seq_prefix]").val(data.form_seq_prefix);    //접두어
+            $("#ProgramManageForm select[name=form_seq_type]").val(data.form_seq_type);        //타입(ymd, ym..)
+            $("#ProgramManageForm input[name=form_seq_size]").val(data.form_seq_size);        //시퀀스 사이즈( ex) 3 ) -> 001
+            $("#ProgramManageForm input[name=form_seq_prefix]").addClass("required");
+            $("#ProgramManageForm select[name=form_seq_type]").addClass("required");
+            $("#ProgramManageForm input[name=form_seq_size]").addClass("required");
+            $("#seq_display_yn").show();
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/SysSet/ProgramManageSelectParameter',
+            data: {
+                form_cd: data.form_cd
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#ProgramManageParamGrid").dxDataGrid("option", "dataSource", jsonData);
+                }
+                catch (e) {
+                    $("#ProgramManageParamGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+            }
+        })
+    }
+
+    function ProgramManageSearch() {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysSet/ProgramManageSelect',
+            data: {
+                form_cd: ""
+            },
+            success: function (result) {
+
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#ProgramManageGrid").dxDataGrid("instance").option("dataSource", json);
+                } else {
+                    $("#ProgramManageGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+
+            }
+        })
+        UtilView.setGridFocus("G", "ProgramManageGrid");
+
+    }
+
+    // 입력 버튼
+    function ProgramManageInput() {
+
+        programManageEditCheck(true);
+
+        $("#ProgramManageForm")[0].reset();
+
+        $("#ProgramManageParamGrid").dxDataGrid("option", "dataSource", []);
+
+        $("#seq_use_n").prop("checked", true);
+        $("#ProgramManageForm input[name=form_seq_prefix]").removeClass("required");
+        $("#ProgramManageForm select[name=form_seq_type]").removeClass("required");
+        $("#ProgramManageForm input[name=form_seq_size]").removeClass("required");
+        $("#ProgramManageForm input[name=form_seq_prefix]").val("");
+        $("#ProgramManageForm select[name=form_seq_type]").val("");
+        $("#ProgramManageForm input[name=form_seq_size]").val("");
+        $("#seq_display_yn").hide();
+
+        _programManageCRUDGubun = "I";
+
+    }
+
+    // 수정 버튼
+    function ProgramManageEdit() {
+        var grid = $("#ProgramManageGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            programManageEditCheck(true);
+            _programManageCRUDGubun = "U";
+
+            $("#ProgramManageForm input[name=form_cd]").attr("readonly", true);
+        }
+        else {
+            alert("선택된 데이터가 없습니다.");
+        }
+    }
+
+    // 취소 버튼
+    function ProgramManageUndo() {
+
+        programManageEditCheck(false);
+
+        programManageSelectProgram();
+    }
+
+    // 저장 버튼
+    async function ProgramManageSave() {
+        if (!UtilView.checkValidForm("ProgramManageForm")) {
+            return;
+        }
+
+        if ($("#ProgramManageForm input[name=form_interface]").val() != "1") {
+            $("#ProgramManageForm input[name=form_interface]").val("0");
+        }
+
+        var formData = new FormData($("#ProgramManageForm")[0]);
+        formData.set("gubun", _programManageCRUDGubun);
+
+        await $("#ProgramManageParamGrid").dxDataGrid("instance").saveEditData();
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/ProgramCRUD',
+            data: formData,
+            processData: false,
+            contentType: false,
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (_programManageParamChanges.length > 0) {
+                    console.log(_programManageParamChanges);
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/SysSet/ProgramParamCRUD',
+                        data: {
+                            programParameters: JSON.stringify(_programManageParamChanges)
+                        },
+                        success: function (result) {
+
+                        }
+                    })
+
+                }
+
+                alert(json.messege);
+
+                programManageEditCheck(false);
+                ProgramManageSearch();
+
+            }
+        })
+
+
+    }
+
+    // 삭제 버튼
+    function ProgramManageDelete() {
+
+        var grid = $("#ProgramManageGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('ProgramManageGrid', grid.option("focusedRowKey"));
+
+        _programManageCRUDGubun = "D";
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/ProgramCRUD',
+            data: {
+                form_cd: data.form_cd,
+                gubun: _programManageCRUDGubun
+            },
+            success: function (result) {
+
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    alert(json.messege);
+                }
+                programManageEditCheck(false);
+                ProgramManageSearch();
+
+            }
+        })
+    }
+
+    function ProgramManageParamInsert(info) {
+        var data = info.data;
+
+        data.spGubun = "I";
+        data.form_cd = $("#ProgramManageForm input[name=form_cd]").val();
+
+        _programManageParamChanges.push(data);
+    }
+
+    function ProgramManageParamUpdate(info) {
+        var data = info.data;
+
+        data.spGubun = "U";
+        data.form_cd = $("#ProgramManageForm input[name=form_cd]").val();
+
+        _programManageParamChanges.push(data);
+    }
+
+    function ProgramManageParamDelete(info) {
+        var data = info.data;
+
+        data.spGubun = "D";
+        data.form_cd = $("#ProgramManageForm input[name=form_cd]").val();
+
+        _programManageParamChanges.push(data);
+    }
+
+</script>
+
+<div id="ProgramManage" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div id="ProgramManageLeftMain" class="col-4 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ProgramManageGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("form_cd")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("form_cd").Caption("프로그램코드");
+                        c.Add().DataField("form_nm").Caption("프로그램명");
+                        c.Add().DataField("form_security").Caption("레벨");
+                    })
+                    .OnFocusedRowChanged("programManageSelectProgram")
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-8 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>상세 정보</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="ProgramManageForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">코드 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12 required" name="form_cd">
+                            </div>
+                            <label class="col-2">프로그램명 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12 required" name="form_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">웹 URL</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="form_url">
+                            </div>
+                            <label class="col-2">메인메뉴 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="form_main_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="form_main_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">보안등급</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="form_security">
+                            </div>
+                            <label class="col-2">문서번호</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12 " name="form_doc">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">비고</label>
+                            <div class="input-group col-8">
+                                <textarea rows="3" class="form-control col-12" name="form_remark"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">인터페이스 여부</label>
+                            <div class="input-group col-2">
+                                <label><input type="checkbox" name="form_interface" value="1" /> </label>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">채번사용 여부</label>
+                            <div class="input-group col-4">
+                                <div class="input-group-prepend">
+                                    <input class="input-group-append" type="radio" value="Y"  id="seq_use_y" name="form_seq_yn"  />
+                                </div>
+                                <span class="form-control-sm"><label for="seq_use_y">자동</label></span>
+                                <div class="input-group-prepend">
+                                    <input class="input-group-append" type="radio" value="N" id="seq_use_n" name="form_seq_yn" checked/>
+                                </div>
+                                <span class="form-control-sm"><label for="seq_use_n">수동</label></span>
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper" id="seq_display_yn">
+                            <label class="col-2">채번생성 기준</label>
+                            <!-- 채번사용 여부 자동으로 선택시, 아래의 필드는 필수값이 되어야함-->
+                            <label class="col-1">접두어</label>
+                            <div class="input-group col-2">
+                                <input type="text" class="form-control col-11 required" name="form_seq_prefix">
+                            </div>
+
+                            <label class="col-1">날짜타입</label>
+                            <div class="input-group col-2">
+                                <select class="form-control col-12 required" name="form_seq_type">
+                                    <option value="YMD">YMD</option>
+                                    <option value="YM">YM</option>
+                                    <option value="Y">Y</option>
+                                </select>
+                            </div>
+
+                            <label class="col-1">순번길이</label>
+                            <div class="input-group col-2">
+                                <input type="number" class="form-control col-11 required" name="form_seq_size">
+                            </div>
+
+                        </div>
+                    </form>
+
+                </div>
+
+                <div class="divName">
+                    <p>파라미터 설정</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ProgramManageParamGrid")
+                    .KeyExpr(ProgramManageParam_gridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().Lookup(lookup => lookup
+                             .DataSource(d => d.WebApi()
+                                .RouteName("Comm")
+                                .LoadAction("GetCommon")
+                                .LoadMethod("GET")
+                                .LoadParams(new
+                                {
+                                    pGubun = "공통코드",
+                                    pDiv = "N",
+                                    pStrWhere = "SY004",
+                                    pTableName = "gubun"
+                                }).Key("keyfield"))
+                             .ValueExpr("keyfield")
+                             .DisplayExpr("displayfield")
+                             ).DataField("gubun")
+                             .Caption("구분")
+                             .Width(120);
+                        c.Add().DataField("flow_cd").Caption("업무코드");
+                        c.Add().DataField("flow_nm").Caption("업무명");
+                        c.Add().DataField("parameter_cd").Caption("파라미터");
+                        c.Add().DataField("parameter_value").Caption("값");
+                        c.Add().DataField("param_dll").Caption("리포트DLL");
+                        c.Add().DataField("parameter_remark").Caption("비고");
+                        c.Add().DataField("apply_yn").Caption("적용")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.apply_yn == ""Y"" || rowData.apply_yn == true); }");
+                    })
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnRowInserted("ProgramManageParamInsert")
+                    .OnRowUpdated("ProgramManageParamUpdate")
+                    .OnRowRemoved("ProgramManageParamDelete")
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+</div>

@@ -1,0 +1,330 @@
+﻿
+@{
+    Layout = null;
+}
+
+<script type="text/javascript" src="~/js/haccp/SysSet/Upgrade_v2.js"></script>
+<script type="text/javascript">
+    // SP 구문, gubun 변수
+    var curGubun = "";
+    var Upgrade_v2_dataGrid;
+    var Upgrade_v2_selectedItemCd;
+    var Upgrade_v2_duplicatedCheck = false;
+
+    // 스크립트 시작
+    $(function () {
+        Upgrade_v2_EditCheck(false);
+        Upgrade_v2_dataGrid = $("#Upgrade_v2_GridContainer").dxDataGrid("instance");
+        var CRUDstate = "";
+    });
+
+    // 수정중인지 체크
+    function Upgrade_v2_EditCheck(nowEdit) {
+        if (nowEdit) {
+            $("#Save").dxButton().parent().parent().removeClass("display-none");
+            $("#Undo").dxButton().parent().parent().removeClass("display-none");
+            $("#Search").dxButton().parent().parent().addClass("display-none");
+            $("#Input").dxButton().parent().parent().addClass("display-none");
+            $("#Edit").dxButton().parent().parent().addClass("display-none");
+            $("#Delete").dxButton().parent().parent().addClass("display-none");
+
+            $("#Upgrade_v2_RightForm :disabled").attr('disabled', false);
+            $("#Upgrade_v2_GridContainer").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#Save").dxButton().parent().parent().addClass("display-none");
+            $("#Undo").dxButton().parent().parent().addClass("display-none");
+            $("#Search").dxButton().parent().parent().removeClass("display-none");
+            $("#Input").dxButton().parent().parent().removeClass("display-none");
+            $("#Edit").dxButton().parent().parent().removeClass("display-none");
+            $("#Delete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#Upgrade_v2_RightForm :enabled").attr('disabled', true);
+            $("#Upgrade_v2_GridContainer").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    // 그리드 선택변경시 처리
+    function onSelectionChanged(e) {
+        console.log(e.selectedRowsData[0].parameter_code);
+
+        $("#Upgrade_v2_code").val(e.selectedRowsData[0].parameter_code);
+        $("#Upgrade_v2_value").val(e.selectedRowsData[0].parameter_value);
+        $("#Upgrade_v2_remark").val(e.selectedRowsData[0].parameter_remark);
+    }
+
+    // 조회버튼 기능
+    function search() {
+        $("#Gubun").val("S");
+
+        event.preventDefault();
+        var form = $('#Upgrade_v2_Form')[0];
+        var data = new FormData(form);
+        console.log(form);
+        console.log(data);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/Upgrade_v2Select',
+            data: data,
+            contentType: false,
+            processData: false,
+            cache: false,
+            timeout: 600000,
+            success: function (result) {
+                $("#Upgrade_v2_GridContainer").dxDataGrid("option", "dataSource", result);
+                if (result.length < 1)
+                    $("#Upgrade_v2_RightForm")[0].reset();
+
+                $("#Gubun").val("S");
+            }
+        })
+    }
+
+    // 입력 버튼
+    function input() {
+        $("#Upgrade_v2_RightForm")[0].reset();
+        Upgrade_v2_EditCheck(true);
+        $("#Gubun").val("I");
+    }
+
+    // 수정 버튼
+    function edit() {
+        // 키값을 미리 변수에 넣어 둔 다음 처리한다.
+        var sUpgrade_v2_code = $("#Upgrade_v2_code").val();
+        Upgrade_v2_EditCheck(true);
+
+        $("#Upgrade_v2_code").val(sParameter_code);
+        $("input[name=Upgrade_v2_code]").attr("readonly", true);
+
+        $("#Gubun").val("U");
+    }
+
+    // 취소 버튼
+    function undo() {
+        Upgrade_v2_EditCheck(false);
+        $("#Gubun").val("S");
+    }
+
+    // 저장 버튼
+    function save() {
+        validationCheck();
+        //var sGubun = $("#Gubun").val();
+
+        event.preventDefault();
+        var form = $('#Upgrade_v2_RightForm')[0];
+        var data = new FormData(form);
+        console.log(form);
+        console.log(data);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/Upgrade_v2Save',
+            data: data,
+            contentType: false,
+            processData: false,
+            cache: false,
+            timeout: 600000,
+            success: function (result) {
+                if (result.Ok) {
+                    alert("OK");
+
+                    Upgrade_v2_EditCheck(false);
+                    search();
+                    Parameter_duplicatedCheck = false;
+                    complete('Upgrade_v2');
+                }
+                else {
+                    alert("Not OK");
+
+                    $("#valdationChk").removeClass("display-none");
+                    $("#valdationChk").text("* : 필수 입력사항입니다.");
+                }
+            }
+        })
+    }
+
+    // 삭제 버튼
+    function del() {
+        CRUDstate = "delete";
+        var Upgrade_v2_dataGrid = $("#Upgrade_v2_GridContainer").dxDataGrid("instance");
+        Upgrade_v2_dataGrid.selectRowsByIndexes(Upgrade_v2_dataGrid.option("focusedRowIndex"));
+        var data = Upgrade_v2_dataGrid.getSelectedRowsData();
+
+        // 키값(data)을 Form 데이터에 세팅
+        $("#pUpgrade_v2_Code").val(data[0].parameter_code);
+        var form = $('#Upgrade_v2_code_Form')[0];
+        var data = new FormData(form);
+        $("#Gubun").val("D");
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/Upgrade_v2Delete',
+            data: data,
+            contentType: false,
+            processData: false,
+            cache: false,
+            timeout: 600000,
+            success: function (result) {
+                alert("result=" + result);
+
+                var type = result ? true : false,
+                    text = result ? "삭제하였습니다." : "삭제를 실패하였습니다.";
+
+                DevExpress.ui.notify(text, type, 600);
+            }
+        });
+    }
+
+    // validation 상태값 표시
+    function validationCheck() {
+        $("#valdationChk").addClass("display-none");
+    }
+
+    function notify(e) {
+        var buttonText = e.component.option("text");
+        DevExpress.ui.notify(buttonText + " 버튼을 선택하였습니다.");
+
+        // 
+    }
+
+</script>
+
+<div id="Upgrade_v2">
+    <div id="Upgrade_v2Top" class="mainTop">
+        <form id="Upgrade_v2_Form" method="post" enctype="multipart/form-data">
+            @(Html.DevExtreme().FileUploader()
+                .Name("Photo")
+                .SelectButtonText("파일찾기")
+                .LabelText("")
+                .Accept("image/*")
+                .UploadMode(FileUploadMode.UseForm)
+            )
+            <input type="text" name="pUpgrade_v2_Remark" id="pUpgrade_v2_Remark" placeholder="업로드 사유를 입력해주세요." />
+            @(Html.DevExtreme().Button()
+                .ID("button")
+                .Text("Upload")
+                .Type(ButtonType.Success)
+                .UseSubmitBehavior(true)
+            )
+
+
+        </form>
+
+        @(Html.DevExtreme().Toolbar()
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                    .Button()
+                    .Type(ButtonType.Default)
+                    .StylingMode(ButtonStylingMode.Contained)
+                    .ID("Search")
+                    .Icon("search")
+                    .Text("조회")
+                    .OnClick("search")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("Input")
+                .Icon("plus")
+                .Text("입력")
+                .OnClick("input")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("Edit")
+                .Icon("edit")
+                .Text("수정")
+                .OnClick("edit")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("Save")
+                .Icon("save")
+                .Text("저장")
+                .OnClick("save")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("Undo")
+                .Icon("undo")
+                .Text("취소")
+                .OnClick("undo")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("Delete")
+                .Icon("trash")
+                .Text("삭제")
+                .OnClick("del")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+
+        )
+</div>
+
+    <div class="row">
+        <div id="Upgrade_v2LeftMain" class="col-8">
+            @(Html.DevExtreme().DataGrid()
+                .ID("Upgrade_v2_GridContainer")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .DataSource((System.Collections.IEnumerable)ViewBag.Upgrade_v2)
+                .Columns(c =>
+                {
+                    c.Add().DataField("file_name").Caption("파일명");
+                    c.Add().DataField("file_version").Caption("파일버전");
+                    c.Add().DataField("file_size").Caption("파일크기");
+                    c.Add().DataField("file_modify_date").Caption("파일수정일자");
+                    c.Add().DataField("file_upload_date").Caption("업로드일자");
+                    c.Add().DataField("file_use_yn").Caption("파일사용여부");
+                    c.Add().DataField("remark").Caption("비고");
+                    c.Add().DataField("emp_nm").Caption("사원");
+                })
+                .FocusedRowKey(1)
+                .OnSelectionChanged("onSelectionChanged")
+            )
+        </div>
+        
+    </div>
+</div>

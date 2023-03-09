@@ -1,0 +1,334 @@
+﻿@model HACCP.Models.RowMatln.ReceiptCheckSOP
+@using System.Data
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ReceiptCheckSOP";
+    string sData = ViewData["data"] as String;
+
+}
+@{
+    var ReceiptCheckSOPData = @Html.Raw(Json.Encode(ViewBag.ReceiptCheckSOP.Data));
+    var ReceiptCheckSOPAuth = @Html.Raw(Json.Encode(ViewBag.ReceiptCheckSOPAuth.Data));
+}
+
+<script id="ReceiptCheckSOPJs" type="text/javascript">
+    //SP 구문, gubun 변수
+    var checkSOPGubun = "";
+    var _ReceiptCheckSOPAuth;
+    var ReceiptCheckSOPData = @ReceiptCheckSOPData;
+    //validation check
+    var _receiptCheckSOPIsValid = true;
+
+    //SOP 내용 담는 Array
+    var _rcSOPList = new Array();
+
+    //SOP row수    
+    var _rcSOP_Seq = 0;
+
+    $(function () {
+
+        if (ReceiptCheckSOPData.length <= 0) {
+            $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ReceiptCheckSOPData));
+            _rcSOP_Seq = JSON.parse(@ReceiptCheckSOPData).length;
+            $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+        }
+
+        //수정중 체크
+        ReceiptCheckSOPEditCheck(false);
+
+        //사용자 권한
+        _ReceiptCheckSOPAuth = JSON.parse(@ReceiptCheckSOPAuth)[0];
+
+        if (_ReceiptCheckSOPAuth.form_edit != "Y") {
+            $("#ReceiptCheckSOPEdit").remove();
+        }
+
+        //페이지 첫화면 option값 '원료' 고정
+        $("#ReceiptCheckSOP_SearchParentCode select option[value='3']").attr("selected", true);
+
+    });
+
+    //수정중인지 체크
+    function ReceiptCheckSOPEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#ReceiptCheckSOPSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiptCheckSOPUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiptCheckSOPSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckSOPEdit").dxButton().parent().parent().addClass("display-none");
+        }
+        if (!nowEdit) {
+            $("#ReceiptCheckSOPSave").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckSOPUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ReceiptCheckSOPSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ReceiptCheckSOPEdit").dxButton().parent().parent().removeClass("display-none");
+        }
+    }
+
+    //내용 추가시 순서 자동 생성
+    function receipt_check_Seq(e) {
+
+        _rcSOP_Seq = _rcSOP_Seq == 0 ? 1 : _rcSOP_Seq + 1;
+
+        e.data.receipt_check_seq = (_rcSOP_Seq);
+
+        //var ds = $("#ReceiptCheckSOPGrid").dxDataGrid("option", "dataSource");
+
+        //e.data.receipt_check_seq = (ds.length + 1);
+        
+    }
+
+    //수정 버튼 클릭
+    function ReceiptCheckSOPEdit() {
+        ReceiptCheckSOPEditCheck(true);
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: true,
+            allowDeleting: true,
+            mode: 'batch'
+        }
+
+
+        $("#ReceiptCheckSOPGrid").dxDataGrid("option", "editing", editing);
+
+    }
+
+    //입력
+    function contentsInsert(info) {
+        checkSOPGubun = "I";
+        var data = info.data;
+        ReceiptCheckSOPEditCheck(true);
+
+        data.gubun = checkSOPGubun;
+        data.item_gb = $("#ReceiptCheckSOP_SearchParentCode select[name=item_gb]").val();
+
+        _rcSOPList.push(data);
+
+    }
+
+    //수정
+    function contentsUpdate(info) {
+        checkSOPGubun = "U";
+        var data = info.data;
+        ReceiptCheckSOPEditCheck(true);
+
+        data.gubun = checkSOPGubun;
+
+        _rcSOPList.push(data);
+
+    }
+
+    //삭제
+    function contentsDelete(info) {
+        checkSOPGubun = "D";
+        var data = info.data;
+        ReceiptCheckSOPEditCheck(true);
+
+        data.gubun = checkSOPGubun;
+
+        _rcSOPList.push(data);
+
+    }
+
+    //저장 버튼
+    async function ReceiptCheckSOPSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) {
+            return;
+        }
+
+        await $("#ReceiptCheckSOPGrid").dxDataGrid("instance").saveEditData();
+
+        if (!_receiptCheckSOPIsValid) {
+            return;
+        }
+
+        ReceiptCheckSOPCRUD(_rcSOPList);
+    }
+
+    //SOP 저장로직
+    function ReceiptCheckSOPCRUD(data) {
+        
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheckSOPCRUD',
+            data: {
+                rModel: JSON.stringify(data)
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("저장되었습니다.");
+
+                ReceiptCheckSOPEditCheck(false);
+                _rcSOPList = new Array();
+                checkSOPGubun = "";
+
+                var editing = {
+                    allowUpdating: false,
+                    allowAdding: false,
+                    allowDeleting: false,
+                    mode: 'batch'
+                }
+
+                $("#ReceiptCheckSOPGrid").dxDataGrid("option", "editing", editing);
+
+                ReceiptCheckSOPSearch();
+            }
+        });
+
+    }
+
+    //취소 버튼
+    function ReceiptCheckSOPUndo() {
+        ReceiptCheckSOPEditCheck(false);
+
+        var editing = {
+            allowUpdating: false,
+            allowAdding: false,
+            allowDeleting: false,
+            mode: 'batch'
+        }
+
+        $("#ReceiptCheckSOPGrid").dxDataGrid("option", "editing", editing);
+        _receiptCheckSOPIsValid = true;
+        checkSOPGubun = "";
+        ReceiptCheckSOPSearch();
+    }
+
+
+
+    function ReceiptCheckSOPMainFormClear() {
+        $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("dataSource", []);
+    }
+
+    //조회
+    function ReceiptCheckSOPSearch() {
+
+        var formData = new FormData($("#ReceiptCheckSOP_SearchParentCode")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheckSOPSelect',
+            contentType: false,
+            processData: false,
+            data: formData,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ReceiptCheckSOPGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                _rcSOP_Seq = JSON.parse(result).length;
+
+            }
+        });
+    }
+
+    //저장 버튼 비활성화
+    function rcSOP_ToolbarEdit(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+
+    }
+
+    //그리드 validation check
+    function ReceiptCheckSOPRequired(e) {
+        _receiptCheckSOPIsValid = e.isValid;
+    }
+
+
+</script>
+
+<div id="ReceiptCheckSOP" autoresize="Y">
+    @*<h4 class="divTitle">입고 체크 리스트</h4>*@
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="ReceiptCheckSOP_SearchParentCode">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목구분</span>
+                        </div>
+                        <select class="form-control" name="item_gb" >
+                            @foreach (DataRow row in ((DataTable)ViewBag.Select_item_gb).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Edit;Save;Undo");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div id="ReceiptCheckSOPMain" class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiptCheckSOPGrid")
+                    .ShowBorders(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .KeyExpr("receipt_check_id")
+                    .OnInitNewRow("receipt_check_Seq")
+                    .OnRowUpdated("contentsUpdate")
+                    .OnRowInserted("contentsInsert")
+                    .OnRowRemoved("contentsDelete")
+                    .OnToolbarPreparing("rcSOP_ToolbarEdit")                    
+                    .OnRowValidating("ReceiptCheckSOPRequired")
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_check_seq").Caption("순번")
+                            .Width(100)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("순번이 지정되지 않아 저장할 수 없습니다.");
+                            });
+                        c.Add().DataField("receipt_check_contents").Caption("체크사항");
+                    })
+                )
+
+            </div>
+        </div>
+    </div>
+
+
+</div>

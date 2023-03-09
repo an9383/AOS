@@ -1,0 +1,294 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    //var workroomData = @Html.Raw(Json.Encode(ViewBag.workroomData.Data));
+}
+
+<script id="@(pagePrefix)Js">
+
+    var _workroomManageWorkroomCd = "";
+
+    $(function () {
+
+        @*var WorkroomManagePopupColumns = {
+            "workroom": [{ dataField: "workroom_cd", caption: "창고코드" }
+                , { dataField: "workroom_nm", caption: "창고명" }]
+        };
+
+        createPopup("WorkroomManageWorkroom", "작업실 조회", @workroomData, WorkroomManagePopupColumns.workroom);*@
+
+        $("#WorkroomManageLocationGrid").dxDataGrid("option", "dataSource", []);
+
+        WorkroomManageSearch();
+
+        WorkroomManageEditCheck(false, "N");
+    });
+
+    // 수정중인지 체크
+    function WorkroomManageEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "WorkroomManageToolbar"
+            , "WorkroomManageGrid;WorkroomManageLocationGrid"
+            , "WorkroomManageWriteForm"
+            , "workroom_location"
+        );
+
+        $("#WorkroomManageWriteForm input[name=gubun]").val(status);
+
+    }
+
+    // 마스터 그리드 포커스 변경
+    function WorkroomManageFocusChanged() {
+
+        var grid = $("#WorkroomManageGrid").dxDataGrid("instance");
+
+        _workroomManageWorkroomCd = grid.option("focusedRowKey");
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/WorkroomManageSelectLocation',
+            data: {
+                workroom_cd: _workroomManageWorkroomCd
+            },
+            dataType: "json",
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    console.log(jsonData);
+                    $("#WorkroomManageLocationGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#WorkroomManageLocationGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#WorkroomManageLocationGrid").dxDataGrid("option", "dataSource", []);
+                    $("#WorkroomManageLocationGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+
+            }
+        })
+    }
+
+    // 디테일 그리드 포커스 변경
+    function WorkroomManageLocationFocusChanged() {
+        UtilView.setDataGridFormBind("WorkroomManageLocationGrid", "WorkroomManageWriteForm");
+    }
+
+    //#region 툴바 클릭 이벤트 관련
+
+    //조회
+    function WorkroomManageSearch() {
+        $("#WorkroomManageGrid").dxDataGrid("option", "focusedRowKey", "");
+        $("#WorkroomManageLocationGrid").dxDataGrid("option", "dataSource", []);
+        UtilView.dataGridSelect('WorkroomManageGrid', 'WorkroomManageSearchForm');
+    }
+
+    // 입력
+    function WorkroomManageInput() {
+        $("#WorkroomManageWriteForm")[0].reset();
+        WorkroomManageEditCheck(true, "I");
+    }
+
+    // 수정
+    function WorkroomManageEdit() {
+
+        var grid = $("#WorkroomManageLocationGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정 할 사항이 없습니다.");
+            return;
+        }
+
+        WorkroomManageEditCheck(true, "U");
+    }
+
+    // 삭제
+    function WorkroomManageDelete() {
+
+        var grid = $("#WorkroomManageLocationGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("삭제 할 사항이 없습니다.");
+            return;
+        }
+
+        if (!confirm("삭제하시겠습니까?")) {
+            return;
+        }
+        WorkroomManageEditCheck(true, "D");
+        WorkroomManageSave();
+    }
+
+    // 저장
+    function WorkroomManageSave() {
+
+        if (!UtilView.checkValidForm("WorkroomManageWriteForm")) {
+            return;
+        }
+
+        var form = $('#WorkroomManageWriteForm')[0];
+        var formData = new FormData(form);
+
+        formData.set("workroom_cd", _workroomManageWorkroomCd);
+
+        UtilView.dataGridTRX(formData, () => WorkroomManageSearch());
+        WorkroomManageEditCheck(false, "N");
+
+    }
+
+    // 취소
+    function WorkroomManageUndo() {
+        WorkroomManageEditCheck(false, "N");
+
+        var grid = $("#WorkroomManageLocationGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            WorkroomManageLocationFocusChanged();
+        } else {
+            $("#WorkroomManageWriteForm")[0].reset();
+        }
+    }
+
+    //#endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @*<div id="WorkroomManageWorkroomPopup"></div>*@
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            @*<form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">창고</span>
+                        </div>
+                        <input type="text" class="form-control" name="wrokroom_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>*@
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("WorkroomManageGrid")
+                    .KeyExpr("workroom_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("workroom_cd").Caption("창고코드");
+                        c.Add().DataField("workroom_nm").Caption("창고명");
+                    })
+                .OnFocusedRowChanged("WorkroomManageFocusChanged")
+                //.OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("WorkroomManageLocationGrid")
+                    .KeyExpr("id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(600)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("workroom_location").Caption("로케이션코드");
+                        c.Add().DataField("location_nm").Caption("로케이션명");
+                    })
+                    .OnFocusedRowChanged("WorkroomManageLocationFocusChanged")
+                )
+
+                <form id="WorkroomManageWriteForm">
+
+                    <input type="text" name="gubun" hidden="hidden" />
+                    <input type="text" name="loading_limit" hidden="hidden" />
+                    <input type="text" name="loading_limit_unit" hidden="hidden" />
+                    <input type="text" name="loading_priority" hidden="hidden" />
+                    <input type="text" name="abc_type" hidden="hidden" />
+
+                    <div class="divName mb-1">
+                        <p>로케이션 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">로케이션 코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="workroom_location" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">로케이션 명</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control required" name="location_nm" autocomplete="off" />
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

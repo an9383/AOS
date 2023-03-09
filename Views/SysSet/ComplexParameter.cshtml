@@ -1,0 +1,389 @@
+﻿@model HACCP.Models.SysSet.ComplexParameter
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+
+    // 1.2. 좌측 Grid
+    var ComplexParameter = Html.Raw(Json.Encode(ViewBag.ComplexParameter.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+}
+
+@*복합 파라미터 관리*@
+
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";    // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    // SP 구문, gubun 변수
+    var curGubun = "";
+    var ComplexParameter_dataGrid;
+    var ComplexParameter_selectedItemCd;
+    var ComplexParameter_duplicatedCheck = false;
+
+    // 스크립트 시작
+    $(function () {
+
+        if (@ComplexParameter) {
+            $("#ComplexParameter_GridContainer").dxDataGrid("instance").option("dataSource", JSON.parse(@ComplexParameter));
+            $("#ComplexParameter_GridContainer").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        ComplexParameter_EditCheck(false);
+    });
+
+    // 수정중인지 체크
+    function ComplexParameter_EditCheck(nowEdit) {
+        if (nowEdit) {
+            $("#ComplexParameterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ComplexParameterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ComplexParameterSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ComplexParameterInput").dxButton().parent().parent().addClass("display-none");
+            $("#ComplexParameterEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ComplexParameterDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ComplexParameterWriteForm :disabled").attr('disabled', false);
+            $("#ComplexParameter_GridContainer").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#ComplexParameterSave").dxButton().parent().parent().addClass("display-none");
+            $("#ComplexParameterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ComplexParameterSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ComplexParameterInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ComplexParameterEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ComplexParameterDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ComplexParameterWriteForm :enabled").attr('disabled', true);
+            $("#ComplexParameter_GridContainer").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    // 그리드 포커스변경시 처리
+    function ComplexParameter_OnFocusedRowChanged(e) {
+        if (e.row && e.row.data) {
+            $("#ComplexParameter #complex_cd").val(e.row.data.complex_cd);
+            $("#ComplexParameter #complex_id").val(e.row.data.complex_id);
+            $("#ComplexParameter #code1").val(e.row.data.code1);
+            $("#ComplexParameter #code2").val(e.row.data.code2);
+            $("#ComplexParameter #code3").val(e.row.data.code3);
+            $("#ComplexParameter #code4").val(e.row.data.code4);
+            $("#ComplexParameter #code5").val(e.row.data.code5);
+            $("#ComplexParameter #code6").val(e.row.data.code6);
+            $("#ComplexParameter #code7").val(e.row.data.code7);
+            $("#ComplexParameter #code8").val(e.row.data.code8);
+            $("#ComplexParameter #code9").val(e.row.data.code9);
+            $("#ComplexParameter #code10").val(e.row.data.code10);
+            $("#ComplexParameter #code11").val(e.row.data.code11);
+            $("#ComplexParameter #code12").val(e.row.data.code12);
+        } else {
+            $("#ComplexParameterWriteForm")[0].reset();
+        }
+    }
+
+    // 조회버튼 기능
+    function ComplexParameterSearch() {
+        $("#ComplexParameter #Gubun").val("S");
+
+        var form = $('#ComplexParameterSearchForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/ComplexParameterSelect',
+            data: data,
+            async: false,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    $("#ComplexParameter_GridContainer").dxDataGrid("option", "dataSource", json);
+                } else {
+                    $("#ComplexParameter_GridContainer").dxDataGrid("option", "dataSource", []);
+                    $("#ComplexParameterWriteForm")[0].reset();
+                }
+
+                $("#ComplexParameter #Gubun").val("S");
+            }
+        })
+        UtilView.setGridFocus("G", "ComplexParameter_GridContainer");
+
+    }
+
+    // 입력 버튼
+    function ComplexParameterInput() {
+        $("#ComplexParameterWriteForm")[0].reset();
+        ComplexParameter_EditCheck(true);
+        $("input[name=complex_cd]").attr("readonly", false);
+        $("#ComplexParameter #Gubun").val("I");
+    }
+
+    // 수정 버튼
+    function ComplexParameterEdit() {
+        // 키값을 미리 변수에 넣어 둔 다음 처리한다.
+        var sComplex_cd = $("#complex_cd").val();
+        ComplexParameter_EditCheck(true);
+
+        $("#complex_cd").val(sComplex_cd);
+        $("input[name=complex_cd]").attr("readonly", true);
+
+        $("#ComplexParameter #Gubun").val("U");
+    }
+
+    // 취소 버튼
+    function ComplexParameterUndo() {
+        ComplexParameter_EditCheck(false);
+        $("#ComplexParameter #Gubun").val("S");
+    }
+
+    // 저장 버튼
+    function ComplexParameterSave() {
+        if (UtilView.checkValidForm("ComplexParameterWriteForm")) {
+
+            var form = $('#ComplexParameterWriteForm')[0];
+            var data = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/ComplexParameterSave',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.Ok) {
+                        alert("저장되었습니다");
+                    }
+                    else {
+                        alert("저장에 실패하였습니다");
+                    }
+                    ComplexParameter_EditCheck(false);
+                    ComplexParameterSearch();
+                    Parameter_duplicatedCheck = false;
+                }
+            })
+        }
+
+    }
+
+    // 삭제 버튼
+        function ComplexParameterDelete() {
+
+            if (confirm("삭제하시겠습니까?")) {
+
+                var grid = $("#ComplexParameter_GridContainer").dxDataGrid("instance");
+                if (grid.totalCount() <= 0) return;
+                var data = getGridRowByKey('ComplexParameter_GridContainer', grid.option("focusedRowKey"));
+
+                // 키값(data)을 Form 데이터에 세팅
+                $("#pComplex_cd").val(data.complex_cd);
+                $("#pComplex_id").val(data.complex_id);
+
+                var form = $('#ComplexParameter_code_Form')[0];
+                var data = new FormData(form);
+                $("#ComplexParameter #Gubun").val("D");
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysSet/ComplexParameterDelete',
+                    data: data,
+                    contentType: false,
+                    processData: false,
+                    success: function (result) {
+                        if (result) {
+                            alert("삭제되었습니다.");
+                            ComplexParameterSearch();
+                        }
+                        else alert("삭제에 실패하였습니다");
+
+                        ComplexParameter_EditCheck(false);
+                    }
+                });
+        }
+    }
+
+
+</script>
+
+<div id="@(pagePrefix)" autoresize="Y">
+    <form id="ComplexParameter_code_Form" onsubmit="return false;">
+        <input type="text" id="pComplex_cd" name="pComplex_cd" hidden="hidden" />
+        <input type="text" id="pComplex_id" name="pComplex_id" hidden="hidden" />
+    </form>
+
+    <div id="ComplexParameterTop" class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm" onsubmit="return false;">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">파라미터</span>
+                        </div>
+                        <input type="text" class="form-control" name="sComplex_cd">
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="ParameterLeftMain" class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("ComplexParameter_GridContainer")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Height(600)
+                .KeyExpr("complex_id")
+                //.DataSource((System.Collections.IEnumerable)ViewBag.ComplexParameter)
+                .Columns(c =>
+                {
+                    c.Add().DataField("complex_cd").Caption("파라미터");
+                    //c.Add().DataField("complex_id").Caption("complex_id");
+                    c.Add().DataField("code1").Caption("설정값1");
+                    c.Add().DataField("code2").Caption("설정값2");
+                    c.Add().DataField("code3").Caption("설정값3");
+                    c.Add().DataField("code4").Caption("설정값4");
+                    c.Add().DataField("code5").Caption("설정값5");
+                    c.Add().DataField("code6").Caption("설정값6");
+                    c.Add().DataField("code7").Caption("설정값7");
+                    c.Add().DataField("code8").Caption("설정값8");
+                    c.Add().DataField("code9").Caption("설정값9");
+                    c.Add().DataField("code10").Caption("설정값10");
+                    c.Add().DataField("code11").Caption("설정값11");
+                    c.Add().DataField("code12").Caption("설정값12");
+                })
+                .OnFocusedRowChanged("ComplexParameter_OnFocusedRowChanged")
+                )
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box">
+                <div class="divName">
+                    <p>복합 파라미터 정보</p>
+                </div>
+
+
+                <div class="menuDiv">
+                    <form id="@(pagePrefix)WriteForm">
+                        <input type="text" id="Gubun" name="Gubun" hidden="hidden" />
+                        <input type="text" id="complex_id" name="complex_id" hidden="hidden" />
+
+                        <div class="input-wrapper">
+                            <label class="col-1">파라미터</label>
+                            <div class="input-group col-2">
+                                <input type="text" class="form-control required" id="complex_cd" name="complex_cd" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-1">설정값1</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code1" name="code1" />
+                            </div>
+                            <label class="col-1">설정값2</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code2" name="code2" />
+                            </div>
+                            <label class="col-1">설정값3</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code3" name="code3" />
+                            </div>
+                            <label class="col-1">설정값4</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code4" name="code4" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-1">설정값5</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code5" name="code5" />
+                            </div>
+                            <label class="col-1">설정값6</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code6" name="code6" />
+                            </div>
+                            <label class="col-1">설정값7</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code7" name="code7" />
+                            </div>
+                            <label class="col-1">설정값8</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code8" name="code8" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-1">설정값9</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code9" name="code9" />
+                            </div>
+                            <label class="col-1">설정값10</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code10" name="code10" />
+                            </div>
+                            <label class="col-1">설정값11</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code11" name="code11" />
+                            </div>
+                            <label class="col-1">설정값12</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control" id="code12" name="code12" />
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+
+
+            </div>
+
+        </div>
+    </div>
+</div>
+

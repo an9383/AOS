@@ -1,0 +1,1376 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "ItemProduction";
+}
+
+@{
+    var ItemProductionData = @Html.Raw(Json.Encode(ViewBag.ItemProductionData.Data));
+    var ItemProductionAuth = @Html.Raw(Json.Encode(ViewBag.ItemProductionAuth.Data));
+
+    var IP_itemCDJson = @Html.Raw(Json.Encode(ViewBag.IP_itemCD.Data));
+    var IP2_itemCDJson = @Html.Raw(Json.Encode(ViewBag.IP2_itemCD.Data));
+    var IP_venderCDJson = @Html.Raw(Json.Encode(ViewBag.IP_venderCD.Data));
+}
+
+<script type="text/javascript" id="ItemProductionJs">
+
+    // SP 구문, gubun 변수
+    var ItemProduction_Gubun = "";
+
+    // 메뉴 권한
+    var _ItemProductionAuth;
+
+    var _IP_Validation = false;
+
+    $(function () {
+
+        if (@ItemProductionData !== "") {
+
+            $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ItemProductionData));
+            $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 수정중인지 체크
+        ItemProductionEditCheck(false);
+
+        // 사용자 권한
+        _ItemProductionAuth = JSON.parse(@ItemProductionAuth)[0];
+
+        if (_ItemProductionAuth.form_query != "Y") {
+            $("#ItemProductionSearch").remove();
+        }
+
+        //datepicker start
+        setDatePicker("#ItemProduction .datepicker");
+
+        /* (검색) 제품 팝업 */
+        var IP_itemCDPopup_Data = @IP_itemCDJson;
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("IP_itemCD", "제품 조회", IP_itemCDPopup_Data, columns1, "item_cd");
+
+        // IP_itemCDJson sql보다 컬럼 2개 추가 됨
+        var IP2_itemCDPopup_Data = @IP2_itemCDJson;
+
+        createPopup("IP2_itemCD", "제품 조회", IP2_itemCDPopup_Data, columns1, "item_cd");
+
+        /* (검색) 거래처 팝업 */
+        var IP_venderCDPopup_Data = @IP_venderCDJson;
+
+        var columns2 = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("IP_venderCD", "제품 조회", IP_venderCDPopup_Data, columns2, "vender_cd");
+
+    });
+
+    // 수정중인지 체크
+    function ItemProductionEditCheck(nowEdit) {
+
+        // 입력/수정중일 때
+        if (nowEdit) {
+            $("#ItemProductionSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionInput").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionDelete").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#ItemProduction_LeftGrid").dxDataGrid("option", "disabled", true);
+            $("#ItemProduction_UpRight_form :disabled").attr('disabled', false);
+            $("#IP_testReceipt").attr('disabled', true); // 외주 시험의뢰
+        }
+        if (!nowEdit) {
+            $("#ItemProductionSave").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ItemProductionSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemProductionExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ItemProduction_LeftGrid").dxDataGrid("option", "disabled", false);
+            $("#ItemProduction_UpRight_form :enabled").attr('disabled', true);
+            $("#IP_testReceipt").attr('disabled', false); // 외주 시험의뢰 취소
+        }
+
+    }
+
+    // 위 그리드 체인지
+    function ItemProduction_Left_changed() {
+
+        // 오른쪽 아래 그리드 초기화
+        $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ItemProduction_UpRight_form")[0].reset();
+
+        if ($("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {            
+            return;
+        }
+
+        var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+        /* 오른쪽 위 폼 데이터 셋팅 */
+
+        $("#ItemProduction input[name=item_cd]").val(gridData.item_cd); // 제품코드
+        $("#ItemProduction input[name=item_nm]").val(gridData.item_nm); // 제품명
+        $("#ItemProduction input[name=lot_no]").val(gridData.lot_no); // 제조번호
+        $("#ItemProduction input[name=lot_date]").val(gridData.lot_date); // 제조일자
+        $("#ItemProduction input[name=end_date]").val(gridData.end_date); // 유통기한
+
+        $("#ItemProduction select[name=prod_return_ck]").val(gridData.prod_return_ck); // 입고구분
+        $("#ItemProduction input[name=receipt_date]").val(gridData.receipt_date); // 입고일자
+        $("#ItemProduction input[name=receipt_qty]").val(gridData.receipt_qty); // 입고량
+        $("#ItemProduction input[name=prod_qty]").val(gridData.prod_qty); // 포장단위
+        $("#ItemProduction input[name=vender_item_cd]").val(gridData.vender_item_cd); // 거래처제품코드
+        $("#ItemProduction input[name=order_no]").val(gridData.order_no); // 제조지시번호
+        $("#ItemProduction input[name=outsource_cust_cd]").val(gridData.outsource_cust_cd); // 거래처코드
+        $("#ItemProduction input[name=outsource_cust_nm]").val(gridData.outsource_cust_nm); // 거래처명
+        $("#ItemProduction input[name=outsource_base_amt]").val(gridData.outsource_base_amt); // 단가
+        $("#ItemProduction input[name=outsource_amt]").val(gridData.outsource_amt); // 외주금액
+
+        /* 오른쪽 아래 그리드 셋팅 */
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/ItemProduction_DownGrid',
+            data: {
+                item_stock_id: gridData.item_stock_id
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                var ArrayCheck = Array.isArray(result);
+
+                if (!ArrayCheck && JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                /* 아래 그리드 데이터 */
+                if (result[0] != "") {
+                    $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+
+
+
+            }
+        });
+
+        $("#ItemProduction_DownGrid").dxDataGrid("instance").selectAll();
+    }
+
+    /* CRUD 시작 */
+
+    // 조회
+    function ItemProductionSearch() {
+
+        // 초기화
+        $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ItemProduction_LeftGrid").dxDataGrid("instance").selectRows([]) // 체크해제
+
+        ItemProductionEditCheck(false);
+
+        var editing = {
+            allowUpdating: false
+        }
+
+        $("#ItemProduction_DownGrid").dxDataGrid("option", "editing", editing);
+
+        // 초기화 끝
+
+        var formData = new FormData($("#ItemProduction_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/ItemProduction_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+
+    }
+
+    // 취소
+    function ItemProductionUndo() {
+
+        //초기화 셋팅
+        ItemProductionEditCheck(false);
+        ItemProduction_Gubun = "";
+
+        $("#ItemProduction_UpRight_form")[0].reset();
+
+        var editing = {
+            allowUpdating: false
+        }
+
+        $("#ItemProduction_DownGrid").dxDataGrid("option", "editing", editing);
+
+        ItemProductionSearch();
+    }
+
+    // 입력
+    function ItemProductionInput() {
+
+        // 입력&수정 모드 셋팅
+        ItemProductionEditCheck(true);
+
+        $("#ItemProduction_UpRight_form")[0].reset();
+        $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        ItemProduction_Gubun = "Insert";
+    }
+
+    // 수정
+    function ItemProductionEdit() {
+
+        var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+
+        if (grid.option("dataSource") == null || grid.option("dataSource").length === 0) {
+            alert("제품을 선택해 주세요.");
+            return;
+        }
+
+        var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+        if (gridData.testrequest_no !== null && gridData.testrequest_no !== "") {
+            alert("시험의뢰가 된 제품은 수정할 수 없습니다.");
+            return;
+        }
+
+        ItemProduction_Gubun = "Update";
+
+        ItemProductionEditCheck(true);
+
+        $("#SIP2_itemCD").attr('disabled', true); // 제품코드 찾기 버튼
+        $("#IP_LotNo").attr('disabled', true); // 제조번호 찾기 버튼
+
+        $("#ItemProduction input[name=lot_date]").attr('disabled', true); // 제조일자
+        $("#ItemProduction input[name=end_date]").attr('disabled', true); // 유통기한
+
+        $("#ItemProduction input[name=order_no]").attr('disabled', true); // 제조지시번호
+        //$("#ItemProduction input[name=prod_qty]").attr('disabled', true); // 포장단위
+        //$("#IP_Create").attr('disabled', true); // 생성 버튼
+
+        var editing = {
+            allowUpdating: true,
+            mode: 'batch'
+        }
+
+        $("#ItemProduction_DownGrid").dxDataGrid("option", "editing", editing);
+
+    }
+
+    // 신규 저장 & 업데이트 (폼)
+    async function ItemProductionSave() {
+
+        _IP_Validation = false;
+
+        IP_Validation();
+
+        if (_IP_Validation) {
+
+            $("#ItemProduction_UpRight_form :disabled").attr('disabled', false);
+
+            await $("#ItemProduction_DownGrid").dxDataGrid("instance").saveEditData();
+
+            var formData = new FormData($("#ItemProduction_UpRight_form")[0]);
+            formData.set("gubun", ItemProduction_Gubun);
+
+            if (ItemProduction_Gubun === "Update") {
+
+                var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+
+                formData.set("item_stock_id", gridData.item_stock_id);
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdIn/ItemProduction_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    if (result.length <= 0 && JSON.parse(result).messege === "") {
+
+                        alert("저장에 실패했습니다.");
+                        return;
+                    }
+
+                    if (ItemProduction_Gubun === "Insert") { // 신규 입력
+
+                        ItemProduction_Gubun = "BoxInsert";
+
+                        ItemProduction_GridSave(JSON.parse(result).messege);
+
+                    } else if (ItemProduction_Gubun === "Update") { // 업데이트
+
+                        ItemProduction_Gubun = "BoxUpdate";
+
+                        ItemProduction_GridSave(gridData.item_stock_id);
+                    }
+
+                }
+            });
+
+
+        }
+
+    }
+
+    // 신규 저장 & 업데이트 ( 그리드 )
+    function ItemProduction_GridSave(_item_stock_id) {
+
+        $("#ItemProduction_UpRight_form :disabled").attr('disabled', false);
+
+        var formData = new FormData($("#ItemProduction_UpRight_form")[0]);
+
+        var datagrid = $("#ItemProduction_DownGrid").dxDataGrid("instance");
+        var gridData = datagrid.option("dataSource");
+
+        for (var i = 0; i < gridData.length; i++) {
+
+            var data = gridData[i];
+
+            formData.set("item_stock_id", _item_stock_id);
+            formData.set("prod_qty", data.prod_qty);
+            formData.set("stock_qty", data.stock_qty);
+            formData.set("box_barcode_no", data.box_barcode_no);
+            formData.set("pallet_cd", data.pallet_cd);
+            formData.set("gubun", ItemProduction_Gubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdIn/ItemProduction_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    if (i == gridData.length - 1) {
+                        alert("저장되었습니다.");
+                        ItemProduction_Gubun = "";
+                        ItemProductionEditCheck(false);
+                        ItemProductionSearch();
+                    }
+
+                }
+            }).fail(function (data) {
+                alert("Failed: " + data.response);
+            });
+        }
+
+    }
+
+
+    // validation 체크
+    function IP_Validation() {
+
+        if ($("#ItemProduction input[name=item_cd]").val() === null || $("#ItemProduction input[name=item_cd]").val() === "") {
+            alert("제품코드를 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ItemProduction input[name=lot_no]").val() === null || $("#ItemProduction input[name=lot_no]").val() === "") {
+            alert("제조번호를 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ItemProduction select[name=prod_return_ck]").val() === null || $("#ItemProduction select[name=prod_return_ck]").val() === "") {
+            alert("입고구분을 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ItemProduction input[name=receipt_date]").val() === null || $("#ItemProduction input[name=receipt_date]").val() === "") {
+            alert("입고일자 선택해 주세요.");
+            return;
+        }
+
+        if ($("#ItemProduction input[name=receipt_qty]").val() === null || $("#ItemProduction input[name=receipt_qty]").val() === "") {
+            alert("입고량을 선택해 주세요.");
+            return;
+        }
+
+
+        if (parseInt($("#ItemProduction input[name=receipt_qty]").val()) < parseInt($("#ItemProduction input[name=prod_qty]").val())) {
+            alert("포장단위가 입고량 보다 클 수 없습니다.");
+            return;
+        }        
+
+        var downGrid = $("#ItemProduction_DownGrid").dxDataGrid("instance");
+        //var prod_qty_sum = downGrid.getTotalSummaryValue("prod_qty");
+        var prod_qty_sum = 0;
+
+        for (var i = 0; i < downGrid.totalCount(); i++) {
+            prod_qty_sum += downGrid.cellValue(i, "prod_qty");            
+        }
+
+        if (parseInt($("#ItemProduction input[name=receipt_qty]").val()) !== parseInt(prod_qty_sum)) {
+            alert("포장단위 합계와 입고량 은 동일해야 합니다.");
+            return;
+        }
+
+        if (downGrid.option("dataSource") == null || downGrid.option("dataSource").length === 0) {
+            alert("등록 된 팔레트 정보가 없습니다.");
+            return;
+        }
+
+        _IP_Validation = true;
+
+    }
+
+    // 삭제
+    function ItemProductionDelete() {
+
+        //shipping_status
+        var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+
+        if (grid.option("dataSource") == null || grid.option("dataSource").length === 0) {
+            alert("제품을 선택해 주세요.");
+            return;
+        }
+
+        var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+        if (gridData.testrequest_no !== null && gridData.testrequest_no !== "") {
+            alert("시험의뢰가 된 제품은 수정할 수 없습니다.");
+            return;
+        }
+
+        if (gridData.shipping_status !== null && gridData.shipping_status !== "" && gridData.shipping_status === "2") {
+            alert("출하상태가 승인인 것은 삭제가 불가능합니다.");
+            return;
+        }
+
+        if (gridData.packing_result_id !== null && gridData.packing_result_id !== "") {
+            alert("실적 등록으로 입력한 제품은 삭제 불가능 합니다.");
+            return;
+        }
+
+        // 삭제 여부 팝업
+        if (confirm("생성되어있는 팔레트 포함해서 모든 데이터가 삭제됩니다. 삭제하시겠습니까?") === true) {
+
+            ItemProduction_Gubun = "Delete";
+
+            $("#ItemProduction_UpRight_form :disabled").attr('disabled', false);
+
+            var formData = new FormData($("#ItemProduction_UpRight_form")[0]);
+            formData.set("item_stock_id", gridData.item_stock_id);
+            formData.set("purchase_order_no", gridData.purchase_order_no);
+            formData.set("purchase_order_seq", gridData.purchase_order_seq);
+            formData.set("purchase_order_rec", gridData.purchase_order_rec);
+            formData.set("receipt_qty", gridData.receipt_qty);
+            formData.set("gubun", ItemProduction_Gubun);
+
+            $("#ItemProduction_UpRight_form :enabled").attr('disabled', true);
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdIn/ItemProduction_CRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        return;
+                    }
+
+                    alert("삭제되었습니다.");
+                    ItemProduction_Gubun = "";
+                    ItemProductionEditCheck(false);
+                    ItemProductionSearch();
+
+                }
+            });
+
+        }
+    }
+
+    // 엑셀 다운로드
+    function ItemProductionExcel(gridName, ExcelName) {
+        gridExportToExcel("ItemProduction_LeftGrid", "완제품 입고 등록");
+    }
+
+    /* CRUD 종료 */
+
+    // 팔레트 생성
+    function IP_PackCreate() {
+
+        if (parseInt($("#ItemProduction input[name=receipt_qty]").val()) < parseInt($("#ItemProduction input[name=prod_qty]").val())) {
+            alert("포장단위가 입고량 보다 클 수 없습니다.");
+            return;
+        }
+
+        var _item_stock_id = ""; // 임시 일련번호
+        var receipt_qty = $("#ItemProduction input[name=receipt_qty]").val().replace(",", ""); // 입고량
+        var prod_qty = $("#ItemProduction input[name=prod_qty]").val().replace(",", ""); // 포장단위
+        var create_count = "";
+        var barcodeNum = new Array();
+
+        if (ItemProduction_Gubun === "U1") {
+
+            var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+            _item_stock_id = gridData.item_stock_id;
+        }
+
+        if ((!isNaN(receipt_qty) && !isNaN(prod_qty)) && parseInt(receipt_qty) >= parseInt(prod_qty)) {
+
+            create_count = Math.ceil(parseInt(receipt_qty) / parseInt(prod_qty));
+
+            var remain = parseInt(receipt_qty);
+            var _create_count = parseInt(prod_qty);
+
+            for (var i = 0; i < create_count; i++) {
+
+                if ((create_count - 1) === i)
+                    _create_count = remain;
+
+                barcodeNum[i] = {
+
+                    box_barcode_no: "G--------" + (i + 1).toString(),
+                    item_stock_id: _item_stock_id,
+                    prod_qty: _create_count,
+                    stock_qty: 0,
+                    pallet_cd: "",
+                    select_ck: "",
+                    seq: i+1
+                }
+
+                remain = remain - _create_count;
+
+            }
+
+            $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", barcodeNum);
+        }
+    }
+
+    // 팔레트 생성 변경시
+    function IP_qtyCh() {
+
+        if (ItemProduction_Gubun === "Insert") {
+
+            var downGrid = $("#ItemProduction_DownGrid").dxDataGrid("instance");
+
+            // 변경사항 없음
+            if (downGrid.option("dataSource") == null || downGrid.option("dataSource").length === 0) {
+
+                return;
+            } else {
+                $("#ItemProduction input[name=receipt_qty]").val("");
+                $("#ItemProduction_DownGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+        }
+
+    }
+
+    // 단가 입력 시 이벤트
+    function IP_baseAmtBlur() {
+
+        var receipt_qty = $("#ItemProduction input[name=receipt_qty]").val().replace(",", "");
+        var outsource_base_amt = $("#ItemProduction input[name=outsource_base_amt]").val().replace(",", "");
+        var sum = 0;
+
+        if ((!isNaN(receipt_qty) && !isNaN(outsource_base_amt)) && receipt_qty !== null && receipt_qty !== "" && outsource_base_amt !== "") {
+
+            sum = parseInt(receipt_qty) * parseInt(outsource_base_amt);
+
+            $("#ItemProduction input[name=outsource_amt]").val(sum);
+
+        } else {
+            $("#ItemProduction input[name=outsource_amt]").val("0");
+        }
+    }
+
+    // 외주 시험의뢰
+    function IP_testReceipt2() {
+
+        var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ItemProduction_LeftGrid", grid.option("focusedRowKey"));
+        
+        if (gridData.testrequest_no) {
+            alert("이미 시험의뢰가 되었습니다.");
+            return;
+        }
+
+        if (gridData.prod_return_ck == '1') {
+            alert("'생산'제품의 경우,\n[팔레트 포장 실적 등록]에서 시험의뢰 진행해주시기 바랍니다.");
+            return;
+        }
+
+        if (!confirm("시험의뢰를 진행하시겠습니까?")) {
+            return;
+        }
+                
+        var data = new FormData($('#ItemProduction_UpRight_form')[0]);
+        
+        data.set("item_cd", gridData.item_cd);
+        data.set("lot_date", gridData.lot_date);
+        data.set("lot_no", gridData.lot_no);        
+        data.set("item_stock_id", gridData.item_stock_id);        
+        data.set("item_form_cd", gridData.item_form_cd);
+        data.set("order_no", gridData.order_no);
+        data.set("prod_return_ck", gridData.prod_return_ck);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/TestReg',
+            async: false,
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("시험접수가 되었습니다.");
+                
+                ItemProductionSearch();
+
+            },
+            error: function (error) {
+                alert("시험의뢰가 정상적으로 처리 되지 않았습니다. 다시의뢰해 주세요!");
+                return;
+            }
+
+        });
+
+    }
+    //function IP_testReceipt2() {
+
+    //    $("#ItemProduction_UpRight_form :disabled").attr('disabled', false);
+
+    //    /*if ($("#ItemProduction select[name=prod_return_ck]").val() !== "4") {
+    //        alert("외주 입고 제품만 시험의뢰할 수 있습니다.");
+    //        return;
+    //    }*/
+
+    //    var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+
+    //    if (grid.option("dataSource") == null || grid.option("dataSource").length === 0) {
+    //        alert("제품을 선택해 주세요.");
+    //        return;
+    //    }
+
+    //    var gridData = getGridRowByKey('ItemProduction_LeftGrid', grid.option("focusedRowKey"));
+
+    //    if (gridData.testrequest_no !== null && gridData.testrequest_no !== "") {
+    //        alert("이미 시험의뢰가 되었습니다.");
+    //        return;
+    //    }
+
+    //    var today = new Date();
+
+    //    var year = today.getFullYear();
+    //    var month = today.getMonth() + 1;  // 월
+    //    var date = today.getDate();  // 날짜
+
+    //    var todayStr = year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date);
+
+    //    IP_showTestNumberCreate("1", "F", "", todayStr);
+
+    //}
+
+    // 시험번호 생성
+    //function IP_showTestNumberCreate(test_type, item_type, dept_type, qcquest_date) {
+
+    //    var popup = $("#ItemProductionTestPopup").dxPopup("instance");
+    //    popup.option("contentTemplate", $("#ItemProductionTestPopupTemplate"));
+    //    popup.show();
+
+    //    if (test_type === null || test_type === "") {
+    //        $("#ItemProduction_TestForm select[name=test_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ItemProduction_TestForm select[name=test_type]").val(test_type);
+    //    }
+
+    //    if (item_type === null || item_type === "") {
+    //        $("#ItemProduction_TestForm select[name=item_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ItemProduction_TestForm select[name=item_type]").val(item_type);
+    //    }
+
+    //    if (dept_type === null || dept_type === "") {
+    //        $("#ItemProduction_TestForm select[name=dept_type] option:eq(0)").prop("selected", true);
+    //    } else {
+    //        $("#ItemProduction_TestForm select[name=dept_type]").val(dept_type);
+    //    }
+
+    //    if (!qcquest_date) {
+
+    //        let today = new Date();
+
+    //        let year = today.getFullYear();
+    //        let month = today.getMonth() + 1;
+    //        let date = today.getDate();
+
+    //        $("#ItemProduction_TestForm input[name=qcquest_date]").val(year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date));
+    //    } else {
+    //        $("#ItemProduction_TestForm input[name=qcquest_date]").val(qcquest_date);
+    //    }
+
+    //    var qcquest_date = $("#ItemProduction_TestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+    //    $("#ItemProduction_TestForm input[name=test_no]").val(
+    //        $("#ItemProduction_TestForm select[name=test_type]").val() +
+    //        $("#ItemProduction_TestForm select[name=item_type]").val() +
+    //        $("#ItemProduction_TestForm select[name=dept_type]").val() + "-" +
+    //        qcquest_date.substring(2, qcquest_date.length)
+    //    );
+    //}
+
+    // 시험번호 변경
+    function IP_showTestNumberChange() {
+
+        var qcquest_date = $("#ItemProduction_TestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+        $("#ItemProduction_TestForm input[name=test_no]").val(
+            $("#ItemProduction_TestForm select[name=test_type]").val() +
+            $("#ItemProduction_TestForm select[name=item_type]").val() +
+            $("#ItemProduction_TestForm select[name=dept_type]").val() + "-" +
+            qcquest_date.substring(2, qcquest_date.length)
+        );
+
+    }
+
+    // 시험의뢰 저장
+    //function IP_confirmTestNo(isOK) {
+
+    //    if (!isOK) {
+    //        alert("시험의뢰가 정상적으로 선택 되지 않았습니다. 다시의뢰해 주세요!");
+    //        $("#ItemProductionTestPopup").dxPopup("instance").hide();
+    //        return;
+    //    }
+
+    //    var grid = $("#ItemProduction_LeftGrid").dxDataGrid("instance");
+    //    var gridData = getGridRowByKey("ItemProduction_LeftGrid", grid.option("focusedRowKey"));
+
+    //    var data = new FormData($('#ItemProduction_form')[0]);
+
+    //    data.set("item_cd", gridData.item_cd);
+    //    data.set("lot_date", gridData.lot_date);
+    //    data.set("lot_no", gridData.lot_no);
+    //    data.set("TestRequestDate", $("#ItemProduction_TestForm input[name=qcquest_date]").val());
+    //    data.set("item_stock_id", gridData.item_stock_id);
+    //    data.set("testrequest_no", $("#ItemProduction_TestForm input[name=test_no]").val());
+    //    data.set("item_form_cd", gridData.item_form_cd);
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: '/PrdIn/TestReg',
+    //        async: false,
+    //        data: data,
+    //        contentType: false,
+    //        processData: false,
+    //        success: function (result) {
+
+    //            var json = JSON.parse(result);
+
+    //            if (json.hasOwnProperty('sessionLoss')) {
+    //                alert("세션이 만료되었습니다.");
+    //                sessionStorage.clear();
+    //                location.replace("/Comm/Login");
+    //            }
+
+    //            alert("시험접수가 되었습니다.");
+
+    //            $("#ItemProductionTestPopup").dxPopup("instance").hide();
+    //            ItemProductionSearch();
+
+    //        },
+    //        error: function (error) {
+    //            alert("시험의뢰가 정상적으로 처리 되지 않았습니다. 다시의뢰해 주세요!");
+    //            return;
+    //        }
+
+    //    });
+    //}
+
+    // (검색) 제품 팝업
+    function SearchIP_itemCD() {
+
+        var popup = $("#IP_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 제품 더블클릭
+    function IP_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ItemProduction input[name=item_cd_S]").val(data.item_cd);
+        $("#ItemProduction input[name=item_nm_S]").val(data.item_nm);
+
+        var popup = $("#IP_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // (입력) 제품 팝업
+    function SearchIP2_itemCD() {
+
+        var popup = $("#IP2_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (입력) 제품 더블클릭
+    function IP2_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ItemProduction input[name=item_cd]").val(data.item_cd);
+        $("#ItemProduction input[name=item_nm]").val(data.item_nm);
+
+        var popup = $("#IP2_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // (검색) 거래처 팝업
+    function SearchIP_venderCD() {
+
+        var popup = $("#IP_venderCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 거래처 더블클릭
+    function IP_venderCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ItemProduction input[name=outsource_cust_cd]").val(data.vender_cd);
+        $("#ItemProduction input[name=outsource_cust_nm]").val(data.vender_nm);
+
+        var popup = $("#IP_venderCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 제조번호 팝업
+    function IP_lot_no() {
+
+        if ($("#ItemProduction input[name=item_cd]").val() === null || $("#ItemProduction input[name=item_cd]").val() === "") {
+            alert("제품코드를 먼저 선택해 주세요.");
+            return;
+        }
+
+        var requestData = {
+            item_cd: $("#ItemProduction input[name=item_cd]").val()
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/PrdIn/Lot_Popup',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+
+            var popup = $("#Lot_Popup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    // 클릭 이벤트 제한
+    function IP_EditableColumn(cellElement, cellInfo) {
+
+        if (cellElement.column.dataField === 'box_barcode_no')
+            cellElement.element.find('input').prop('readonly', true);
+
+        if (cellElement.column.dataField === 'stock_qty')
+            cellElement.element.find('input').prop('readonly', true);
+
+        if (cellElement.column.dataField === 'seq')
+            cellElement.element.find('input').prop('readonly', true);
+
+    }
+
+    //포장단위 포맷지정(복사 붙여넣기시 값 인식 제대로 되지않는 이슈로 인해)
+    function IP_EditorPreparing(e) {
+        //포장단위 ',' 인식 지정.
+        if (e.parentType == 'dataRow' && e.dataField == 'prod_qty') {
+            e.editorOptions.format = "#,##0";
+        }
+    }
+
+    //저장 버튼 비활성화 및 '+' 버튼 조건 따라 비활성화
+    function IP_ToolbarEdit(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {                //저장 버튼
+                item.visible = false;
+            }
+        });
+    }
+
+    // 라벨 인쇄
+    function fn_PrintingLabel() {        
+
+        if ($("#ItemProduction_LeftGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var downGrid = $("#ItemProduction_DownGrid").dxDataGrid("instance");
+        var selectedData = downGrid.getSelectedRowsData(); // 체크된 값
+
+        if (selectedData.length === 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var reportParam = "";
+
+        //선택한 barcode 값 param으로 넘기기
+        for (var i = 0; i < selectedData.length; i++) {
+            reportParam += selectedData[i].box_barcode_no;
+            if (i !== (selectedData.length - 1)) {
+                reportParam += ',';
+            }
+        }
+
+        // 타입 인쇄 셋팅
+        var btnType;
+        btnType = "ItemProductionPrint"; // 인쇄
+
+        // report 선언
+        var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "PrdIn", RptFileName: "Item_Label_A4" },
+            //objSp: { SpName: "SP_ItemProduction", GUBUN: "label_print", reportParam: reportParam },            
+            objSp: { SpName: "SP_ItemProduction", GUBUN: "label_print", reportParam: "box_barcode_no_value:" + reportParam },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: "" },   
+            objTblNm: { tblName: "Item_Label_A4_D" }
+        })
+
+        report.print();
+
+    }
+
+</script>
+
+<div id="ItemProduction" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="IP_itemCDPopup"></div>
+    <div id="IP2_itemCDPopup"></div>
+    <div id="IP_venderCDPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("Lot_Popup")
+            .Width(1600)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("제조지시 조회")
+            .Visible(false)
+            .DragEnabled(false)
+        )
+    </div>
+
+    @* === 시험번호 생성 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("ItemProductionTestPopup")
+            .Width(450)
+            .Height(350)
+            .ShowTitle(true)
+            .Title("시험번호 생성 옵션")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+
+    @using (Html.DevExtreme().NamedTemplate("ItemProductionTestPopupTemplate"))
+    {
+        <form id="ItemProduction_TestForm">
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">시험구분</label>
+                <select class="form-control col-7" name="test_type" onchange="IP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC602")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">제품구분</label>
+                <select class="form-control col-7" name="item_type" onchange="IP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC603")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">부서구분</label>
+                <select class="form-control col-7" name="dept_type" onchange="IP_showTestNumberChange()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC604")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">생성일자</label>
+                <input type="text" class="col-7 form-control datepicker" name="qcquest_date" value="@DateTime.Now" />
+            </div>
+
+            <div class="input-wrapper" style="margin-bottom: 1px;">
+                <label class="col-4">생성번호</label>
+                <input type="text" class="col-7 form-control" name="test_no" readonly="readonly" />
+            </div>
+
+        </form>
+
+        <div style="text-align: right; margin-right: 7%;">
+            <button class="btn btn-secondary" onclick="IP_confirmTestNo(true)">확인</button>
+            <button class="btn btn-secondary" onclick="IP_confirmTestNo(false)">취소</button>
+        </div>
+    }
+
+    @* === 시험번호 생성 팝업 종료 === *@
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="ItemProduction_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date_S" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date_S" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm_S">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="SearchIP_itemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="item_cd_S">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고구분</span>
+                        </div>
+                        <select class="form-control" name="prod_return_S">
+                            @foreach (DataRow row in ((DataTable)ViewBag.search_prod_return).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+
+    </div>
+
+
+    <div class="row">
+
+        <!-- 좌측 그리드 -->
+        <div class="col-7 pr-0">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemProduction_LeftGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    //.Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_stock_id")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("item_unit").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("receipt_date").Caption("입고일자").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("receipt_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("testrequest_no").Caption("의뢰번호");
+                        c.Add().DataField("prod_return_ck_nm").Caption("구분").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("ItemProduction_Left_changed")
+                )
+
+            </div>
+
+        </div>
+
+        <!-- $Contets Right-->
+        <div class="col-5">
+
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>제품 정보</p>
+                </div>
+
+                <!-- 우측 위 폼 -->
+                <form id="ItemProduction_UpRight_form">
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">제품코드<star>*</star></label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-4 required" name="item_cd" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="SIP2_itemCD" onclick="SearchIP2_itemCD()">찾기</button>
+                            </div>
+                            <input type="text" class="form-control col-8 required" name="item_nm" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">제조일자<star>*</star></label>
+                        <input type="text" class="form-control col-2 datepicker required" name="lot_date" value="">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">제조번호<star>*</star></label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-8 required" name="lot_no">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="IP_LotNo" onclick="IP_lot_no()">찾기</button>
+                            </div>
+                        </div>
+
+                        <label class="col-2">유통기한<star>*</star></label>
+                        <input type="text" class="form-control col-2 datepicker required" name="end_date" value="">
+
+                    </div>
+
+                    <hr width="95%" color="black">
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">입고구분<star>*</star></label>
+                        <div class="input-group col-5">
+                            <select class="col-5 form-control required" name="prod_return_ck">
+                                <!-- <option value="" selected disabled hidden> </option> -->
+                                @foreach (DataRow row in ((DataTable)ViewBag.form_prod_return).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+
+                        <label class="col-2">입고일자<star>*</star></label>
+                        <input type="text" class="form-control col-2 datepicker required" name="receipt_date" value="">
+
+
+                    </div>
+
+                    <div class="input-wrapper" style="margin-top: -1px;">
+
+                        <label class="col-2">제조지시번호</label>
+                        <input type="text" class="form-control col-3 " name="order_no" style="margin-left: -2px;">
+
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-success btn-sm" id="IP_testReceipt" onclick="IP_testReceipt2()">시험의뢰</button>
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">거래처코드</label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-6" name="outsource_cust_cd" readonly="readonly">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="SearchIP_venderCD()">찾기</button>
+                            </div>
+                            <input type="text" class="form-control col-6" name="outsource_cust_nm" readonly="readonly">
+                        </div>
+
+                        <label class="col-2">거래처품목코드</label>
+                        <input type="text" class="form-control col-2" name="vender_item_cd" value="" readonly="readonly">
+
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">입고량<star>*</star></label>
+                        <input type="text" class="form-control col-2 required" name="receipt_qty" value="" onfocus="IP_qtyCh()" style="margin-left: -1px;">
+
+                        <label class="col-2">단가</label>
+                        <input type="text" class="form-control col-2" name="outsource_base_amt" onblur="IP_baseAmtBlur()" style="margin-left: -63px;">
+
+                        <label class="col-2">입고금액</label>
+                        <input type="text" class="form-control col-2" name="outsource_amt" value="">
+
+                    </div>
+
+                    <div class="input-wrapper" style="margin-top: 1px; margin-bottom: 1px;">
+
+                        <label class="col-2">포장단위<star>*</star></label>
+                        <input type="text" class="form-control col-2 required" name="prod_qty">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-success btn-sm" id="IP_Create" onclick="IP_PackCreate()">생성</button>
+                        </div>
+
+                    </div>
+
+                </form>
+
+                <div class="divName">
+                    <p>팔레트 생성 정보</p>
+
+                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="fn_PrintingLabel()" style="float:right; margin-right:2px; margin-top:-5px;">라벨 인쇄</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemProduction_DownGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("box_barcode_no")
+                    .Height(900)
+                    .OnToolbarPreparing("IP_ToolbarEdit")
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("box_barcode_no").Caption("팔레트바코드번호");
+                        c.Add().DataField("prod_qty").Caption("포장단위").Alignment(HorizontalAlignment.Center).Format("#,##0");
+                        c.Add().DataField("stock_qty").Caption("재고량").Width(70).Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("seq").Caption("seq");
+                    })
+                    .OnCellPrepared("IP_EditableColumn")
+                    .OnEditorPreparing("IP_EditorPreparing")
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 포장단위 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("prod_qty")
+                                .ShowInColumn("prod_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+
+                        /* 재고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("stock_qty")
+                                .ShowInColumn("stock_qty")
+                                .ValueFormat("#,##0.00")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+
+                    }))
+                    )
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+
+</div>

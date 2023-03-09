@@ -1,0 +1,827 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    var selfAuditCheckListData = @Html.Raw(Json.Encode(ViewBag.selfAuditCheckListData.Data));
+    var SelfAuditCheckListAuth = @Html.Raw(Json.Encode(ViewBag.SelfAuditCheckListAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+<script type="text/javascript" id="SelfAuditCheckListJs">
+    // SP 구문, gubun 변수
+    var _commonCRUDGubun = "";
+    var _signGubun = "";
+
+    $(document).ready(function () {
+
+        if (@Html.Raw(Json.Encode(ViewBag.selfAuditCheckListData.Data)) != "") {
+            $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@selfAuditCheckListData));
+            $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("UserMenuManageUser", "사원조회", @empPopupJson, columns, "emp_cd");
+        createPopup("UserMenuManageUser2", "사원조회", @empPopupJson, columns, "emp_cd");
+
+        CommonEditCheck(false);
+
+
+        // CRUD체크
+        var SelfAuditCheckListAuth = JSON.parse(@SelfAuditCheckListAuth)[0];
+        if (SelfAuditCheckListAuth.form_query != "Y") {
+            $("#SelfAuditCheckListSearch").remove();
+        }
+        if (SelfAuditCheckListAuth.form_insert != "Y") {
+            $("#SelfAuditCheckListInput").remove();
+        }
+        if (SelfAuditCheckListAuth.form_edit != "Y") {
+            $("#SelfAuditCheckListEdit").remove();
+        }
+        if (SelfAuditCheckListAuth.form_delete != "Y") {
+            $("#SelfAuditCheckListDelete").remove();
+        }
+
+        //$("#SelfAuditCheckListPrint").dxButton().parent().parent().addClass("display-none");
+        $("#SelfAuditCheckListExcel").dxButton().parent().parent().addClass("display-none");
+
+    })
+
+    // 수정, 입력 중인지 체크
+    function CommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#SelfAuditCheckListSave").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListSearch").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListInput").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListEdit").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListDelete").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListPrint").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListPreview").dxButton().parent().parent().addClass("display-none");
+
+
+            $("#SelfAuditCheckListForm #ListForm_Wrtier_Cd").css("background", "#f6c4db");
+
+            $("#SelfAuditCheckListForm :disabled").attr('disabled', false);
+            $("#SelfAuditCheckListGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#SelfAuditCheckListSave").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListUndo").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditCheckListSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListInput").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListPrint").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditCheckListPreview").dxButton().parent().parent().removeClass("display-none");
+
+            $("#SelfAuditCheckListForm #ListForm_Wrtier_Cd").css("background", "");
+
+            $("#SelfAuditCheckListForm :enabled").attr('disabled', true);
+            $("#SelfAuditCheckListGrid").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+
+    // 조회버튼 기능
+    /* 수정 history
+     *
+     * 순번 수정자  수정내용                                                                       수정일자
+     * ------------------------------------------------------------------------------------------------------
+     * 1.   박가희  메인데이터 없을 경우, 우측폼과 전자서명 그리드도 초기화                        2020.12.16
+     */
+    function SelfAuditCheckListSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/SelfAuditCheckListSelect',
+            data: {
+                list_gubun_cd: $("#SelfAuditCheckListSearchForm #SelfAuditCheckList_Gubun").val(),
+                list_checker_cd: $("#SelfAuditCheckListSearchForm #ListForm_Check").val()
+            },
+            async: false,
+            success: function (result) {
+
+                if (result == "") {
+                    $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#SelfAuditCheckListForm")[0].reset();
+
+                    $("#SelfAuditCheckListSignGrid").dxDataGrid("instance").option("dataSource", []);
+                    return;
+                }
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditCheckListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        })
+    }
+
+
+    // 입력버튼 기능
+    function SelfAuditCheckListInput() {
+        CommonEditCheck(true);
+
+        $("#SelfAuditCheckListForm")[0].reset();
+        $("#SelfAuditCheckListSignGrid").dxDataGrid("instance").option("dataSource", []);
+
+        _commonCRUDGubun = "I";
+
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('SelfAuditCheckListGrid', grid.option("focusedRowKey"));
+        var rangeOption = $("#ListForm_Range option");
+        var range;
+
+        if (data.key != "") {
+
+            if (data.hasOwnProperty('items')) {
+
+                for (var i = 1; i < rangeOption.length; i++) {
+                    //if (rangeOption[i].text == data.key) {
+                    //    range = i;
+                    //}
+                    if (rangeOption[i].text == data.items[0].self_audit_check_range) {
+                        range = i;
+                    }
+                }
+                
+                $("#SelfAuditCheckListForm #ListForm_Gubun").val(data.items[0].self_audit_check_gb);
+                $("#SelfAuditCheckListForm #ListForm_Range").val(range);
+                $("#SelfAuditCheckListForm #ListForm_Target").val(data.items[0].self_audit_check_object);
+
+            } else {
+                for (var i = 1; i < rangeOption.length; i++) {
+                    if (rangeOption[i].text == data.self_audit_check_range) {
+                        range = i;
+                    }
+                }
+                $("#SelfAuditCheckListForm #ListForm_Gubun").val(data.self_audit_check_gb);
+                $("#SelfAuditCheckListForm #ListForm_Range").val(range);
+                $("#SelfAuditCheckListForm #ListForm_Target").val(data.self_audit_check_object);
+            }
+
+        }
+        CommonEditCheck(true);
+
+    }
+
+
+    // 수정버튼 기능
+    function SelfAuditCheckListEdit() {
+        CommonEditCheck(true);
+
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("SelfAuditCheckListGrid", grid.option("focusedRowKey"));
+
+        if (data.hasOwnProperty("items")) {
+
+            alert("수정할 항목을 선택해주십시오.");
+
+            CommonEditCheck(false);
+            return;
+        }
+
+
+        $("#SelfAuditCheckListForm #ListForm_Content").select();
+        _commonCRUDGubun = "U";
+
+        CommonEditCheck(true);
+    }
+
+
+    // 취소버튼 기능
+    function SelfAuditCheckListUndo() {
+        CommonEditCheck(false);
+        _commonCRUDGubun = "";
+
+        $("#SelfAuditCheckListGrid").dxDataGrid("option", "disabled", false);
+
+        CheckListSelect();
+    }
+
+
+    // 저장버튼 기능
+    function SelfAuditCheckListSave() {
+        var input_arr = $("#SelfAuditCheckListForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        $.ajax({
+            type: 'post',
+            url: '/insp/saveSelfauditchecklist',
+            data: {
+                list_no: $("#SelfAuditCheckListForm #ListForm_No").val(),
+                list_gubun: $("#SelfAuditCheckListForm #ListForm_Gubun").val(),
+                list_range: $("#SelfAuditCheckListForm #ListForm_Range").val(),
+                list_target: $("#SelfAuditCheckListForm #ListForm_Target").val(),
+                list_seq: $("#SelfAuditCheckListForm #ListForm_Seq").val(),
+                list_content: $("#SelfAuditCheckListForm #ListForm_Content").val(),
+                list_wrtier_cd: $("#SelfAuditCheckListForm #ListForm_Wrtier_Cd").val(),
+                CRUD_gubun: _commonCRUDGubun
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.messege != "") {
+                    alert("저장되었습니다.");
+                } else {
+                    alert("저장에 실패하였습니다.");
+                }
+
+                CommonEditCheck(false);
+                _commonCRUDGubun = "";
+                SelfAuditCheckListSearch();
+            }
+        })
+
+    }
+
+
+    // 삭제버튼 기능
+    function SelfAuditCheckListDelete() {
+
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("SelfAuditCheckListGrid", grid.option("focusedRowKey"));
+        var list_no = $("#SelfAuditCheckListForm #ListForm_No").val();
+
+        if (data.hasOwnProperty("items")) {
+            alert("삭제할 항목을 선택해주십시오.");
+
+            return;
+        }
+
+        if (confirm("정말로 삭제하시겠습니까?")){
+
+            $.ajax({
+                type: 'post',
+                url: '/insp/DeleteSelfAuditCheckList',
+                data: {
+                    list_no: list_no
+                },
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.messege != "") {
+                        alert("삭제되었습니다.");
+                    } else {
+                        alert("삭제에 실패하였습니다.");
+                    }
+
+                    CommonEditCheck(false);
+                    SelfAuditCheckListSearch();
+                }
+            })
+
+        }
+    }
+
+
+    // 프린트 버튼 기능
+    function SelfAuditCheckListPrint() {
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "SelfAudit", RptFileName: "SelfAuditCheckListRPT" },
+            objSp: {
+                SpName: "SP_SelfAuditCheckList", gubun: "SR",
+                reportParam: "check_gb:" + $("#SelfAuditCheckListSearchForm #SelfAuditCheckList_Gubun").val()
+                    + ";check_emp_cd:" + $("#SelfAuditCheckListSearchForm #ListForm_Check").val()
+            },
+            objEtcInfo: { subParam: "" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        //report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+
+    // 엑셀 버튼 기능
+    function SelfAuditCheckListExcel() {
+
+    }
+
+
+    // 그리드 선택 시 처리
+    function CheckListSelect() {
+        $("#SelfAuditCheckListForm")[0].reset();
+        $("#SelfAuditCheckListSignGrid").dxDataGrid("instance").option("dataSource", []);
+
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('SelfAuditCheckListGrid', grid.option("focusedRowKey"));
+        var rangeOption = $("#ListForm_Range option");
+        var range;
+
+        for (var i = 1; i < rangeOption.length; i++) {
+            if (rangeOption[i].text == data.self_audit_check_range) {
+                range = i;
+            }
+        }
+
+
+        if (data.hasOwnProperty("items")) return;
+
+        $("#SelfAuditCheckListForm #ListForm_No").val(data.self_audit_check_item_no);
+        $("#SelfAuditCheckListForm #ListForm_Gubun").val(data.self_audit_check_gb);
+        $("#SelfAuditCheckListForm #ListForm_Range").val(range);
+        $("#SelfAuditCheckListForm #ListForm_Target").val(data.self_audit_check_object);
+        $("#SelfAuditCheckListForm #ListForm_Seq").val(data.self_audit_check_seq);
+        $("#SelfAuditCheckListForm #ListForm_Content").val(data.self_audit_check_item);
+        $("#SelfAuditCheckListForm #ListForm_Wrtier_Cd").val(data.self_audit_check_emp_cd);
+        $("#SelfAuditCheckListForm #ListForm_Wrtier_Name").val(data.self_audit_check_emp_nm);
+
+
+        // 작성자 서명 정보 조회
+        SelfAuditCheckList_DisplayESInfo();
+    }
+
+
+    // 사원 팝업 띄우기
+    function userMenuManagesearchUserBtn() {
+        $("#SelfAuditCheckList #UserMenuManageUserPopup").dxPopup("instance").show();
+    }
+
+    // 체크리스트 작성자용 사원 팝업 띄우기
+    function userMenuManagesearchUserBtn2() {
+        $("#SelfAuditCheckList #UserMenuManageUser2Popup").dxPopup("instance").show();
+    }
+
+    // 사원 팝업 로우 더블클릭
+    function UserMenuManageUserRowDblClick(selectedItems) {
+        $("#SelfAuditCheckListSearchForm #ListForm_Check").val(selectedItems.data.emp_cd);
+        $("#SelfAuditCheckListSearchForm #Checker_Name").val(selectedItems.data.emp_nm);
+
+        var popup = $("#SelfAuditCheckList #UserMenuManageUserPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    // 체크리스트 작성자용 사원 팝업 로우 더블클릭
+    function UserMenuManageUser2RowDblClick(selectedItems) {
+        $("#SelfAuditCheckListForm #ListForm_Wrtier_Cd").val(selectedItems.data.emp_cd);
+        $("#SelfAuditCheckListForm #ListForm_Wrtier_Name").val(selectedItems.data.emp_nm);
+
+        var popup = $("#SelfAuditCheckList #UserMenuManageUser2Popup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 작성자 서명 정보 조회
+    function SelfAuditCheckList_DisplayESInfo() {
+
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        $("#SelfAuditCheckListSignGrid").dxDataGrid("instance").option("dataSource", []);
+
+        if (grid.totalCount != 0) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/SelfAuditCheckListSignInfo',
+                data: {
+                    checkList_gubun: $("#SelfAuditCheckListSearchForm #SelfAuditCheckList_Gubun").val(),
+                    sign_set_cd: '5201'
+                },
+                success: function (result) {
+                    var JsonData = JSON.parse(result);
+
+                    if (JsonData.length > 0) {
+                        $("#SelfAuditCheckListSignGrid").dxDataGrid("option", "dataSource", JsonData);
+                    }
+
+                }
+            })
+        }
+
+    }
+
+    // 체크리스트 최종 서명
+    function SelfAuditCheckList_Sign_Check() {
+
+        _signGubun = "ES";
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+
+        if (_commonCRUDGubun == "I" || _commonCRUDGubun == "U") {
+            alert("입력 / 수정 상태에선 서명할 수 없습니다.")
+
+            return;
+        } else {
+            if (grid.totalCount() == 0) {
+                alert("체크리스트가 존재하지 않습니다.")
+
+                return;
+            } else {
+                var data = getGridRowByKey("SelfAuditCheckListGrid", grid.option("focusedRowKey"));
+                if (data.hasOwnProperty("key")) {
+                    alert("서명이 불가능한 항목입니다.");
+
+                    return;
+                }
+
+
+                var grid = $("#SelfAuditCheckListSignGrid").dxDataGrid("instance");
+                var data = getGridRowByKey("SelfAuditCheckListSignGrid", grid.option("focusedRowKey"));
+                /* 수정 history
+                 * 
+                 * 순번 수정자  수정내용                                                                       수정일자
+                 * ------------------------------------------------------------------------------------------------------
+                 * 1.   박가희  data.self_audit_write_emp_time에 해당하는 컬럼이 존재하지 않으므로 오류발생    2020.12.16
+                 *              data.sign_time으로 변경
+                 */
+                if (data.sign_time.length > 0) {
+                    alert("이미 서명된 체크리스트입니다.")
+
+                    return;
+                }
+            }
+        }
+
+        var popup = $("#SelfAuditCheckListSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditCheckListSignPopupTemplate"));
+        popup.show();
+    }
+
+    // 서명 권한 체크(id, pw)
+    function SelfAuditCheckListSignSubmit() {
+        var data = new FormData($('#SelfAuditCheckListSignForm')[0]);
+        var grid = $("#SelfAuditCheckListGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditCheckListGrid", grid.option("focusedRowKey"));
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (!result) {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                var isOK = false;
+                // 서명 권한 / 대리자 권한 확인
+                $.ajax({
+                    type: 'GET',
+                    url: '/Comm/AuthorityCheck',
+                    data: {
+                        emp_cd: JSON.parse(result)[0].emp_cd,
+                        sign_set_cd: "5201",
+                        sign_set_seq: "1"
+                    },
+                    success: function (result) {
+
+                        if (result.length > 0) {
+                            isOK = true;
+                        }
+                    }
+                });
+
+                if (!isOK) {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                $("input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                $("input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+                $("input[name='emp_cd']").val(JSON.parse(result)[0].emp_cd);
+
+
+                setTimeout(function () {
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Insp/List_SignCRUD',
+                        data: {
+                            gubun: _signGubun,
+                            check_gb: gridData.self_audit_check_gb,
+                            write_emp_cd: JSON.parse(result)[0].emp_cd
+                        },
+                        success: function (result) {
+
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            if (json.messege != "") {
+                                alert(json.messege);
+                            } else {
+                                alert("실패하였습니다.");
+                            }
+
+                        }
+                    });
+
+                    if (_signGubun == "DEL_ES") {
+                        $("#SelfAuditCheckListSignGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+
+                    _signGubun = "";
+
+                    var popup = $("#SelfAuditCheckListSignPopup").dxPopup("instance");
+                    popup.hide();
+                }, 1000);
+
+
+
+
+            }
+        });
+    }
+
+    function clearSignInput() {
+        $('#SelfAuditCheckListSignForm')[0].reset();
+        $("input[name='dept_nm']").val("");
+        $("input[name='emp_nm']").val("");
+    }
+
+</script>
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+</style>
+
+<div id="SelfAuditCheckList" autoresize="Y">
+
+    <div id="UserMenuManageUserPopup"></div>
+    <div id="UserMenuManageUser2Popup"></div>
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("SelfAuditCheckListSignPopup")
+        .Width(500)
+        .Height(420)
+        .ShowTitle(true)
+        .Title("작업자 인증")
+        .OnHidden("clearSignInput")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("SelfAuditCheckListSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="SelfAuditCheckListSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-outline-secondary" onclick="SelfAuditCheckListSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <label class="col-3">부서</label>
+        <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+        <label class="col-3">성명</label>
+        <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        <input type="hidden" name="emp_cd" />
+    }
+
+    <div id="SelfAuditCheckList_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="SelfAuditCheckListSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control" name="SelfAuditCheckList_Gubun" id="SelfAuditCheckList_Gubun">
+                            @foreach (DataRow row in ((DataTable)ViewBag.sListGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">점검자</span>
+                        </div>
+                        <input type="text" class="form-control" name="ListForm_Check" id="ListForm_Check">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="high_module_cd_button" onclick="userMenuManagesearchUserBtn()"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control" name="Checker_Name" id="Checker_Name" readonly />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*");}
+
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="SelfAuditCheckListLeftMain" class="col-8 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("SelfAuditCheckListGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .KeyExpr("self_audit_check_item_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("self_audit_check_seq").Caption("점검순서").Width("15%");
+                        c.Add().DataField("self_audit_check_item").Caption("점검항목").Width("70%");
+                        c.Add().DataField("self_audit_check_emp_nm").Caption("점검자").Width("15%");
+                        c.Add().DataField("self_audit_check_range").Caption("점검범위").GroupIndex(0);
+                        c.Add().DataField("self_audit_check_object").Caption("점검대상").GroupIndex(1);
+                        c.Add().DataField("self_audit_check_item_no").Visible(false);
+                    })
+                    .OnFocusedRowChanged("CheckListSelect")
+                )
+            </div>
+        </div>
+
+        <div id="SelfAuditCheckListRightMain" class="col-4">
+            <div class="box">
+                <form id="SelfAuditCheckListForm">
+                    <div class="divName margin-bottom">
+                        <p>점검 항목 정보</p>
+                    </div>
+                    <input type="hidden" id="ListForm_No" />
+
+                    <div class="input-wrapper">
+                        <label class="col-3">구분<star>*</star></label>
+                        <div class="input-group col-8">
+                            <select class="col-12 form-control required" name="ListForm_Gubun" id="ListForm_Gubun" required>
+                                @foreach (DataRow row in ((DataTable)ViewBag.listGubuns).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">점검 범위<star>*</star></label>
+                        <div class="input-group col-8">
+                            <select class="col-12 form-control required" name="ListForm_Range" id="ListForm_Range" required>
+                                @foreach (DataRow row in ((DataTable)ViewBag.listRanges).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">점검 대상<star>*</star></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="col-12 form-control required" name="ListForm_Target" id="ListForm_Target" required>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">점검 순서<star>*</star></label>
+                        <div class="input-group col-8">
+                            <input type="number" class="col-12 form-control required" min="1" , name="ListForm_Seq" id="ListForm_Seq" required>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">점검 항목<star>*</star></label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control required" cols="100" rows="5" name="ListForm_Content" id="ListForm_Content" style="height: 100px; resize: vertical;" required></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">점검자<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="ListForm_Wrtier_Cd" id="ListForm_Wrtier_Cd" readonly required>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="high_module_cd_button2" onclick="userMenuManagesearchUserBtn2()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="ListForm_Wrtier_Name" id="ListForm_Wrtier_Name" readonly>
+                        </div>
+                    </div>
+                </form>
+
+
+                <div>
+                    <div class="divName mb-0 mt-1">
+                        <p>작성자 서명</p>
+                    </div>
+                    <div id="SelfAuditCheckListSignDiv">
+                        <div>
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("SelfAuditCheckListSignGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .HoverStateEnabled(true)
+                                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .Height(204)
+                                .OnCellClick("SelfAuditCheckList_Sign_Check")
+                                .KeyExpr("sign_set_dt_id")
+                                .Columns(columns =>
+                                {
+                                            columns.Add().DataField("displayfield").Caption("구분");
+                                            columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                                            columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                                            columns.Add().DataField("sign_image").Caption("서명")
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+</div>

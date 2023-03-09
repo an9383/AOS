@@ -1,0 +1,1422 @@
+﻿@*일탈 접수*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var DeviationReceiptData = @Html.Raw(Json.Encode(ViewBag.DeviationReceiptData.Data));
+    var DeviationReceiptAuth = @Html.Raw(Json.Encode(ViewBag.DeviationReceiptAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+
+<script type="text/javascript" id="DeviationReceiptJs">
+    // SP 구문, gubun 변수
+    var toDay = new Date();
+    var _CRUDGubun = "";
+    var receipt_temp_key = "";
+    var ReportGubun = "";
+
+    $(document).ready(function () {
+        DeviationReceipt_contentResize();
+
+        DeviationReceiptCommonEditCheck(false);
+        removeInsertBtn();
+        $("#DeviationReceiptDownLeft #DeviationReceiptDetailForm :enabled").attr('disabled', true);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+
+        $("#DeviationReceiptSearchForm #s_start_date").val(getFormatDate(sDate));
+        $("#DeviationReceiptSearchForm #s_end_date").val(getFormatDate(toDay));
+        $("#DeviationReceiptSearchForm #s_dep_status").val("1");
+
+        if (@Html.Raw(Json.Encode(ViewBag.DeviationReceiptData.Data)) != "") {
+            $("#DeviationReceiptGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@DeviationReceiptData));
+            $("#DeviationReceiptGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#DeviationReceiptGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            DeviationReceiptSelect(JSON.parse(@DeviationReceiptData)[0]);
+        }
+
+        var popupColumns = {
+            "employee": [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ]
+        };
+
+        createPopup("RequestEmpSearch", "의뢰자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("DespatchChargeEmpSearch", "담당자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+
+
+        // CRUD체크
+        var DeviationReceiptAuth = JSON.parse(@DeviationReceiptAuth)[0];
+        if (DeviationReceiptAuth.form_query != "Y") {
+            $("#DeviationReceiptSearch").remove();
+        }
+        if (DeviationReceiptAuth.form_insert != "Y") {
+            $("#DeviationReceiptInput").remove();
+        }
+        if (DeviationReceiptAuth.form_edit != "Y") {
+            $("#DeviationReceiptEdit").remove();
+        }
+        if (DeviationReceiptAuth.form_delete != "Y") {
+            $("#DeviationReceiptDelete").remove();
+        }
+
+        $("#DeviationReceiptExcel").dxButton().parent().parent().addClass("display-none");
+
+        setDatePicker("#DeviationReceipt .datepicker");
+
+    })
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function DeviationReceiptCommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#DeviationReceiptSave").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptSearch").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptDelete").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptPrint").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptPreview").dxButton().parent().parent().addClass("display-none");
+
+            $("#DeviationReceiptReceiptForm #deviation_yn_radio_div").css("background", "#f6c4db");
+
+            $("#DeviationReceiptCapaForm #request_emp_cd").css("background", "#f6c4db");
+            $("#DeviationReceiptCapaForm #despatch_charge_emp").css("background", "#f6c4db");
+
+            $("#DeviationReceiptEdit").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptInput").dxButton().parent().parent().addClass("display-none");
+
+
+            $("#DeviationReceiptGrid").dxDataGrid("option", "disabled", true);
+            $("#DeviationReceiptDownRightDiv_1 #DeviationReceiptReceiptForm :disabled").attr('disabled', false);
+            $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm :disabled").attr('disabled', false);
+
+            _CRUDGubun = true;
+        }
+        if (!nowEdit) {
+            $("#DeviationReceiptSave").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptUndo").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationReceiptSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptPrint").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationReceiptPreview").dxButton().parent().parent().removeClass("display-none");
+
+            $("#DeviationReceiptReceiptForm #deviation_yn_radio_div").css("background", "");
+
+            $("#DeviationReceiptCapaForm #request_emp_cd").css("background", "");
+            $("#DeviationReceiptCapaForm #despatch_charge_emp").css("background", "");
+
+            $("#DeviationReceiptGrid").dxDataGrid("option", "disabled", false);
+            $("#DeviationReceiptDownRightDiv_1 #DeviationReceiptReceiptForm :enabled").attr('disabled', true);
+            $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm :enabled").attr('disabled', true);
+
+            _CRUDGubun = "";
+        }
+    }
+
+
+    // 조회버튼 기능
+    function DeviationReceiptSearch() {
+        var tap_no = $("#DeviationReceiptDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        $("#DeviationReceiptDownLeft #DeviationReceiptDetailForm")[0].reset();
+        $("#DeviationReceiptDownRightDiv #DeviationReceiptReceiptForm")[0].reset();
+        $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm")[0].reset();
+
+        $("#DeviationReceiptDownRightDiv #deviation_confirm_date").val("");
+        $("#DeviationReceiptDownRightDiv_2 #request_date").val("");
+        $("#DeviationReceiptDownRightDiv_2 #despatch_limit").val("");
+
+        gridReset("DeviationReceiptGrid");
+        gridReset("DeviationReceiptCapaGrid");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/DeviationReceiptSearch',
+            data: {
+                sDate: $("#DeviationReceiptSearchForm #s_start_date").val(),
+                eDate: $("#DeviationReceiptSearchForm #s_end_date").val(),
+                status: $("#DeviationReceiptSearchForm #s_dep_status").val()
+            },
+            success: function (result) {
+                if (result == "") {
+                    DeviationReceiptCommonEditCheck(false);
+                    return;
+                }
+                //if (result <= 0) {
+                //    DeviationReceiptCommonEditCheck(false);
+
+                //    return;
+                //}
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#DeviationReceiptGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#DeviationReceiptGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#DeviationReceiptGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+
+                if (tap_no == "1") {
+                    DeviationReceiptSelect(json[0]);
+                }
+                else if (tap_no == "2") {
+                    DeviationReceiptSelect(json[0]);
+                    DeviationReceiptCapaSearch(json[0].deviation_no);
+                }
+
+                _CRUDGubun = "";
+                DeviationReceiptCommonEditCheck(false);
+            }
+        });
+    }
+
+
+    // 입력버튼 기능
+    function DeviationReceiptInput() {
+        var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("입력할 대상이 없습니다");
+
+            return;
+        }
+
+        DeviationReceiptCommonEditCheck(true);
+        _CRUDGubun = "I";
+
+        $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm")[0].reset();
+        $("#DeviationReceiptCapaForm #request_date").val("@DateTime.Today.ToShortDateString()");
+        $("#DeviationReceiptCapaForm #despatch_limit").val("");
+
+        $("#DeviationReceiptCapaForm #request_emp_cd").val(sessionStorage.getItem("loginCD"));
+        $("#DeviationReceiptCapaForm #request_emp_nm").val(sessionStorage.getItem("loginNM"));
+
+    }
+
+
+    // 수정버튼 기능
+    function DeviationReceiptEdit() {
+        var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 항목이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+
+            var status = data.deviation_status;
+            var tap_no = $("#DeviationReceiptDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+            if (status != "1" && status != "2" && status != "3") {
+
+                alert("진행상태가 문제등록, 일탈확인, 해당없음일 경우에만 수정할 수 있습니다");
+
+                return;
+
+
+
+            } else {
+                if (tap_no == "2") {
+                    var capaGrid = $("#DeviationReceiptCapaGrid").dxDataGrid("instance");
+
+                    if (capaGrid.totalCount() <= 0) {
+                        alert("수정할 항목이 없습니다");
+
+                        return;
+                    }
+                }
+
+                DeviationReceiptCommonEditCheck(true);
+                _CRUDGubun = "U";
+            }
+
+        }
+    }
+
+
+    // 취소버튼 기능
+    function DeviationReceiptUndo() {
+        DeviationReceiptCommonEditCheck(false);
+
+        var tap_no = $("#DeviationReceiptDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+        if (tap_no == "1") {
+            removeInsertBtn();
+        } else {
+            addInsertBtn();
+        }
+
+        DeviationReceiptSelect({ rowIndex: "0" });
+        DeviationReceiptCapaSelect({ rowIndex: "0" });
+    }
+
+
+    // 저장버튼 기능
+    function DeviationReceiptSave() {
+        var tap_no = $("#DeviationReceiptDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == "1") {
+            ReceiptSave();
+        }
+        else if (tap_no == "2") {
+            CapaSave();
+        }
+
+
+    }
+
+
+    // 삭제버튼 기능
+    function DeviationReceiptDelete() {
+        var tap_no = $("#DeviationReceiptDownRightDiv > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == "1") {
+            ReceiptDelete();
+        }
+        else if (tap_no == "2") {
+            CapaDelete();
+        }
+
+    }
+
+
+    // 프린트버튼 기능
+    function DeviationReceiptPrint() {
+
+        //var data = new FormData($("#DayOrderWorkPopupForm")[0]);
+
+
+        //var btnType;
+        ReportGubun = $(event.target).closest('.dx-button').attr('id');
+
+
+        //리포트 호출구분 팝업
+        var popup = $("#DeviationReceiptPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#DeviationReceiptPopupTemplate"));
+        popup.show();
+
+
+
+        //var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+        //if (grid.totalCount() > 0) {
+        //    var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+
+        //    var deviation_class;
+        //    if (data.deviation_class == "0") {
+        //        deviation_class = "%";
+        //    } else {
+        //        deviation_class = data.deviation_class;
+        //    }
+
+        //    // report 출력 객체 생성
+        //    var report = new ReportHelper($(event.target));
+        //    //var report = new ReportHelper();
+
+        //    report.addParam({
+        //        objFile: { path: "Deviation", RptFileName: "DeviationRegister" },
+        //        objSp: {
+        //            SpName: "SP_DeviationReceipt", gubun: "RPT",
+        //            reportParam: "deviation_no:" + $("#DeviationReceiptReceiptForm #deviation_no").val()
+        //                + ";table_id:deviation_master"
+        //        },
+        //        objEtcInfo: { subParam: "", viewerName: "", nCopies: 2 }
+        //    });
+
+        //    report.addParam({
+        //        objFile: { path: "Deviation", RptFileName: "RegisterOfDeviation" },
+        //        objSp: {
+        //            SpName: "SP_DeviationReceipt", gubun: "RPT2",
+        //            reportParam: "de_date_S:" + $("#DeviationReceiptSearchForm #s_start_date").val()
+        //                + ";de_date_E:" + $("#DeviationReceiptSearchForm #s_end_date").val()
+        //                + ";searchtext_S:" + data.deviation_ref_no
+        //                + ";deviation_item_cd:" + data.deviation_ref_item_cd
+        //                + ";deviation_class:" + deviation_class
+        //                + ";deviation_status:" + data.deviation_status
+        //        },
+        //        objEtcInfo: { subParam: "", viewerName: "", nCopies: 2 }
+        //    });
+
+
+        //    report.run();
+        //}
+
+    }
+
+
+    function DeviationReceiptViewReport() {
+         var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+            var option = $("#DeviationReceiptPopupForm input[name='opt']:checked").val();
+
+            var gubun = "";
+            if (ReportGubun.indexOf('Preview') > -1) {
+                gubun = "P";
+            } else if (ReportGubun.indexOf('Print') > -1) {
+                gubun = "V";
+            }
+
+            // report 출력
+            var report = new ReportHelper();
+            if (option == "1") {
+                report.addParam({
+                    objFile: { path: "Deviation", RptFileName: "DeviationRegister" },
+                    objSp: {
+                        SpName: "SP_DeviationReceipt", gubun: "RPT",
+                        reportParam: "deviation_no:" + $("#DeviationReceiptReceiptForm #deviation_no").val()
+                            + ";table_id:deviation_master"
+                    },
+                    objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+                });
+            } else {
+
+                var deviation_class;
+                if (data.deviation_class == "0") {
+                    deviation_class = "%";
+                } else {
+                    deviation_class = data.deviation_class;
+                }
+
+                report.addParam({
+                    objFile: { path: "Deviation", RptFileName: "RegisterOfDeviation" },
+                    objSp: {
+                        SpName: "SP_DeviationReceipt", gubun: "RPT2",
+                        reportParam: "de_date_S:" + $("#DeviationReceiptSearchForm #s_start_date").val()
+                            + ";de_date_E:" + $("#DeviationReceiptSearchForm #s_end_date").val()
+                            + ";searchtext_S:" + data.deviation_ref_no
+                            + ";deviation_item_cd:" + data.deviation_ref_item_cd
+                            + ";deviation_class:" + deviation_class
+                            + ";deviation_status:" + data.deviation_status
+                    },
+                    objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+                });
+            }
+
+
+            if (ReportGubun.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (ReportGubun.indexOf('Print') > -1) {
+                report.print();
+            }
+
+            setTimeout(function () {
+                var popup = $("#DeviationReceiptPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+
+        } else {
+            alert("선택된 일탈 정보가 없습니다."); return;
+        }
+    }
+
+
+    // 엓셀버튼 기능
+    function DeviationReceiptExcel() {
+
+    }
+
+
+    function removeInsertBtn() {
+        $("#DeviationReceiptEdit").dxButton().parent().parent().removeClass("display-none");
+        $("#DeviationReceiptInput").dxButton().parent().parent().addClass("display-none");
+    }
+
+
+    function addInsertBtn() {
+        $("#DeviationReceiptInput").dxButton().parent().parent().removeClass("display-none");
+    }
+
+
+    function DeviationReceiptPopupClear() {
+        $("#DeviationReceiptPopupForm input[name='opt'][value='1']").prop("checked", true);
+    }
+
+
+    function DeviationReceiptViewCancel() {
+        var popup = $("#DeviationReceiptPopup").dxPopup("instance");
+        popup.hide();
+    }
+    // #endregion
+
+
+    // #region 그리드 선택 시
+    // 메인 그리드 선택 시
+    function DeviationReceiptSelect() {
+        $("#DeviationReceiptDownLeft #DeviationReceiptDetailForm")[0].reset();
+        $("#DeviationReceiptDownRightDiv_1 #DeviationReceiptReceiptForm")[0].reset();
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+            if (grid.option("focusedRowIndex") >= 0) {
+
+                data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#DeviationReceiptDetailForm #deviation_contents").val(data.deviation_contents);
+        $("#DeviationReceiptDetailForm #detect_method").val(data.detect_method);
+        $("#DeviationReceiptDetailForm #deviation_doc").val(data.deviation_doc);
+        $("#DeviationReceiptDetailForm #deviation_ref_no").val(data.deviation_ref_no);
+        $("#DeviationReceiptDetailForm #deviation_ref_item_cd").val(data.deviation_ref_item_cd);
+        $("#DeviationReceiptDetailForm #deviation_ref_item_nm").val(data.deviation_ref_item_nm);
+        $("#DeviationReceiptDetailForm #deviation_ref_test_item").val(data.deviation_ref_test_item);
+        $("#DeviationReceiptDetailForm #deviation_ref_test_item_nm").val(data.deviation_ref_test_item_nm);
+        $("#DeviationReceiptDetailForm #deviation_ref_equip_cd").val(data.deviation_ref_equip_cd);
+        $("#DeviationReceiptDetailForm #deviation_ref_equip_nm").val(data.deviation_ref_equip_nm);
+        $("#DeviationReceiptDetailForm #deviation_status_nm").val(data.deviation_status_nm);
+
+        if (data.deviation_type == "1") {
+            $("#DeviationReceiptDetailForm #type_h").prop("checked", false);
+            $("#DeviationReceiptDetailForm #type_l").prop("checked", true);
+        } else {
+            $("#DeviationReceiptDetailForm #type_h").prop("checked", true);
+            $("#DeviationReceiptDetailForm #type_l").prop("checked", false);
+        }
+
+
+        $("#DeviationReceiptReceiptForm #deviation_class").val(data.deviation_class);
+        $("#DeviationReceiptReceiptForm #deviation_contents2").val(data.deviation_contents2);
+        $("#DeviationReceiptReceiptForm #deviation_confirm_date").val(data.deviation_confirm_date);
+        $("#DeviationReceiptReceiptForm #deviation_cause").val(data.deviation_cause);
+        $("#DeviationReceiptReceiptForm #deviation_ref_doc").val(data.deviation_ref_doc);
+        $("#DeviationReceiptReceiptForm #deviation_level").val(data.deviation_level);
+        $("#DeviationReceiptReceiptForm #deviation_no").val(data.deviation_no);
+        $("#DeviationReceiptReceiptForm #deviation_status").val(data.deviation_status);
+        $("#DeviationReceiptReceiptForm #deviation_receive_comment").val(data.deviation_receive_comment);
+
+        if (data.deviation_yn != null) {
+            if (data.deviation_yn == "1") {
+                $("#DeviationReceiptReceiptForm #deviation_y").prop("checked", true);
+                $("#DeviationReceiptReceiptForm #deviation_n").prop("checked", false);
+            } else {
+                $("#DeviationReceiptReceiptForm #deviation_y").prop("checked", false);
+                $("#DeviationReceiptReceiptForm #deviation_n").prop("checked", true);
+            }
+        }
+
+        DeviationReceiptCapaSearch(data.deviation_no);
+    }
+
+
+    // 계획 그리드 선택 시
+    function DeviationReceiptCapaSelect() {
+        $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm")[0].reset();
+        $("#DeviationReceiptCapaForm #request_date").val("");
+        $("#DeviationReceiptCapaForm #despatch_limit").val("");
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#DeviationReceiptCapaGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("DeviationReceiptCapaGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#DeviationReceiptCapaForm #request_emp_cd").val(data.request_emp_cd);
+        $("#DeviationReceiptCapaForm #request_emp_nm").val(data.request_emp_nm);
+        $("#DeviationReceiptCapaForm #request_date").val(data.request_date);
+        $("#DeviationReceiptCapaForm #request_level").val(data.request_level);
+        $("#DeviationReceiptCapaForm #despatch_charge_emp").val(data.despatch_charge_emp);
+        $("#DeviationReceiptCapaForm #despatch_charge_emp_nm").val(data.despatch_charge_emp_nm);
+        $("#DeviationReceiptCapaForm #despatch_limit").val(data.despatch_limit);
+        $("#DeviationReceiptCapaForm #request_contents").val(data.request_contents);
+        $("#DeviationReceiptCapaForm #deviation_capa_id").val(data.deviation_capa_id);
+    }
+
+    // #endregion 그리드 선택 시 END
+
+
+    // #region 일탈접수 관련
+    // 일탈접수 수정
+    function ReceiptSave() {
+        $("#DeviationReceiptReceiptForm input[name='deviation_yn']")[0].value = "1";
+        $("#DeviationReceiptReceiptForm input[name='deviation_yn']")[1].value = "2";
+
+
+        var input_arr = $("#DeviationReceiptReceiptForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var type = $("#DeviationReceiptReceiptForm input[name='deviation_yn']:checked");
+
+        if (type.length <= 0) {
+
+            alert("필수 입력 자료를 모두 입력하십시요!!");
+
+            return;
+        }
+
+        var data = new FormData($('#DeviationReceiptDownRightDiv_1 #DeviationReceiptReceiptForm')[0]);
+        data.set("deviation_no", $("#DeviationReceiptReceiptForm #deviation_no").val());
+        data.set("deviation_status", $("#DeviationReceiptReceiptForm #deviation_status").val());
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/ReceiptSave',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    removeInsertBtn();
+                    DeviationReceiptSearch();
+                } else {
+                    alert("실패하였습니다.");
+
+                    DeviationReceiptUndo();
+                }
+            }
+        })
+
+    }
+
+
+    // 일탈접수 삭제
+    function ReceiptDelete() {
+        var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0 || $("#DeviationReceiptReceiptForm #deviation_contents2").val().length <= 0) {
+            alert("삭제할 항목이 없습니다");
+
+            return;
+        } else {
+            var capaGrid = $("#DeviationReceiptCapaGrid").dxDataGrid("instance");
+
+            if (capaGrid.totalCount() > 0) {
+                alert("중간조치 사항이 존재합니다. 삭제할 수 없습니다");
+
+                var capaData = getGridRowByKey("DeviationReceiptCapaGrid", capaGrid.option("focusedRowKey"));
+                DeviationReceiptCapaSelect(capaData);
+
+                return;
+            } else {
+                var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+
+                if (data.deviation_status != "2" && data.deviation_status != "3") {
+                    alert("진행상태가 일탈확인, 해당없음일 경우에만 삭제할 수 있습니다");
+
+                    return;
+                } else {
+                    if (confirm("삭제하시겠습니까?")) {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/Dep/ReceiptDelete',
+                            data:
+                            {
+                                deviation_no: data.deviation_no
+                            },
+                            success: function (result) {
+                                var json = JSON.parse(result)
+                                if (json.hasOwnProperty('sessionLoss')) {
+                                    alert("세션이 만료되었습니다.");
+                                    sessionStorage.clear();
+                                    location.replace("/Comm/Login");
+                                }
+
+                                if (json.message != "") {
+                                    alert(json.message);
+
+                                    _CRUDGubun = "D";
+
+                                    DeviationReceiptSearch();
+                                } else {
+                                    alert("실패하였습니다.");
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+
+        }
+    }
+    // #endregion
+
+
+    // #region 계획 관련
+    // 계획조회
+    function DeviationReceiptCapaSearch() {
+        $("#DeviationReceiptDownRightDiv_2 #DeviationReceiptCapaForm")[0].reset();
+        $("#DeviationReceiptCapaForm #request_date").val("");
+        $("#DeviationReceiptCapaForm #despatch_limit").val("");
+
+        var data;
+        if (arguments.length > 0) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey")).deviation_no;
+
+            } else {
+                return;
+            }
+        }
+
+
+        gridReset("DeviationReceiptCapaGrid");
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/DeviationReceiptCapaSearch',
+            data: {
+                deviation_no: data
+            },
+            success: function (result) {
+
+                if (result <= 0) {
+                    DeviationReceiptCommonEditCheck(false);
+
+                    return;
+                } else {
+                    var json = JSON.parse(result);
+
+                    $("#DeviationReceiptCapaGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#DeviationReceiptCapaGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#DeviationReceiptCapaGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    DeviationReceiptCapaSelect(json[0]);
+
+                    _CRUDGubun = "";
+                    DeviationReceiptCommonEditCheck(false);
+                }
+            }
+        })
+    }
+
+
+    // 계획입력
+    function CapaSave() {
+
+        var input_arr = $("#DeviationReceiptCapaForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/CapaSave',
+            data:
+            {
+                deviation_no: data.deviation_no,
+                request_emp_cd: $("#DeviationReceiptCapaForm #request_emp_cd").val(),
+                request_date: $("#DeviationReceiptCapaForm #request_date").val(),
+                request_contents: $("#DeviationReceiptCapaForm #request_contents").val(),
+                request_level: $("#DeviationReceiptCapaForm #request_level").val(),
+                despatch_limit: $("#DeviationReceiptCapaForm #despatch_limit").val(),
+                despatch_charge_emp_cd: $("#DeviationReceiptCapaForm #despatch_charge_emp").val(),
+                deviation_capa_id: $("#DeviationReceiptCapaForm #deviation_capa_id").val(),
+                CRUDGubun: _CRUDGubun
+            },
+            success: function (result) {
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    addInsertBtn();
+                    DeviationReceiptCapaSearch(data.deviation_no);
+                } else {
+                    alert("실패하였습니다.");
+
+                    DeviationReceiptCapaSearch();
+                }
+            }
+        })
+
+    }
+
+
+    // 계획삭제
+    function CapaDelete() {
+        var grid = $("#DeviationReceiptGrid").dxDataGrid("instance");
+        var capaGrid = $("#DeviationReceiptCapaGrid").dxDataGrid("instance");
+
+
+        if (grid.totalCount() <= 0 || capaGrid.totalCount() <= 0) {
+            alert("삭제할 항목이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("DeviationReceiptGrid", grid.option("focusedRowKey"));
+            var capaData = getGridRowByKey("DeviationReceiptCapaGrid", capaGrid.option("focusedRowKey"));
+
+            if (data.deviation_status != "2") {
+                alert("진행상태가 일탈확인일 경우에만 삭제할 수 있습니다.");
+
+                return;
+            } else {
+                if (confirm("삭제하시겠습니까?")) {
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Dep/CapaDelete',
+                        data:
+                        {
+                            deviation_capa_id: capaData.deviation_capa_id
+                        },
+                        success: function (result) {
+                            var json = JSON.parse(result)
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            if (json.message != "") {
+                                alert(json.message);
+
+                                _CRUDGubun = "D";
+
+                                DeviationReceiptCapaSearch();
+                            } else {
+                                alert("실패하였습니다.");
+                            }
+                        }
+                    })
+                }
+            }
+
+        }
+
+    }
+
+    // #endregion 계획 관련 END
+
+
+    // #region 팝업 관련
+    // 입력용 의뢰자 팝업 띄우기
+    function RequestEmpSearch() {
+        $("#DeviationReceipt #RequestEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 의뢰자 팝업 로우 더블클릭
+    function RequestEmpSearchRowDblClick(selectedItems) {
+        $("#DeviationReceiptCapaForm #request_emp_cd").val(selectedItems.data.emp_cd);
+        $("#DeviationReceiptCapaForm #request_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#DeviationReceipt #RequestEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 의뢰자 팝업 띄우기
+    function DespatchChargeEmpSearch() {
+        $("#DeviationReceipt #DespatchChargeEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 의뢰자 팝업 로우 더블클릭
+    function DespatchChargeEmpSearchRowDblClick(selectedItems) {
+        $("#DeviationReceiptCapaForm #despatch_charge_emp").val(selectedItems.data.emp_cd);
+        $("#DeviationReceiptCapaForm #despatch_charge_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#DeviationReceipt #DespatchChargeEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    // #endregion
+
+
+    function DeviationReceipt_contentResize() {
+        var topPoint = document.getElementById("DeviationReceipt_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint + 1) - 386;
+
+        document.getElementById("DeviationReceiptGrid").style.height = content_max_height + "px";
+
+    }
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.17
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+</script>
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+    #DeviationReceipt div[id$="radio_div"] {
+        border: 1px solid #ced4da;
+        background-color: #e9ecef;
+        border-radius: 0.15rem;
+        opacity: 1;
+        height: 23px;
+        padding-top: 2px;
+    }
+
+        #DeviationReceipt div[id$="radio_div"] div {
+            padding-top: 2px;
+        }
+</style>
+
+<div id="DeviationReceipt">
+    @using (Html.DevExtreme().NamedTemplate("DeviationReceiptPopupTemplate"))
+    {
+
+        <form id="DeviationReceiptPopupForm">
+            <div class="divName">
+                <p>미리보기 범위 선택</p>
+            </div>
+            <div class="input-wrapper">
+                <div class="col-12 input-group input-group-sm">
+
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="1" id="opt_1" name="opt" checked />
+                    </div>
+                    <span class="form-control-sm"><label for="opt_1">일탈접수서</label></span>
+
+                    <div class="input-group-prepend">
+                        <input class="input-group-append" type="radio" value="2" id="opt_2" name="opt" />
+                    </div>
+                    <span class="form-control-sm"><label for="opt_2">일탈 접수대장</label></span>
+                </div>
+
+
+                @*<div class="radioDiv form-control">
+                        <label><input type="radio" name="opt" value="1" checked />  선택공정  </label>
+                        <label><input type="radio" name="opt" value="2" />          전체공정  </label>
+                        <label><input type="radio" name="opt" value="3" />          표지      </label>
+                        <label><input type="radio" name="opt" value="4" />          칭량지시서</label>
+                    </div>*@
+            </div>
+
+        </form>
+        <div class="align-center">
+            <button class="btn btn-secondary" onclick="DeviationReceiptViewReport()">확인</button>
+            <button class="btn btn-secondary" onclick="DeviationReceiptViewCancel()">취소</button>
+        </div>
+    }
+
+    @(Html.DevExtreme().Popup()
+            .ID("DeviationReceiptPopup")
+            .Width(500)
+            .Height(200)
+            .ShowTitle(true)
+            .Title("일탈접수 보고서 미리보기")
+            .OnHidden("DeviationReceiptPopupClear")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+
+
+
+
+    <div id="RequestEmpSearchPopup"></div>
+    <div id="DespatchChargeEmpSearchPopup"></div>
+
+    <form id="editPlanFileSubmitForm" enctype="multipart/form-data" style="display: none;">
+    </form>
+
+
+    <div id="DeviationReceipt_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="DeviationReceiptSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">발견일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행 상태</span>
+                        </div>
+                        <select class="form-control col-10" name="s_dep_status" id="s_dep_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.depStatus_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+
+        </div>
+
+    </div>
+    <div>
+        <div class="row">
+            <div id="DeviationReceiptUp" class="col-12 pb-1">
+                <div class="box mb-0">
+                    @(Html.DevExtreme().DataGrid()
+                .ID("DeviationReceiptGrid")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .Height(485)
+                .ShowColumnLines(true)
+                .HoverStateEnabled(true)
+                .ColumnAutoWidth(true)
+                .SearchPanel(s => s.Visible(true))
+                .KeyExpr("deviation_no")
+                .Columns(c =>
+                {
+                    c.Add().DataField("deviation_no").Caption("일탈번호").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("detect_date").Caption("발견일자").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("deviation_place_nm").Caption("발생장소").Width("10%").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("detect_emp_nm").Caption("발견자").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("deviation_contents").Caption("일탈내용").Width("30%").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("deviation_date").Caption("발생일자").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("detect_method").Caption("발견방법").Width("30%").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("deviation_confirm_emp_nm").Caption("CAPA담당자").Alignment(HorizontalAlignment.Center);
+                    c.Add().DataField("deviation_status_nm").Caption("진행상태").Alignment(HorizontalAlignment.Center);
+
+
+                    c.Add().DataField("deviation_place").Visible(false);
+                    c.Add().DataField("detect_emp_cd").Visible(false);
+                    c.Add().DataField("deviation_doc").Visible(false);
+                    c.Add().DataField("deviation_type").Visible(false);
+                    c.Add().DataField("deviation_ref_no").Visible(false);
+                    c.Add().DataField("deviation_ref_item_cd").Visible(false);
+                    c.Add().DataField("deviation_ref_item_nm").Visible(false);
+                    c.Add().DataField("deviation_ref_test_item").Visible(false);
+                    c.Add().DataField("deviation_ref_test_item_nm").Visible(false);
+                    c.Add().DataField("deviation_ref_equip_cd").Visible(false);
+                    c.Add().DataField("deviation_ref_equip_nm").Visible(false);
+                    c.Add().DataField("deviation_confirm_emp").Visible(false);
+                    c.Add().DataField("deviation_yn").Visible(false);
+                    c.Add().DataField("deviation_confirm_date").Visible(false);
+                    c.Add().DataField("deviation_contents2").Visible(false);
+                    c.Add().DataField("deviation_cause").Visible(false);
+                    c.Add().DataField("deviation_ref_doc").Visible(false);
+                    c.Add().DataField("deviation_level").Visible(false);
+                    c.Add().DataField("deviation_status").Visible(false);
+                    c.Add().DataField("deviation_level_nm").Visible(false);
+                    c.Add().DataField("deviation_class").Visible(false);
+                })
+                .OnFocusedRowChanged("DeviationReceiptSelect")
+                )
+                </div>
+            </div>
+
+        </div>
+
+        <div class="row">
+            <!-- 왼쪽 아래 div -->
+            <div id="DeviationReceiptDownLeft" class="col-4 pr-0">
+                <div class="box mb-1">
+                    <form id="DeviationReceiptDetailForm">
+                        <div class="divName margin-bottom">
+                            <p>일탈등록 정보</p>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">일탈 내용</label>
+                            <div class="input-group col-8">
+                                <textarea class="form-control" name="deviation_contents" id="deviation_contents" cols="100" rows="5" style="height: 70px; resize: vertical;" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">발견 방법</label>
+                            <div class="input-group col-8">
+                                <textarea class="form-control" name="detect_method" id="detect_method" cols="100" rows="5" style="height: 70px; resize: vertical;" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">일탈 문서</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control" name="deviation_doc" id="deviation_doc" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">일탈 타입</label>
+                            <div id="deviation_radio_div" class="input-group col-4">
+                                <div class="col-6">
+                                    <input type="radio" name="deviation_type" id="type_h" disabled>
+                                    <span for="deviation_type">복잡</span>
+                                </div>
+
+                                <div class="col-6">
+                                    <input type="radio" name="deviation_type" id="type_l" disabled>
+                                    <span for="deviation_type">단순</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관련 번호</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control" name="deviation_ref_no" id="deviation_ref_no" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관련 제품</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_item_cd" id="deviation_ref_item_cd" readonly>
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" id="deviation_ref_item_search_btn" @*onclick="DeviationRefItemSearch()" *@><i class="fa fa-search"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_item_nm" id="deviation_ref_item_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관련 항목</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_test_item" id="deviation_ref_test_item" readonly>
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" id="deviation_ref_test_item_search_btn" @*onclick="DeviationRefTestItemSearch()*@><i class="fa fa-search"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_test_item_nm" id="deviation_ref_test_item_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관련 장치</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_equip_cd" id="deviation_ref_equip_cd" readonly>
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" id="deviation_ref_equip_search_btn" @*onclick="DeviationRefEquipSearch()" *@><i class="fa fa-search"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="deviation_ref_equip_nm" id="deviation_ref_equip_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">진행 상태</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control" name="deviation_status_nm" id="deviation_status_nm" />
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- 오른쪽 아래 div -->
+            <div id="DeviationReceiptDownRight" class="col-8">
+                <div class="box mb-0">
+                    <ul class="nav nav-tabs" id="DeviationReceiptDownRightDiv">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('DeviationReceiptDownRightDiv', 'DeviationReceiptDownRightDiv', 1); removeInsertBtn();">일탈접수</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('DeviationReceiptDownRightDiv', 'DeviationReceiptDownRightDiv', 2); addInsertBtn(); DeviationReceiptCapaSearch();">계획</a>
+                        </li>
+                    </ul>
+
+                    <div id="DeviationReceiptDownRightDiv">
+                        <div id="DeviationReceiptDownRightDiv_1" class="m-1">
+                            <div class="col-10">
+                                <form id="DeviationReceiptReceiptForm">
+                                    <input type="hidden" name="deviation_no" id="deviation_no" />
+                                    <input type="hidden" name="deviation_status" id="deviation_status" />
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">일탈 여부<star>*</star></label>
+                                        <div id="deviation_yn_radio_div" class="input-group col-3" readonly>
+                                            <div class="col-6">
+                                                <input type="radio" name="deviation_yn" id="deviation_y" disabled>
+                                                <span for="deviation_yn">일탈</span>
+                                            </div>
+
+                                            <div class="col-6">
+                                                <input type="radio" name="deviation_yn" id="deviation_n" disabled>
+                                                <span for="deviation_yn">일탈아님</span>
+                                            </div>
+                                        </div>
+
+
+                                        <label class="col-2">일탈 구분</label>
+                                        <div class="input-group col-2">
+                                            <select class="form-control" name="deviation_class" id="deviation_class">
+                                                @foreach (DataRow row in ((DataTable)ViewBag.depClass_d).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">일탈내용 요약<star>*</star></label>
+                                        <div class="input-group col-9">
+                                            <textarea class="form-control required" name="deviation_contents2" id="deviation_contents2" cols="100" rows="5" style="height: 60px; resize: vertical;" required />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">접수 날짜<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control datepicker required" name="deviation_confirm_date" id="deviation_confirm_date" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">발생 원인</label>
+                                        <div class="input-group col-9">
+                                            <textarea class="form-control" name="deviation_cause" id="deviation_cause" cols="100" rows="5" style="height: 60px; resize: vertical;" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">접수 의견</label>
+                                        <div class="input-group col-9">
+                                            <textarea class="form-control" name="deviation_receive_comment" id="deviation_receive_comment" cols="100" rows="5" style="height: 75px; resize: vertical;" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">관련 문서</label>
+                                        <div class="input-group col-9">
+                                            <input type="text" class="form-control" name="deviation_ref_doc" id="deviation_ref_doc">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">심각도 수준<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <select class="form-control required" name="deviation_level" id="deviation_level" required>
+                                                @foreach (DataRow row in ((DataTable)ViewBag.depLevel_d).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                </form>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="display-none" id="DeviationReceiptDownRightDiv_2">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                            .ID("DeviationReceiptCapaGrid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(190)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .KeyExpr("deviation_capa_id")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("request_date").Caption("의뢰일자").Alignment(HorizontalAlignment.Center);
+                                c.Add().DataField("request_contents").Caption("필요작업").Width("40%").Alignment(HorizontalAlignment.Center);
+                                c.Add().DataField("request_level_nm").Caption("의뢰종류").Alignment(HorizontalAlignment.Center);
+                                c.Add().DataField("despatch_limit").Caption("처리기한").Alignment(HorizontalAlignment.Center);
+                                c.Add().DataField("despatch_charge_emp_nm").Caption("처리담당자").Alignment(HorizontalAlignment.Center);
+                                c.Add().DataField("deviation_capa_status_nm").Caption("처리상태").Alignment(HorizontalAlignment.Center);
+
+                                c.Add().DataField("deviation_no").Visible(false);
+                                c.Add().DataField("deviation_capa_id").Visible(false);
+                                c.Add().DataField("request_emp_cd").Visible(false);
+                                c.Add().DataField("request_emp_nm").Visible(false);
+                                c.Add().DataField("request_level").Visible(false);
+                                c.Add().DataField("despatch_charge_emp").Visible(false);
+                                c.Add().DataField("deviation_capa_status").Visible(false);
+                            })
+                            .OnFocusedRowChanged("DeviationReceiptCapaSelect")
+                            )
+                            </div>
+
+                            <div class="col-10 m-1">
+                                <form id="DeviationReceiptCapaForm">
+                                    <input type="hidden" id="deviation_capa_id" name="deviation_capa_id" />
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">의뢰자<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control" name="request_emp_cd" id="request_emp_cd" readonly required>
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button" id="requet_emp_search_btn" onclick="RequestEmpSearch()"><i class="fa fa-search"></i></button>
+                                            </div>
+                                        </div>
+
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control" name="request_emp_nm" id="request_emp_nm" readonly>
+                                        </div>
+
+                                        <label class="col-2">의뢰 일자<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control datepicker required" name="request_date" id="request_date" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                        </div>
+                                    </div>
+
+
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">담당자<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control" name="despatch_charge_emp" id="despatch_charge_emp" readonly required>
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button" id="despatch_charge_emp_search_btn" onclick="DespatchChargeEmpSearch()"><i class="fa fa-search"></i></button>
+                                            </div>
+                                        </div>
+
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control" name="despatch_charge_emp_nm" id="despatch_charge_emp_nm" readonly>
+                                        </div>
+
+                                        <label class="col-2">처리 기한<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <input type="text" class="form-control datepicker required" name="despatch_limit" id="despatch_limit" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">의뢰 종류<star>*</star></label>
+                                        <div class="input-group col-2">
+                                            <select class="form-control required" name="request_level" id="request_level" required>
+                                                @foreach (DataRow row in ((DataTable)ViewBag.requestLavel_d).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">필요 작업<star>*</star></label>
+                                        <div class="input-group col-9">
+                                            <textarea class="form-control required" name="request_contents" id="request_contents" cols="100" rows="5" style="height: 50px; resize: vertical;" required />
+                                        </div>
+                                    </div>
+
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+
+    </div>
+</div>

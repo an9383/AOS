@@ -1,0 +1,273 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "PackingResultInq2";
+}
+
+@{
+    var PackingResultInq2Data = @Html.Raw(Json.Encode(ViewBag.PackingResultInq2Data.Data));
+    var PackingResultInq2Auth = @Html.Raw(Json.Encode(ViewBag.PackingResultInq2Auth.Data));
+
+    var PRI_itemCDJson = @Html.Raw(Json.Encode(ViewBag.PRI_itemCD.Data));
+}
+
+<script type="text/javascript" id="PackingResultInq2Js">
+
+    // SP 구문, gubun 변수
+    var PackingResultInq2_Gubun = "";
+
+    // 메뉴 권한
+    var _PackingResultInq2Auth;
+
+    $(function () {
+
+        if (@PackingResultInq2Data !== "") {
+            $("#PackingResultInq2_Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@PackingResultInq2Data));
+            $("#PackingResultInq2_Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#PackingResultInq2_Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 사용자 권한
+        _PackingResultInq2Auth = JSON.parse(@PackingResultInq2Auth)[0];
+
+        if (_PackingResultInq2Auth.form_query != "Y") {
+            $("#PackingResultInq2Search").remove();
+        }
+
+        //datepicker start
+        setDatePicker("#PackingResultInq2 .datepicker");
+
+        /* (검색) 품목 팝업 */
+        var PRI_itemCDPopup_Data = @PRI_itemCDJson;
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("PRI_itemCD", "제품 조회", PRI_itemCDPopup_Data, columns1, "item_cd");
+
+    });
+
+    // 조회
+    function PackingResultInq2Search() {
+
+        var formData = new FormData($("#PackingResultInq2_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/PackingResultInq2_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#PackingResultInq2_Grid").dxDataGrid("instance").option("dataSource", []);
+
+                    $("#PackingResultInq2_Grid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PackingResultInq2_Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PackingResultInq2_Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingResultInq2_Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    // 엑셀 다운로드
+    function PackingResultInq2Excel(gridName, ExcelName) {
+        gridExportToExcel("PackingResultInq2_Grid", "완제품 출하승인");
+    }
+
+    // (검색) 품목 팝업
+    function SearchPRI_itemCD() {
+
+        var popup = $("#PRI_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 품목 더블클릭
+    function PRI_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#PackingResultInq2 input[name=item_cd_S]").val(data.item_cd);
+        $("#PackingResultInq2 input[name=item_nm_S]").val(data.item_nm);
+
+        var popup = $("#PRI_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 프린트
+    function PackingResultInq2Print() {
+
+        var grid = $("#PackingResultInq2_Grid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("조회된 품목이 없습니다.")
+            return;
+        }
+
+        var report = new ReportHelper($(event.target));
+
+        var reportParam = "packing_order_work_date_start_s:" + $("#PackingResultInq2 input[name=start_date_S]").val() + ";";
+        reportParam += "packing_order_work_date_end_s:" + $("#PackingResultInq2 input[name=end_date_S]").val() + ";";
+        reportParam += "item_cd_s:" + $("#PackingResultInq2 input[name=item_cd_S]").val() + ";";
+        reportParam += "lot_no_s:;"
+        reportParam += "issue_status:" + $("#PackingResultInq2 select[name=s_issue_status]").val();
+
+        report.addParam({
+            objFile: { path: "PrdIn", RptFileName: "PackingResultListR" },
+            objSp: { SpName: "SP_PackingResultInq2", gubun: "Select", reportParam: reportParam },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)            
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 },
+            objTblNm: { tblName: "PackingResultTB" }
+        });
+
+        report.testObj();
+        report.run();
+    }
+
+</script>
+
+<div id="PackingResultInq2" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="PRI_itemCDPopup"></div>
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="PackingResultInq2_form">
+
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+
+                        <input type="text" class="form-control datepicker text-center" name="start_date_S" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date_S" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm_S" >
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="SearchPRI_itemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="item_cd_S">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">출하승인상태</span>
+                        </div>
+                        <select class="form-control" name="s_issue_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.search_issueStatus).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Print;Preview");}
+        </div>
+
+    </div>
+
+
+    <div class="row">
+
+        <!-- 위 그리드 -->
+        <div class="col-12 pb-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingResultInq2_Grid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("packing_order_no")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        c.Add().DataField("sale_item_cd").Caption("제품코드");
+                        c.Add().DataField("sale_item_nm").Caption("제품명");
+                        c.Add().DataField("item_packunit2").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("packing_date").Caption("포장일자").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("packing_order_qty").Caption("지시수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("packing_qty").Caption("생산량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remain_qty").Caption("잔량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("disuse_qty").Caption("폐기량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("issue_status_nm").Caption("출하승인상태").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("receipt_status").Caption("제품이관상태").Alignment(HorizontalAlignment.Center);
+
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 지시수량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("packing_order_qty")
+                                .ShowInColumn("packing_order_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+
+                        /* 생산량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("packing_qty")
+                                .ShowInColumn("packing_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

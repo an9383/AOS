@@ -1,0 +1,407 @@
+﻿
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var OrderProcResultMonitor = Html.Raw(Json.Encode(ViewBag.OrderProcResultMonitor.Data));
+    var MakingItems = Html.Raw(Json.Encode(ViewBag.MakingItems.Data));
+}
+
+@{
+    string[] OrderProcResultMonitoringGridKey = { "order_no", "order_proc_sdate" };
+}
+
+
+@*일일 작업 일보*@
+
+<script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        var _orderProcResultMonitorOrderNo;
+        var _orderProcResultMonitorItemCd;
+        var _orderProcResultMonitorGridDs;
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            if ((@OrderProcResultMonitor).length > 0) {
+
+                $("#OrderProcResult_MonitorGrid").dxDataGrid("option", "dataSource", JSON.parse(@OrderProcResultMonitor));
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup(PagePrefix + "Item", "품목 조회", @MakingItems, popupColumns);
+
+            setDatePicker("#OrderProcResult_Monitor .datepicker");
+
+            $("#OrderProcResult_MonitorSearchForm input[name=sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+            $("#OrderProcResult_MonitorSearchForm input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        });
+
+        // 검색용 제조제품 팝업
+        function OrderProcResult_MonitorSelectItem() {
+            $("#OrderProcResult_MonitorItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업 선택
+        function OrderProcResult_MonitorItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#OrderProcResult_MonitorSearchForm input[name=item_cd]").val(data.item_cd);
+
+            $("#OrderProcResult_MonitorItemPopup").dxPopup("instance").hide();
+        }
+
+        // 기본정보 그리드 포커스 변경
+        function OrderProcResult_MonitorGridFocusChange() {
+
+            var grid = $("#OrderProcResult_MonitorGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("OrderProcResult_MonitorGrid", grid.option("focusedRowKey"));
+
+            _orderProcResultMonitorOrderNo = gridData.order_no;
+            _orderProcResultMonitorItemCd = gridData.item_cd;
+        }
+
+        // 조회
+        function OrderProcResult_MonitorSearch() {
+
+            var formData = $("#" + FormNmSearch).serialize();
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/OrderProcResult_MonitorSelect',
+                data: formData,
+                dataType: 'json',
+                success: function (result) {
+
+                    if (result.length <= 0) {
+
+                        _orderProcResultMonitorGridDs = "";
+                        $("#OrderProcResultGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#OrderProcResultGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    _orderProcResultMonitorGridDs = json;
+                    $("#OrderProcResult_MonitorGrid").dxDataGrid("instance").option("dataSource", json);
+
+                }
+            })
+        }
+
+        // 탭 변경
+        function OrderProcResult_MonitorChangeTab() {
+
+            var tabIndex = $("#OrderProcResult_MonitorTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+            if (tabIndex === 1 && _orderProcResultMonitorOrderNo) {
+                OrderProcResult_MonitorSelectChartData(_orderProcResultMonitorOrderNo);
+            }
+        }
+
+        // 기본정보 그리드 로우 더블클릭
+        function OrderProcResult_MonitorGridDblClick(selectedItems) {
+
+            var order_no = selectedItems.data.order_no;
+
+            $("#OrderProcResult_MonitorTabPanel").dxTabPanel("instance").option("selectedIndex", 1);
+
+            OrderProcResult_MonitorSelectChartData(order_no);
+        }
+
+
+        function OrderProcResult_MonitorSelectChartData(order_no) {
+
+            console.log(order_no);
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/OrderProcResultMonitorSelectChartData',
+                data: {
+                    order_no: order_no
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    var jsonData = JSON.parse(result);
+
+                    $("#OrderProcResult_MonitorChart1").dxChart("option", "dataSource", []);
+                    $("#OrderProcResult_MonitorChart1").dxChart("option", "dataSource", jsonData);
+
+                    var tmpChartJson = _orderProcResultMonitorGridDs.filter(OrderProcResult_MonitorSelectJsonFilter);
+
+                    $("#OrderProcResult_MonitorChart2").dxChart("option", "dataSource", []);
+                    $("#OrderProcResult_MonitorChart2").dxChart("option", "dataSource", tmpChartJson);
+
+
+                    //if (result.length <= 0) {
+
+                    //    $("#OrderProcResultGrid").dxDataGrid("instance").option("dataSource", []);
+                    //    $("#OrderProcResultGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    //    _orderProcResultDetail = new Array();
+
+                    //    return;
+                    //}
+
+                    //var json = JSON.parse(result);
+
+                    //if (json.hasOwnProperty('sessionLoss')) {
+                    //    alert("세션이 만료되었습니다.");
+                    //    sessionStorage.clear();
+                    //    location.replace("/Comm/Login");
+                    //}
+
+                    //$("#OrderProcResultGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            })
+        }
+
+
+        function OrderProcResult_MonitorSelectJsonFilter(obj) {
+            if (obj.item_cd === _orderProcResultMonitorItemCd) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        function OrderProcResult_MonitorExcel() {
+
+            var tabIndex = $("#OrderProcResult_MonitorTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+            if (tabIndex === 1) {
+                return;
+            }
+
+            gridExportToExcel("OrderProcResult_MonitorGrid", "일일_작업_일보_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)">
+
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공정작업일</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate">
+                        <input type="text" class="form-control datepicker" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">실공수가 0 인 것</span>
+                        </div>
+                        <input type="checkbox" class="checkbox" name="zero_work_yn" value="Y">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">작업라인</span>
+                        </div>
+                        <select class="form-control" name="trade_cd2">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("품목구분1", "S", "CM059")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb_0">
+
+                @(Html.DevExtreme().TabPanel()
+                    .ID(pagePrefix+"TabPanel")
+                    .SelectedIndex(0)
+                    .Loop(false)
+                    .Height(841)
+                    .AnimationEnabled(false)
+                    .SwipeEnabled(false)
+                    .OnTitleClick(pagePrefix + "ChangeTab")
+                    .Items(config =>
+                    {
+                        config.Add().Title("기본정보").Template(new JS("$('#"+ pagePrefix + "TabContent1')"));
+                        config.Add().Title("제품별 현황").Template(new JS("$('#OrderProcResult_MonitorTabContent2')"));
+                    })
+                )
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent1"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Grid")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .FocusedRowEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .Height(800)
+                        .KeyExpr("row_num")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("품목코드");
+                            c.Add().DataField("item_nm").Caption("품목명");
+                            c.Add().DataField("lot_no").Caption("제조번호");
+                            c.Add().DataField("trade_cd2").Caption("작업라인");
+                            c.Add().DataField("process_nm").Caption("공정명");
+                            c.Add().DataField("order_proc_sdate").Caption("작업시작일시")
+                                .DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                            c.Add().DataField("order_proc_edate").Caption("작업종료일시")
+                                .DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                            c.Add().DataField("order_proc_receive_qty").Caption("인계량")
+                                .Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("order_proc_receive_ea_qty").Caption("인계수량")
+                                .Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("order_proc_real_qty").Caption("생산량")
+                                .Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("order_proc_real_ea_qty").Caption("생산수량")
+                                .Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("order_proc_rate").Caption("수율");
+                            c.Add().DataField("order_gubun_nm").Caption("실적구분");
+                            c.Add().DataField("normal_time").Caption("정상근무");
+                            c.Add().DataField("added_time").Caption("연장근무");
+                            c.Add().DataField("night_time").Caption("철야근무");
+                            c.Add().DataField("special_time").Caption("특근");
+                            c.Add().DataField("total_time").Caption("총계");
+                            c.Add().DataField("worker_cnt").Caption("인원");
+                            c.Add().DataField("ew_nm").Caption("작업자명");
+                        })
+                        .OnRowDblClick(pagePrefix + "GridDblClick")
+                        .OnFocusedRowChanged(pagePrefix + "GridFocusChange")
+                    )
+                }
+
+                @using (Html.DevExtreme().NamedTemplate(pagePrefix + "TabContent2"))
+                {
+                    <div class="col-12">
+
+                        @(Html.DevExtreme().Chart()
+                            .ID(pagePrefix+"Chart1")
+                            .Size(c => c.Height(380))
+                            .Title("공정별 공수현황")
+                            .Series(s => s
+                                .Add()
+                                .ArgumentField("process_nm")
+                                .ValueField("total_time")
+                                .Name("공정별공수")
+                                .Type(SeriesType.Bar)
+                                .Color("#ffaa66")
+                            )
+                            .Series(s => s
+                                .Add()
+                                .ArgumentField("process_nm")
+                                .ValueField("total_work_time")
+                                .Name("표준공수")
+                                .Type(SeriesType.Bar)
+                                .Color("#28a745")
+                            )
+                        )
+
+                    </div>
+
+                    <hr>
+
+                    <div class="col-12">
+
+                        @(Html.DevExtreme().Chart()
+                            .ID(pagePrefix+"Chart2")
+                            .Size(c => c.Height(380))
+                            .Title("로트별 공수현황")
+                            .Series(s => s
+                                .Add()
+                                .ArgumentField("lot_no")
+                                .ValueField("total_time")
+                                .Name("등록공수")
+                                .Type(SeriesType.Line)
+                                .Color("#ffaa66")
+                            )
+                        //.Series(s => s
+                        //    .Add()
+                        //    .ArgumentField("lot_no")
+                        //    .ValueField("전년")
+                        //    .Name("표준공수")
+                        //    .Type(SeriesType.Line)
+                        //    .Color("#28a745")
+                        //)
+                        )
+
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+</div>

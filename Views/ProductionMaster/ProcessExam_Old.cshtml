@@ -1,0 +1,584 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.ProductionMaster.ProcessExam.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var processPopupData = @Html.Raw(Json.Encode(ViewBag.processPopupData.Data));
+    var processexamPopupData = @Html.Raw(Json.Encode(ViewBag.processexamPopupData.Data));
+    var le_process_exam_start = (DataTable)ViewBag.le_process_exam_start;
+    var le_unit = (DataTable)ViewBag.le_unit;
+    var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var le_grand_item = (DataTable)ViewBag.le_grand_item;
+    var le_middle_item = (DataTable)ViewBag.le_middle_item;
+
+}
+
+@{
+    string[] gridKey = { "process_cd", "process_exam_cd" };
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+    // 1. 화면 Load 영역
+    $(function () {
+        // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+"ProcessExam"+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+"ProcessExam"+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+"ProcessExam"+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+
+        //1.3. help팝업설정
+        var popupColumns = {
+            //"s_process_cd": [{ dataField: "process_cd", caption: "공정" }, { dataField: "process_nm", caption: "공정명" }]
+            "s_process_cd": [{ dataField: "keyfield", caption: "ccp코드" }, { dataField: "displayfield", caption: "ccp명" }]
+         ,  "processexam":  [{ dataField: "common_part_cd", caption: "검사항목코드" }, { dataField: "common_part_nm", caption: "검사항목" }]
+         ,  "equip":        [{ dataField: "equip_cd", caption: "기계코드" }, { dataField: "equip_nm", caption: "기계명" }]
+        };
+
+        createPopup("ProcessExam" + "Process", "공정 조회",         @processPopupData, popupColumns.s_process_cd);
+        createPopup("ProcessExam" + "ProcessExam", "검사항목 조회", @processexamPopupData, popupColumns.processexam);
+        createPopup("ProcessExam" + "Equip", "기계기구 조회",       @equipPopupData, popupColumns.equip);
+
+        //1.4 툴바 활성/비활성
+        ProcessExamEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=s_process_cd]', $('#' + "ProcessExamSearchForm")).change(function () {
+            ProcessExamSelect();
+        });
+        $('input[name=s_process_cd]+div>button', $('#' + "ProcessExamSearchForm")).click(function (event) {
+            ProcessExamHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+        $('input[name=process_cd]+div>button, input[name=process_exam_cd]+div>button, input[name*=equip_cd]+div>button', $('#' + "ProcessExamWriteForm")).click(function (event) {
+            ProcessExamHelpPopUpSearch(event);
+        });
+
+        //1.5.3 공통객체
+
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var ProcessExamHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function ProcessExamHelpPopUpSearch(e) {
+        //ProcessExamHelpPopUpCurInputName = $(e.target).parent().prev().attr('name');
+        ProcessExamHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (ProcessExamHelpPopUpCurInputName)
+        {
+            case "s_process_cd":
+                popupId = "ProcessExam" + "Process";
+                break;
+            case "process_cd":
+                popupId = "ProcessExam" + "Process";
+                break;
+            case "process_exam_cd":
+                popupId = "ProcessExam" + "ProcessExam";
+                break;
+            case "equip_cd":
+                popupId = "ProcessExam" + "Equip";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function ProcessExamProcessRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (ProcessExamHelpPopUpCurInputName == "s_process_cd") {
+            $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExamSearchForm")).val(data.keyfield);
+        } else if (ProcessExamHelpPopUpCurInputName == "process_cd") {
+            $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExamWriteForm")).val(data.keyfield);
+            $("input[name=process_nm]", $('#' + "ProcessExamWriteForm")).val(data.displayfield);
+        }
+        $("#"+"ProcessExam"+"ProcessPopup").dxPopup("instance").hide();
+    }
+
+    function ProcessExamProcessExamRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExam" + "WriteForm")).val(data.common_part_cd);
+        $("input[name=process_exam_nm]", $('#' + "ProcessExam" + "WriteForm")).val(data.common_part_nm);
+
+        $("#" + "ProcessExam" + "ProcessExamPopup").dxPopup("instance").hide();
+    }
+
+    function ProcessExamEquipRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=" + ProcessExamHelpPopUpCurInputName + "]", $('#' + "ProcessExam" + "WriteForm")).val(data.equip_cd);
+        $("input[name=equip_nm]", $('#' + "ProcessExam" + "WriteForm")).val(data.equip_nm);
+
+        $("#" + "ProcessExam" + "EquipPopup").dxPopup("instance").hide();
+    }
+
+    // 3. 툴바영역
+    //조회
+    function ProcessExamSearch() {
+        ProcessExamSelect();
+    }
+
+    //입력
+    function ProcessExamInput() {
+        ProcessExamEditCheck(true, 'I');
+        ProcessExamWriteFormClear();
+    }
+    //수정
+    function ProcessExamEdit() {
+        ProcessExamEditCheck(true,'U');
+    }
+    //삭제
+    function ProcessExamDelete() {
+        ProcessExamEditCheck(true, 'D');
+        ProcessExamTrx("ProcessExamWriteForm", "ProcessExamSearchForm");
+
+    }
+    //저장
+    function ProcessExamSave() {
+        if (UtilView.checkValidForm("ProcessExamWriteForm")) {
+            ProcessExamTrx("ProcessExamWriteForm", "ProcessExamSearchForm");
+        }
+    }
+    //취소
+    function ProcessExamUndo() {
+        ProcessExamEditCheck(false, 'N');
+        ProcessExamFocusChanged();
+    }
+
+    // 프린트
+    function ProcessExamPrint() {
+
+    }
+
+    // 엑셀다운로드
+    function ProcessExamExcel() {
+
+    }
+
+    // 엑셀다운로드
+    function ProcessExamFavorite() {
+
+    }
+
+    // 트랜잭션처리
+    function ProcessExamTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+
+        // please add form parameter When need to form parameter
+        //formData.append("edate", $('input[name=edate]',$('#'+formSearchId)).val());
+        // formData 확인
+        //for (var key of formData.keys()) { console.log("[" + PagePrefix + "]=> " + key + " : " + formData.get(key)); }
+
+        $.ajax({
+            type: 'POST',
+            url: UtilView.getActionUrl('TRX'),
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                if (JSON.parse(result[0]).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                } else {
+                    alert(result);
+                    console.log(result);
+                }
+                ProcessExamSelect();
+            }
+        });
+    }
+
+    // 수정중인지 체크
+    function ProcessExamEditCheck(nowEdit, status) {
+
+        if (status != null && status != undefined) {
+            $('input[type=hidden][name=row_status]',$('#'+"ProcessExamWriteForm")).val(status);
+        }
+        if (nowEdit) {
+            // 툴바 활성/비활성
+            $('#' + "ProcessExam" + 'Save,   #' + "ProcessExam" + 'Undo').dxButton().parent().parent().removeClass("display-none");
+            $('#' + "ProcessExam" + 'Search, #' + "ProcessExam" + 'Input, #' + "ProcessExam" + 'Edit, #' + "ProcessExam" + 'Delete').dxButton().parent().parent().addClass("display-none");
+
+            //그리드 및 폼 활성/비활성
+            $('#' + "ProcessExam" + 'Grid').dxDataGrid("instance").option("disabled", true);
+            $('input',    $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+            $('textarea', $('#' + "ProcessExamWriteForm")).attr("disabled", false);
+        }
+        else {
+            // 툴바 활성/비활성
+            $('#' + "ProcessExam" + 'Save,  #' + "ProcessExam" + 'Undo').dxButton().parent().parent().addClass("display-none");
+            $('#' + "ProcessExam" + 'Search,#' + "ProcessExam" + 'Input, #' + "ProcessExam" + 'Edit, #' + "ProcessExam" + 'Delete').dxButton().parent().parent().removeClass("display-none");
+
+            //그리드 및 폼 활성/비활성
+            $('#' + "ProcessExam" + 'Grid').dxDataGrid("instance").option("disabled", false);
+            $("input",    $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+            $("textarea", $('#' + "ProcessExamWriteForm")).attr("disabled", true);
+        }
+    }
+
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function ProcessExamSelect() {
+        // form claear
+        ProcessExamWriteFormClear();
+        // edit 해제
+        ProcessExamEditCheck(false, 'N');
+        // 메인grid
+        UtilView.dataGridSelect('ProcessExam' + 'Grid', 'ProcessExam' + 'SearchForm');
+    }
+
+    // 3.2 Row focus changed
+    function ProcessExamFocusChanged() {
+        // data 객체, 폼에 바인딩
+        UtilView.setDataGridFormBind("ProcessExam" + "Grid", "ProcessExam" + "WriteForm");
+
+        // 우측 gird바인딩
+        //ProcessExamSelectSub(gridId, PagePrefix + "SubGrid");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+    function ProcessExamWriteFormClear() {
+        $('#' + "ProcessExamWriteForm")[0].reset();
+        $("textarea", $('#' + "ProcessExamWriteForm")).text("");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid ($기능입력$)
+    //function ProcessExamSelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { afterservice_no: gridData.afterservice_no };
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: UtilView.getActionUrl('SelectSub'),
+    //        data: data,
+    //        success: function (result) {
+    //            if (result[0] == "") clear();
+    //            else {
+    //                var jsonResult = JSON.parse(result);
+    //                $('#' + tGridId).dxDataGrid("option", "dataSource", jsonResult);
+    //            }
+    //        }
+    //    })
+    //}
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)ProcessPopup"></div>
+    <div id="@(pagePrefix)ProcessExamPopup"></div>
+    <div id="@(pagePrefix)EquipPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">공정검사 마스터</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">공정검사</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-9">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공정코드</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_process_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- test 2줄 : 검색영역이 2줄이상일때 주석풀고 적절히 내용입력-->
+                @*<div class="input-wrapper" >
+                            <div class="input-group input-group-sm col-2">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">설비</span>
+                                </div>
+                                <input type="text" class="form-control" name="equipment">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">찾기</button>
+                                </div>
+                            </div>
+                    </div>*@
+
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-3">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-9 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("ProcessExam" + "Grid")
+                .KeyExpr(gridKey)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .Height(900)
+                .ShowBorders(true)
+                //.Selection(s => s.Mode(SelectionMode.Single))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .ShowColumnLines(true)
+                .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("process_cd").Caption("ccp코드").Width(80);
+                            c.Add().DataField("process_nm").Caption("ccp명");
+                            c.Add().DataField("process_exam_cd").Caption("검사항목코드").Width(100);
+                            c.Add().DataField("process_exam_nm").Caption("검사항목명");
+                            c.Add().DataField("process_exam_start_nm").Caption("검사시기").Width(80);
+                            c.Add().DataField("process_exam_period").Caption("검사주기").Width(80);
+                            c.Add().DataField("process_exam_sample_qty").Caption("1회검체수량").Width(100);
+                            c.Add().DataField("process_exam_qty").Caption("검사횟수").Width(80);
+                            c.Add().DataField("process_exam_unit_nm").Caption("결과유형").Width(150);
+                        })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("ProcessExam" + "FocusChanged")
+                    )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-3 pl-0">
+            <div class="box">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName margin-bottom">
+                        <p>공정검사 항목</p>
+                    </div>
+
+                     <div class="input-wrapper">
+                        <label class="col-3">CCP 코드</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="process_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control required" name="process_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사항목</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="process_exam_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control required" name="process_exam_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사시기</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="process_exam_start" value="">
+                                @foreach (DataRow row in le_process_exam_start.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사주기(분)</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="process_exam_period">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">1회검체수량</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="process_exam_sample_qty">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사횟수</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="process_exam_qty">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">결과유형</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="process_exam_unit" value="">
+                                @foreach (DataRow row in le_unit.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사자(제조)</label>
+                        <div class="input-group col-3">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="process_exam_manu1" name="process_exam_manu" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_manu1">Yes</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="process_exam_manu2" name="process_exam_manu" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_manu2">No</label></span>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사자(품질)</label>
+                        <div class="input-group col-3">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="process_exam_qc1" name="process_exam_qc" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_qc1">Yes</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="process_exam_qc2" name="process_exam_qc" />
+                            </div>
+                            <span class="form-control-sm"><label for="process_exam_qc2">No</label></span>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">검사기기</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="equip_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control" name="equip_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">대분류</label>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="grand_item" value="">
+                                @foreach (DataRow row in le_grand_item.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">중분류</label>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="middle_item" value="">
+                                @foreach (DataRow row in le_middle_item.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">순번</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control" name="ce_item_seq">
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+</div>

@@ -1,0 +1,430 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@*기타제품 관리*@
+
+<script id="@(pagePrefix)Js">
+
+    $(function () {
+
+        EtcItem2EditCheck(false, "N");
+        Etc_Item2Search();
+
+    });
+
+    // 수정중인지 체크
+    function EtcItem2EditCheck(nowEdit, status) {
+
+        UtilView.setActiveElementToolbar(nowEdit
+            , "Etc_Item2Toolbar"
+            , "Etc_Item2"
+        );
+
+        UtilView.setActiveElementGrids(nowEdit, "Etc_Item2Grid");
+
+        $("#Etc_Item2WriteForm input[name=gubun]").val(status);
+        $("#Etc_Item2WriteForm input[name=item_cd]").prop("readonly", false);
+
+        if (nowEdit) {
+
+            $("#Etc_Item2WriteForm input").prop("disabled", false);
+            $("#Etc_Item2WriteForm select").readonly(false);
+
+            if (status === "I") {
+                $('#Etc_Item2WriteForm input[name=prod_end]').prop("checked", true);
+            }else if (status === "U") {
+                $("#Etc_Item2WriteForm input[name=item_cd]").prop("readonly", true);
+                $("#Etc_Item2WriteForm select[name=item_gb_cd]").readonly(true);
+            }
+            EtcItem2ProdEndChk();
+        } else {
+            $("#Etc_Item2WriteForm input").prop("disabled", true);
+            $("#Etc_Item2WriteForm select").readonly(true);
+        }
+    }
+
+    // 기타제품 그리드 포커스 변경
+    function EtcItem2FocusChanged() {
+        UtilView.setDataGridFormBind("Etc_Item2Grid", "Etc_Item2WriteForm");
+
+        var grid = $("#Etc_Item2Grid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("Etc_Item2Grid", grid.option("focusedRowKey"));
+
+        if (gridData.prod_end === "Y") {
+            $('#Etc_Item2WriteForm input[name=prod_end]').prop("checked", true);
+        } else {
+            $('#Etc_Item2WriteForm input[name=prod_end]').prop("checked", false);
+        }
+    }
+
+    // 사용여부 체크 박스 체크여부에 따른 사용중지 사유 셀렉트 박스 제어
+    function EtcItem2ProdEndChk() {
+        if ($('#Etc_Item2WriteForm input[name=prod_end]').is(":checked") == true) {
+            $('#Etc_Item2WriteForm select[name=break_type]').val("1");
+            $('#Etc_Item2WriteForm select[name=break_type]').readonly(true);
+        } else {
+            $('#Etc_Item2WriteForm select[name=break_type]').readonly(false);
+        }
+    }
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function Etc_Item2Search() {
+        UtilView.dataGridSelect('Etc_Item2Grid', 'Etc_Item2SearchForm');
+    }
+
+     // 입력
+    function Etc_Item2Input() {
+        $("#Etc_Item2WriteForm")[0].reset();
+        EtcItem2EditCheck(true, "I");
+    }
+
+    // 수정
+    function Etc_Item2Edit() {
+
+        var grid = $("#Etc_Item2Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정할 사항이 없습니다.");
+            return;
+        }
+
+        EtcItem2EditCheck(true, "U");
+    }
+
+    // 삭제
+    function Etc_Item2Delete() {
+
+        if (!confirm("삭제하시겠습니까?")) {
+            return;
+        }
+
+        EtcItem2EditCheck(true, 'D');
+        Etc_Item2Save();
+    }
+
+    // 저장
+    function Etc_Item2Save() {
+
+        if (!UtilView.checkValidForm("Etc_Item2WriteForm")) {
+            return;
+        }
+
+        var form = $('#Etc_Item2WriteForm')[0];
+        var formData = new FormData(form);
+
+        UtilView.dataGridTRX(formData, () => Etc_Item2Search());
+        EtcItem2EditCheck(false, "N");
+    }
+
+    // 취소
+    function Etc_Item2Undo() {
+        EtcItem2EditCheck(false, "N");
+        EtcItem2FocusChanged();
+    }
+
+    // 외부파일
+    function Etc_Item2Excel() {
+        gridExportToExcel("Etc_Item2Grid", "기타제품관리_" + '@DateTime.Now.ToShortDateString()');
+    }
+
+    //#endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기타제품구분</span>
+                        </div>
+                        <select class="form-control" name="item_gb">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("기타품목구분", "S", "")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">생산동구분</span>
+                        </div>
+                        <select class="form-control" name="item_type1">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM027")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">팀 구분</span>
+                        </div>
+                        <select class="form-control" name="item_type2">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM059")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Etc_Item2Grid")
+                    .KeyExpr("item_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_gb_nm").Caption("기타제품구분");
+                        c.Add().DataField("item_cd").Caption("코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("item_enm").Caption("품목영문명");
+                        c.Add().Lookup(lookup => lookup
+                            .DataSource(d => d.WebApi()
+                            .RouteName("Comm")
+                            .LoadAction("GetCommon")
+                            .LoadMethod("GET")
+                            .LoadParams(new
+                            {
+                                pGubun = "공통코드",
+                                pDiv = "D",
+                                pStrWhere = "CM012",
+                                pTableName = "unit"
+                            }).Key("keyfield"))
+                            .ValueExpr("keyfield")
+                            .DisplayExpr("displayfield")
+                            ).DataField("item_unit")
+                            .Caption("관리단위");
+                        c.Add().DataField("prod_end").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .TrueText("Y")
+                            .FalseText("N")
+                            .Width("10%")
+                            .CalculateCellValue(@"function(rowData) { return (rowData.prod_end == ""Y"" || rowData.prod_end == true); }");
+                    })
+                    .OnFocusedRowChanged("EtcItem2FocusChanged")
+                    .OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <form id="Etc_Item2WriteForm">
+
+                    <input name="gubun" hidden="hidden" />
+
+                    <div class="divName mb-1">
+                        <p>기본 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">기타제품구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control required" name="item_gb_cd">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("기타품목구분", "D", "")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">코드</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control required" name="item_cd" readonly="readonly" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">기타품목명</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control required" name="item_nm" />
+                            </div>
+                        </div>
+
+                        @*<div class="input-wrapper">
+                            <label class="col-4">품목영문명</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="item_enm" />
+                            </div>
+                        </div>*@
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사용여부</label>
+                            <div class="input-group col-1">
+                                <label><input type="checkbox" name="prod_end" value="Y" onchange="EtcItem2ProdEndChk()" /></label>
+                            </div>
+
+                            <label class="col-3">사용중지사유</label>
+                            <div class="input-group col-3">
+                                <select class="form-control" name="break_type">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM060")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="divName mb-1">
+                        <p>분류 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">abc 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control" name="abc_gubun">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM042")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사업장</label>
+                            <div class="input-group col-4">
+                                <select class="form-control required" name="plant_cd">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("사업장", "D", "")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">생산동 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control" name="item_type1">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM027")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">팀 구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control" name="item_type2">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM059")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="divName mb-1">
+                        <p>주요 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">관리단위</label>
+                            <div class="input-group col-4">
+                                <select class="form-control" name="item_unit">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM012")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">보관창고</label>
+                            <div class="input-group col-4">
+                                <select class="form-control" name="keeping_warehouse">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM023")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">비고</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="remark" />
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

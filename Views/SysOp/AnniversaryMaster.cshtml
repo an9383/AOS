@@ -1,0 +1,321 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "AnniversaryMaster";
+    string sData = ViewData["data"] as String;
+}
+
+@*공휴일 등록*@
+
+<script id="AnniversaryMasterJs">
+
+    var _anniveraryMasterGubun;
+    var _anniveraryMasterID;
+
+    $(function () {
+
+        $('#AnniversaryMaster .datepicker').datepicker({
+            format: "mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: true,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });//datepicker end
+
+        anniversaryMasterIsEdited(false);
+
+        $("#anniversaryMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 1);
+
+    });
+
+    function anniversaryMasterFocusChanged() {
+
+        var grid = $("#anniversaryMasterGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('anniversaryMasterGrid', grid.option("focusedRowKey"));
+        if (UtilView.isEmpty(data)) return;
+        anniversaryMasterFillForm(data);
+    }
+
+    function anniversaryMasterFillForm(data) {
+
+        $("#anniversaryMasterForm")[0].reset();
+
+        $("#AnniversaryMaster input:radio[name='lunar_yn']:radio[value='" + data.lunar_yn + "']").prop('checked', true);
+        $("#AnniversaryMaster input[name=anniversary_date]").val(data.anniversary_date);
+        $("#AnniversaryMaster input[name=anniversary_nm]").val(data.anniversary_nm);
+        $("#AnniversaryMaster select[name=calendar_type]").val(data.calendar_type);
+        $("#AnniversaryMaster input[name=attend_time]").val(data.attend_time);
+        $("#AnniversaryMaster input[name=leave_time]").val(data.leave_time);
+        $("#AnniversaryMaster input[name=working_minute]").val(data.working_minute);
+        $("#AnniversaryMaster input[name=rest_minute]").val(data.rest_minute);
+
+    }
+
+    function anniversaryMasterIsEdited(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#AnniversaryMasterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#AnniversaryMasterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#AnniversaryMasterEdit").dxButton().parent().parent().addClass("display-none");
+            $("#AnniversaryMasterDelete").dxButton().parent().parent().addClass("display-none");
+            $("#AnniversaryMasterInput").dxButton().parent().parent().addClass("display-none");
+
+            $("#anniversaryMasterForm :disabled").attr('disabled', false);
+            $("#anniversaryMasterGrid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+
+            $("#AnniversaryMasterSave").dxButton().parent().parent().addClass("display-none");
+            $("#AnniversaryMasterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#AnniversaryMasterEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#AnniversaryMasterDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#AnniversaryMasterInput").dxButton().parent().parent().removeClass("display-none");
+
+            $("#anniversaryMasterForm :enabled").attr('disabled', true);
+            $("#anniversaryMasterGrid").dxDataGrid("option", "disabled", false);
+
+        }
+    }
+
+    function AnniversaryMasterSearch() {
+        selectAnniversary();
+    }
+
+    function AnniversaryMasterInput() {
+        anniversaryMasterIsEdited(true);
+        $("#anniversaryMasterForm")[0].reset();
+        _anniveraryMasterGubun = "I";
+
+    }
+
+    function AnniversaryMasterEdit() {
+
+        var grid = $("#anniversaryMasterGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('anniversaryMasterGrid', grid.option("focusedRowKey"));
+
+        if (!data.id) {
+            return;
+        }
+
+        _anniveraryMasterID = data.id;
+        anniversaryMasterIsEdited(true);
+        _anniveraryMasterGubun = "U";
+
+    }
+
+    function AnniversaryMasterDelete() {
+
+        if (!confirm("선택된 공휴일을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        var grid = $("#anniversaryMasterGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('anniversaryMasterGrid', grid.option("focusedRowKey"));
+
+        _anniveraryMasterID = data.id;
+        anniversaryMasterIsEdited(true);
+        _anniveraryMasterGubun = "D";
+
+        AnniversaryMasterSave();
+    }
+
+    function AnniversaryMasterSave() {
+
+        if (!UtilView.checkValidForm("anniversaryMasterForm")) {
+            return;
+        }
+
+        var form = $('#anniversaryMasterForm')[0];
+        var data = new FormData(form);
+        data.set("gubun", _anniveraryMasterGubun);
+        if (_anniveraryMasterGubun != "I") {
+            data.set("id", _anniveraryMasterID);
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/AnniversaryCRUD',
+            data: data,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                anniversaryMasterIsEdited(false);
+                selectAnniversary();
+            }
+        })
+    }
+
+    function AnniversaryMasterUndo() {
+        $("#anniversaryValdationChk").text("");
+        $("#anniversaryValdationChk").addClass("display-none");
+        anniversaryMasterIsEdited(false);
+        $("#anniversaryMasterForm")[0].reset();
+        anniversaryMasterFocusChanged();
+    }
+
+    function selectAnniversary() {
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysOp/SelectAnniversary',
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#anniversaryMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#anniversaryMasterGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "anniversaryMasterGrid");
+
+    }
+
+</script>
+
+<div id="AnniversaryMaster" autoresize="Y">
+
+    <div id="AnniversaryMasterTop" class="mainTop row">
+
+        <div class="col-8">
+
+        </div>
+
+        @*<form id="pForm">
+                <label>년도</label>
+                <select id="pYear" class="form-control">
+                    <option value="2020">2020</option>
+                    <option value="2019">2019</option>
+                </select>
+            </form>*@
+
+    <div class="CRUD-btn col-4">
+        @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+    </div>
+
+    </div>
+
+    <div class="row">
+        <div id="AnniversaryMasterLeftMain" class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("anniversaryMasterGrid")
+                    .KeyExpr("id")
+                    .ShowBorders(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .HoverStateEnabled(true)
+                    .DataSource(new JS(ViewData["data"].ToString()))
+                    .Grouping(grouping => grouping.AutoExpandAll(true))
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("lunar_yn_nm").Caption("구분").GroupIndex(0);
+                        c.Add().DataField("anniversary_date").Caption("기념일자");
+                        c.Add().DataField("anniversary_nm").Caption("기념내용");
+                        c.Add().DataField("calendar_type_nm").Caption("휴무구분");
+                        c.Add().DataField("attend_time").Caption("출근시간");
+                        c.Add().DataField("leave_time").Caption("퇴근시간");
+                        c.Add().DataField("working_minute").Caption("작업시간");
+                    })
+                    .OnFocusedRowChanged("anniversaryMasterFocusChanged")
+                )
+            </div>
+        </div>
+        <div id="AnniversaryMasterRightMain" class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>회사 기념일</p>
+                    <span id="anniversaryValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="anniversaryMasterForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">음력여부<star>*</star></label>
+                            <div class="input-group col-4">
+                                <label><input type="radio" name="lunar_yn" value="Y" />음력</label>
+                                <label><input type="radio" name="lunar_yn" value="N" checked="checked" />양력</label>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">시행일자 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker required" name="anniversary_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">기념내용 <star>*</star></label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="anniversary_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">휴무구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="calendar_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.calendarGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">출근시간</label>
+                            <div class="input-group col-4">
+                                <input type="time" class="form-control col-12" name="attend_time">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">최근시간</label>
+                            <div class="input-group col-4">
+                                <input type="time" class="form-control col-12" name="leave_time">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">근무시간(분) <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12 required" name="working_minute">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">휴식시간(분)</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12" name="rest_minute">
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,287 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "AuditTrail_DLIMS";
+
+    var empData = @Html.Raw(Json.Encode(ViewBag.empData.Data));
+
+}
+
+@*AuditTrail 상세확인*@
+
+<script id="AuditTrail_DLIMSJs">
+
+        $(function () {
+
+             var columns = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("AuditTrail_DLIMS", "사원조회", @empData, columns, "emp_cd");
+
+            setDatePicker("#AuditTrail_DLIMS .datepicker");
+
+        });
+
+        function AuditTrailUserSearch() {
+            $("#AuditTrail_DLIMSPopup").dxPopup("instance").show();
+        }
+
+        function AuditTrail_DLIMSRowDblClick(selectedItems) {
+
+            $("#AuditTrail_DLIMS input[name=emp_cd]").val(selectedItems.data.emp_cd);
+
+            $("#AuditTrail_DLIMSPopup").dxPopup("instance").hide();
+        }
+
+        function AuditTrail_DLIMSSearch() {
+
+            $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("dataSource", []);
+
+            var formData = new FormData($("#AuditTrailForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSec/SelectAuditTrail',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    var AuditTrailColumns = [
+                        { caption: "Audit Trail Common",
+                        columns: [
+                            { dataField: "Audit_ID", caption: "Audit_ID" },
+                            { dataField: "구분", caption: "구분" },
+                            { dataField: "시원코드", caption: "사원코드" },
+                            { dataField: "수정시간", caption: "수정시간" } ] },
+                        { caption: "MetaData",
+                        columns: JSON.parse(result[0]) }
+                    ];
+
+                    $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("columns", AuditTrailColumns);
+
+                    if (result[1].length <= 0) {
+                        $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                        $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    if (JSON.parse(result[0]).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                    $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+            });
+        }
+
+        function selectAuditTrail() {
+
+            $("#auditTrailChangesGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#auditTrailChangesGrid").dxDataGrid("instance").option("dataSource", []);
+
+            var data = $("#auditTrailCorrectionHistoryGrid").dxDataGrid("instance").option("focusedRowKey");
+            data.TableName = $("#AuditTrail_DLIMS select[name=TableName]").val();
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSec/SelectAuditTrailDetail',
+                data: {
+                    TableName: $("#AuditTrail_DLIMS select[name=TableName]").val(),
+                    AuditTrail_ID: data.audittrail_id
+                },
+                success: function (result) {
+
+                    var AuditTrailColumns = [
+                        {
+                            caption: "Audit Trail Common",
+                            columns: [
+                                { dataField: "Audit_ID", caption: "Audit_ID" },
+                                { dataField: "구분", caption: "구분" },
+                                { dataField: "시원코드", caption: "사원코드" },
+                                { dataField: "수정시간", caption: "수정시간" }]
+                        },
+                        {
+                            caption: "MetaData",
+                            columns: JSON.parse(result[0])
+                        }
+                    ];
+
+                    $("#auditTrailChangesGrid").dxDataGrid("instance").option("columns", AuditTrailColumns);
+
+                    if (result[1].length <= 0) {
+                        $("#auditTrailChangesGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                        $("#auditTrailChangesGrid").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    if (JSON.parse(result[0]).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#auditTrailChangesGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                    $("#auditTrailChangesGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#auditTrailChangesGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+            });
+        }
+
+</script>
+
+<div id="AuditTrail_DLIMS" autoresize="Y">
+
+    <div id="AuditTrail_DLIMSPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="AuditTrailForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">수정일시</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="FromDate" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()">
+                        <div class="input-group-append"><span class="input-group-text">~</span></div>
+                        <input type="text" class="form-control col-5 datepicker" name="ToDate" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">확인대상</span>
+                        </div>
+                        <select class="form-control" name="TableName">
+                            @foreach (DataRow row in ((DataTable)ViewBag.checkTarget).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용자</span>
+                        </div>
+                        <input type="text" class="form-control" name="emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="AuditTrailUserSearch()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        @* === CRUD 버튼 === *@
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box mb-1">
+
+                <div class="divName margin-bottom">
+                    <p>기간별 수정이력</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("auditTrailCorrectionHistoryGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Height(350)
+                    .Scrolling(scrolling => scrolling.ColumnRenderingMode(GridColumnRenderingMode.Virtual))
+                    .OnFocusedRowChanged("selectAuditTrail")
+                    .Columns(c =>
+                    {
+                        c.Add().Caption("Audit Trail Common")
+                        .Columns(a =>
+                        {
+                            a.Add().DataField("").Caption("");
+                        });
+                        c.Add().Caption("Meta Data")
+                        .Columns(a =>
+                        {
+                            a.Add().DataField("").Caption("");
+                        });
+                    })
+                    .ShowBorders(true)
+                )
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>변경사항(전/후)</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("auditTrailChangesGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.ColumnRenderingMode(GridColumnRenderingMode.Virtual))
+                    .Columns(c =>
+                    {
+                        c.Add().Caption("Audit Trail Common")
+                        .Columns(a =>
+                        {
+                            a.Add().DataField("").Caption("");
+                        });
+                        c.Add().Caption("Meta Data")
+                        .Columns(a =>
+                        {
+                            a.Add().DataField("").Caption("");
+                        });
+                    })
+                    .ShowBorders(true)
+                )
+
+            </div>
+        </div>
+
+    </div>
+
+</div>
