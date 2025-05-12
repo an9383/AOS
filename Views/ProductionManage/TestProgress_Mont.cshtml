@@ -1,0 +1,340 @@
+﻿@*시험현황 모니터링*@
+@using System.Data
+@using HACCP.Libs.Views
+@using System
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+
+@{ 
+    var TestProgress_Mont_State = Html.Raw(Json.Encode(ViewBag.TestProgress_Mont_State.Data));
+    var TestProgress_Mont_StateDetail = Html.Raw(Json.Encode(ViewBag.TestProgress_Mont_StateDetail.Data));
+    var TestProgress_Mont_Detail = Html.Raw(Json.Encode(ViewBag.TestProgress_Mont_Detail.Data));
+
+}
+
+
+<script id="TestProgress_MontJs">
+
+    var time = 600;
+    var toDay = new Date();
+
+    // 새로고침 객체
+    var TestProgress_Mont_intervalSet = {
+        TestProgress_Mont_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(TestProgress_Mont_intervalSet).length;
+                var _thisViewId = "TestProgress_Mont";
+
+                var time = 5;
+                if ($("#TestProgress_MontSearchForm #refresh_time").val() == 0) $("#TestProgress_MontSearchForm #refresh_time").val(1);
+                time = $("#TestProgress_MontSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "TestProgress_Mont";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        TestProgress_Mont_interval_0: function () {
+            TestProgress_MontSearch();
+
+            TestProgress_Mont_intervalSet.TestProgress_Mont_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+    $(function () {
+        TestProgress_Mont_Content_Resize();
+        TestProgress_Mont_intervalSet.TestProgress_Mont_intervalMaster.intervalExcute();
+
+        var today = new Date();
+        $("#TestProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+
+        if ((@TestProgress_Mont_State).length > 0) {
+            TestProgress_Mont_stateDataInsert(JSON.parse(@TestProgress_Mont_State));
+        }
+
+        if ((@TestProgress_Mont_StateDetail).length > 0) {
+            TestProgress_Mont_stateDetailDataInsert(JSON.parse(@TestProgress_Mont_StateDetail));
+        }
+
+        if ((@TestProgress_Mont_Detail).length > 0) {
+            TestProgress_Mont_detailDataInsert(JSON.parse(@TestProgress_Mont_Detail));
+        }
+
+    });
+
+
+
+
+    $("#TestProgress_MontSearchForm input[name='workroom_type']").change(function () {
+
+        TestProgress_MontSearch();
+    })
+
+
+    $("#TestProgress_MontSearchForm #refresh_time").blur(function () {
+
+        TestProgress_Mont_intervalSet.TestProgress_Mont_intervalMaster.intervalDelete(0, 1);
+        TestProgress_Mont_intervalSet.TestProgress_Mont_intervalMaster.intervalExcute();
+    });
+
+
+    $("#TestProgress_MontSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#TestProgress_MontSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    function TestProgress_MontSearch() {
+        var today = new Date();
+        $("#TestProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+        $.ajax({
+            type: 'POST',
+            url: "/ProductionManage/TestProgress_MontSearch",
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+                var jsonData = new Array();
+                for (let i = 0; i < result.length; i++) {
+
+                    if (result[i] != "" && result[i] != null) {
+                        jsonData[i] = JSON.parse(result[i]);
+                    }
+                    else {
+                        jsonData[i] = result[i];
+                    }
+
+                }
+
+
+                TestProgress_Mont_stateDetailDataInsert(jsonData[0]);
+                TestProgress_Mont_stateDataInsert(jsonData[1]);
+                TestProgress_Mont_detailDataInsert(jsonData[2]);
+
+            }
+        })
+    }
+
+
+    function TestProgress_Mont_stateDataInsert(data) {
+        $("#TestProgress_MontStateTable tr:eq(1) td:eq(0)").text(data[0].today_request_cnt);
+        $("#TestProgress_MontStateTable tr:eq(1) td:eq(1)").text(data[0].today_testing_cnt);
+        $("#TestProgress_MontStateTable tr:eq(1) td:eq(2)").text(data[0].today_complete_cnt);
+    }
+
+
+    function TestProgress_Mont_stateDetailDataInsert(data) {
+
+        $("#TestProgress_MontStateDetailGrid").dxDataGrid("option", "dataSource", data);
+
+    }
+
+
+    function TestProgress_Mont_detailDataInsert(data) {
+
+        $("#TestProgress_MontDetailGrid").dxDataGrid("option", "dataSource", data);
+
+    }
+
+
+    function TestProgress_Mont_Content_Resize() {
+        var topPoint1 = document.getElementById("TestProgress_Mont_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1) - 20
+        var TestProgressStateTable_height = $("table#TestProgress_MontStateTable").css("height");
+
+        document.querySelector("#TestProgress_Mont div.box:first-child").style.height = content_max_height + "px";
+
+
+        var TestProgressStateTable_height = $("table#TestProgress_MontStateTable").css("height");
+        var TestProgressStateTable_height_int = TestProgressStateTable_height.substr(0, (TestProgressStateTable_height.length) - 2)
+
+        document.getElementById("TestProgress_MontStateDetailGrid").style.height = (content_max_height - TestProgressStateTable_height_int - 37) + "px"; // DivName높이 >> 35px
+        document.getElementById("TestProgress_MontDetailGrid").style.height = (content_max_height - 37) + "px"; // DivName높이 >> 35px
+    }
+
+</script>
+
+<style>
+    #TestProgress_Mont #TestProgress_MontStateTable {
+        width: 100%;
+        text-align: center;
+        height: 10%;
+        border: none;
+    }
+
+    #TestProgress_Mont #TestProgress_MontStateTable tr:first-child {
+        font-size: 1.3em;
+        border-bottom: 1px solid #ddd;
+        background-color: #F5F7F9;
+    }
+
+    #TestProgress_Mont #TestProgress_MontStateTable tr:first-child th:nth-child(-n+2) {
+        border-right: 1px solid #ddd;
+    }
+
+    #TestProgress_Mont #TestProgress_MontStateTable tr:nth-child(2) {
+        font-size: 1.2em;
+        font-weight: 500;
+    }
+
+    #TestProgress_Mont #TestProgress_MontStateTable tr:nth-child(2) td:nth-child(-n+2) {
+        border-right: 1px solid #ddd;
+    }
+
+
+    #TestProgres_Mont .text_over {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        height: 20px;
+        padding: 0 5px;
+    }
+</style>
+
+<div id="TestProgress_Mont">
+
+    <div id="TestProgress_Mont_Top" class="mainTop row">
+
+        <div class="col-12">
+            <form id="@(pagePrefix)SearchForm"  onsubmit="return false;">
+
+                <div class="input-wrapper">
+                    <div class="col-8 input-group input-group-sm">
+
+                    </div>
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="600" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+
+            </form>
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                <div class="divName mb-0">
+                    <p>시험 진행 현황</p>
+                </div>
+                <table id="@(pagePrefix)StateTable" frame=void>
+                    <tr>
+                        <th class="text_over">금일 의뢰</th>
+                        <th class="text_over">금일 진행중</th>
+                        <th class="text_over">금일 완료</th>
+                    </tr>
+
+                    <tr>
+                        <td class="text_over">-</td>
+                        <td class="text_over">-</td>
+                        <td class="text_over">-</td>
+                    </tr>
+
+                </table>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "StateDetailGrid")
+                    .KeyExpr("row_num")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(false)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("testType").Caption("구분");
+                        columns.Add().DataField("today_request_cnt").Caption("의뢰");
+                        columns.Add().DataField("today_testing_cnt").Caption("진행중");
+                        columns.Add().DataField("today_complete_cnt").Caption("완료");
+                    })
+                )
+            </div>
+
+        </div>
+
+        <div class="col-8 pl-0">
+           
+            <div class="box mb-0" style="width:100%">
+                <div class="divName mb-0">
+                    <p>금일 의뢰건 시험자별 진행율</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "DetailGrid")
+                    .KeyExpr("row_num")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(false)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(400)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("testType").Caption("구분");
+                        columns.Add().DataField("sign_set_dt_nm").Caption("담당");
+                        columns.Add().DataField("emp_nm").Caption("책임자");
+                        columns.Add().DataField("today_request_cnt").Caption("의뢰");
+                        columns.Add().DataField("today_wait_cnt").Caption("미진행");
+                        columns.Add().DataField("today_complete_cnt").Caption("완료");
+                    })
+                )
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

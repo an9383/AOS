@@ -1,0 +1,332 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.Equipment.PartHistory.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeS_equip_type = (DataTable)ViewBag.S_equip_type;
+
+
+    // 1.5 codehelp 데이터
+    var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+    // 1. 화면 Load 영역
+    $(function () {
+        // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+'PartHistory'+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+'PartHistory'+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+'PartHistory'+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+        $('select[name=s_equip_type]', $('#' + 'PartHistorySearchForm')).val('@srch.S_equip_type');
+        $('input:text[name=s_equipment][value="@srch.S_equipment"]', $('#'+'PartHistorySearchForm')).val('@srch.S_equipment');
+
+        //1.3. help팝업설정
+        var popupColumns = {
+            "equip": [{ dataField: "equip_cd", caption: "기계기구코드" }, { dataField: "equip_nm", caption: "기계기구명" }]
+        };
+        createPopup('PartHistory' + "Equip", "기계기구 조회", @equipPopupData, popupColumns.equip);
+
+
+        //1.4 툴바 활성/비활성
+        //PartHistoryEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('select[name=s_equip_type]', $('#' + 'PartHistorySearchForm')).change(function () {
+            console.log("test");
+            PartHistorySelect();
+        });
+
+        $('input[name=s_equipment]', $('#' + 'PartHistorySearchForm')).keyup(function () {
+            PartHistorySelect();
+        });
+
+        $('input[name=s_equipment]+div>button',$('#'+'PartHistorySearchForm')).click(function (event) {
+            PartHistoryHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+
+        //1.5.3 공통객체
+
+
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var PartHistoryHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function PartHistoryHelpPopUpSearch(e) {
+        PartHistoryHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (PartHistoryHelpPopUpCurInputName)
+        {
+            case "s_equipment":
+                popupId = 'PartHistory'+"Equip";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function PartHistoryEquipRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (PartHistoryHelpPopUpCurInputName == "s_equipment") {
+            $("input[name=" + PartHistoryHelpPopUpCurInputName + "]", $('#' + 'PartHistorySearchForm')).val(data.equip_cd);
+        }
+        $("#"+'PartHistory'+"EquipPopup").dxPopup("instance").hide();
+    }
+
+    // 3. 툴바영역
+    //조회
+    function PartHistorySearch() {
+        PartHistorySelect();
+    }
+    // 프린트
+    function PartRegisterPrint() {
+
+    }
+
+    // 엑셀다운로드
+    function PartRegisterExcel() {
+
+    }
+
+    // 즐겨찾기
+    function PartRegisterFavorite() {
+
+    }
+
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function PartHistorySelect() {
+        // form claear
+        //PartHistoryWriteFormClear();
+        // edit 해제
+        //PartHistoryEditCheck(false, 'N');
+
+       // 메인Grid
+       // var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+       // var gridOption = { "focusedRowEnabled": true };
+       UtilView.dataGridSelect('PartHistory' + 'Grid', 'PartHistorySearchForm');
+    }
+
+    // 4.2 Row focus changed
+    function PartHistoryFocusChanged() {
+        // datagrid 폼바인딩
+        var gridId = 'PartHistory'+"Grid";
+        //UtilView.setDataGridFormBind(gridId, 'PartHistoryWriteForm');
+
+        // 우측 gird바인딩
+        PartHistorySelectSub(gridId, 'PartHistory' + "SubSSGrid", "SelectSubSS");
+        PartHistorySelectSub(gridId, 'PartHistory' + "SubSPGrid", "SelectSubSP");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+
+    //5.2 조회 :우측 Grid (사용설비현황)
+    function PartHistorySelectSub(sGridId, tGridId, actType) {
+        var sGrid = $('#' + sGridId).dxDataGrid("instance");
+        var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+        var data = { rowkey: gridData.equip_cd };
+
+        //var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+        UtilView.dataGridSimpleSelect(tGridId, data, actType);
+    }
+
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)EquipPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">설비 점검/수리 로그북</h4>*@
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설비종류</span>
+                        </div>
+                        <select class="form-control" name="s_equip_type" value="">
+                            @foreach (DataRow row in codeS_equip_type.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>                   
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설비</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_equipment">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>                    
+                </div>
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search");}
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-4">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("PartHistory" + "Grid")
+                        .KeyExpr("equip_manage_num")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("900")
+                        .ShowBorders(true)
+                        //.Selection(s => s.Mode(SelectionMode.Single))
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("equip_cd").Caption("코드");
+                            c.Add().DataField("equip_nm").Caption("장비명");
+                        })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("PartHistory" + "FocusChanged")
+                    )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-8">
+            <div class="box mb-0">
+                <form id="@(pagePrefix)WriteForm">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName mb-0">
+                        <p>예방점검 이력</p>
+                    </div>
+                    <div>
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("PartHistory" + "SubSSGrid")
+                            .KeyExpr("equip_cd")
+                            .ShowBorders(true)
+                            //.Selection(s => s.Mode(SelectionMode.Single))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(350)
+                            //.OnCellPrepared("PartHistoryEditableColumn")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("schedule_date").Caption("일자");
+                                c.Add().DataField("work_type_nm").Caption("구분");
+                                c.Add().DataField("schedule_type_nm").Caption("내용");
+                                c.Add().DataField("amt").Caption("금액");
+                                c.Add().DataField("emp_nm").Caption("담당");
+                                //c.Add()
+                                //    .DataField("emp_chk")
+                                //    .Caption("발신")
+                                //    .DataType(GridColumnDataType.Boolean)
+                                //    .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                            })
+                        )
+                    </div>
+                    <div class="divName mb-0">
+                        <p>고장수리 이력</p>
+                    </div>
+                    <div>
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("PartHistory" + "SubSPGrid")
+                            .KeyExpr("equip_cd")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height(900)
+                            .ShowBorders(true)
+                            //.Selection(s => s.Mode(SelectionMode.Single))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            //.OnCellPrepared("PartHistoryEditableColumn")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("repair_date").Caption("수리일자");
+                                c.Add().DataField("work_type_nm").Caption("구분");
+                                c.Add().DataField("error_content").Caption("내용");
+                                c.Add().DataField("repair_price").Caption("금액");
+                                c.Add().DataField("emp_nm").Caption("담당");
+                                //c.Add()
+                                //    .DataField("emp_chk")
+                                //    .Caption("발신")
+                                //    .DataType(GridColumnDataType.Boolean)
+                                //    .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                            })
+                        )
+                    </div>
+                </form>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+

@@ -1,0 +1,899 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "QualificationInfo";
+    string sData = ViewData["data"] as String;
+}
+@{
+    var QualificationInfo_LicenseData = @Html.Raw(Json.Encode(ViewBag.QualificationInfoLicenseData.Data));
+    var QualificationInfo_EmpData = @Html.Raw(Json.Encode(ViewBag.QualificationInfoEmpData.Data));
+    //var QualificationInfo_FileData = @Html.Raw(Json.Encode(ViewBag.QualificationInfoFileData.Data));
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+}
+
+<script id="QualificationInfoJs" type="text/javascript">
+    var QualificationInfo_crudGubun = "";
+
+    $(function () {
+        var QI_EmpData = @QualificationInfo_EmpData;
+        var QI_LicenseData = @QualificationInfo_LicenseData;
+
+        var QI_emp_columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("QualificationInfo_Employee", "사원목록", QI_EmpData, QI_emp_columns, "emp_cd");
+
+        setDatePicker("#QualificationInfo .datepicker");
+
+        if (QI_EmpData.length <= 0) {
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        }
+        else {
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@QualificationInfo_EmpData));
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            QualificationInfo_FillEmpData(JSON.parse(@QualificationInfo_EmpData)[0]);
+
+        }
+
+        if (QI_LicenseData.length <= 0) {
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        }
+        else {
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@QualificationInfo_LicenseData));
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            QualificationInfo_FillLicenseData(JSON.parse(@QualificationInfo_LicenseData)[0]);
+
+        }
+
+        @*if (QI_FileData.length <= 0) {
+            $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@QualificationInfo_FileData));
+            $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+        }*@
+
+        QualificationInfoEditCheck(false, 'N');
+
+
+    });
+
+    // 수정중인지 체크
+    function QualificationInfoEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "QualificationInfoToolbar"
+            , "QualificationInfoEmpGrid;QualificationInfoLicenseGrid;QualificationInfoFileGrid;QualificationInfoEduInGrid;QualificationInfoEduOutGrid"
+            , "QualificationInfoLicenseForm"//"QualificationInfoSearchForm" //, "QualificationInfoSearchForm;QualificationInfoEmpForm"
+            , ""
+        );
+
+    }
+
+
+    function QualificationInfoSearch() {
+
+        var formData = new FormData();
+
+
+        //그리드 초기화
+        $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+
+        //폼 초기화
+        $("#QualificationInfoEmpForm")[0].reset();
+        $("#QualificationInfoLicenseForm")[0].reset();
+
+        //첫번째 탭으로 이동
+        menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1);
+
+        QualificationInfoEditCheck(false, 'N');
+
+        if ($("#QI_search_emp_nm").val() == "") {
+            formData.append("emp_cd", "");
+        }
+        else {
+            formData.append("emp_cd", $("#QI_search_emp_cd").val());
+        }
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_Search',
+            data:formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#QualificationInfoEmpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            }
+        });
+    }
+
+    function QualificationInfoSearchLicenseInfo(EmpData) {
+        QualificationInfoEditCheck(false, 'N');
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_SearchLicense',
+            data: {
+                emp_cd: EmpData.emp_cd
+            },
+            success: function (result) {
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            }
+        });
+
+    }
+
+
+    function QualificationInfoEmp_changed(e) {
+
+        QualificationInfoEditCheck(false, 'N');
+
+        //첫번째 탭으로 이동
+        menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1);
+
+        //그리드 초기화
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoLicenseGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $("#QualificationInfoEmpForm")[0].reset();
+        QualificationInfo_FillEmpData(e.row.data);
+
+        $("#QualificationInfoLicenseForm")[0].reset();
+        //자격정보 불러오기
+        QualificationInfoSearchLicenseInfo(e.row.data);
+
+    }
+
+    function QualificationInfo_FillEmpData(Empdata) {
+
+        $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val(Empdata.emp_cd); //사원코드
+        $("#QualificationInfoEmpForm input[name=QI_emp_nm]").val(Empdata.emp_nm); //사원명
+        $("#QualificationInfoEmpForm input[name=QI_dept_cd]").val(Empdata.dept_cd); //부서코드
+        $("#QualificationInfoEmpForm input[name=QI_dept_nm]").val(Empdata.dept_nm); //부서명
+
+    }
+
+    function QualificationInfo_changed(e) {
+
+        QualificationInfoEditCheck(false, 'N');
+
+        $("#QualificationInfoLicenseForm")[0].reset();
+        QualificationInfo_FillLicenseData(e.row.data);
+
+        QualificationInfoSearchFile(e.row.data.emp_cd, e.row.data.license_cd);
+
+    }
+
+    function QualificationInfo_FillLicenseData(License_data) {
+
+        $("#QualificationInfoLicenseForm select[name=QI_license_nm]").val(License_data.license_cd); //자격
+        $("#QualificationInfoLicenseForm textarea[name=QI_license_info]").val(License_data.license_info); //자격 및 면허사항
+        $("#QualificationInfoLicenseForm textarea[name=QI_remark]").val(License_data.remark); //비고
+
+    }
+
+    function refresh_Edu_IN() {
+
+        var emp_cd = $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val();
+        //그리드 초기화
+        $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_SearchEduIn',
+            data: {
+                emp_cd: emp_cd
+            },
+            success: function (result) {
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#QualificationInfoEduInGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            }
+        });
+    }
+
+    function refresh_Edu_OUT() {
+
+        var emp_cd = $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val();
+        //그리드 초기화
+        $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_SearchEduOut',
+            data: {
+                emp_cd: emp_cd
+            },
+            success: function (result) {
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#QualificationInfoEduOutGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            }
+        });
+    }
+
+    //#region CRUD 버튼 처리
+    function QualificationInfoInput() {
+        //첫번째 탭으로 이동
+        menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1);
+
+        $("#QualificationInfoLicenseForm")[0].reset();
+        QualificationInfoEditCheck(true, 'I');
+        QualificationInfo_crudGubun = "InsertLicense";
+
+
+    }
+
+    function QualificationInfoEdit() {
+        //첫번째 탭으로 이동
+        menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1);
+
+        QualificationInfoEditCheck(true, 'U');
+        QualificationInfo_crudGubun = "UpdateLicense";
+
+
+    }
+
+    function QualificationInfoDelete() {
+        //첫번째 탭으로 이동
+        menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1);
+
+        QualificationInfoEditCheck(true, 'D');
+        QualificationInfo_crudGubun = "DeleteLicense";
+
+        // 삭제 여부 팝업
+        if (confirm("정말 삭제하시겠습니까??") === true) {
+
+            var formData = new FormData();
+            //crud 구분
+            formData.append("gubun", QualificationInfo_crudGubun);
+
+            var emp_cd = $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val();
+            var license_cd = $("#QualificationInfoLicenseForm select[name=QI_license_nm]").val();
+
+
+            formData.append("emp_cd", emp_cd);
+            formData.append("license_cd", license_cd);
+
+            QualificationInfo_CRUD(formData);
+
+
+        } else {   //취소
+
+            QualificationInfoEditCheck(false, 'N');
+            QualificationInfo_crudGubun = "";
+            QualificationInfoSearch();
+            return;
+
+        }
+
+    }
+
+    function QualificationInfoSave() {
+
+        var formData = new FormData();
+
+        //crud 구분
+        formData.append("gubun", QualificationInfo_crudGubun);
+
+        var emp_cd = $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val();
+        var license_cd = $("#QualificationInfoLicenseForm select[name=QI_license_nm]").val();
+        var license_info = $("#QualificationInfoLicenseForm textarea[name=QI_license_info]").val();
+        var remark = $("#QualificationInfoLicenseForm textarea[name=QI_remark]").val();
+
+        
+        formData.append("emp_cd", emp_cd);
+        formData.append("license_cd", license_cd);
+        formData.append("license_info", license_info);
+        formData.append("remark", remark);
+
+        QualificationInfo_CRUD(formData);
+
+    }
+
+    function QualificationInfoUndo() {
+        QualificationInfoEditCheck(false, 'N');
+        QualificationInfoSearch();
+    }
+
+    function QualificationInfo_CRUD(formData) {
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_CRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                alert(result);
+
+                //alert(json.messege);
+                QualificationInfoEditCheck(false, 'N');
+                QualificationInfo_crudGubun = "";
+                QualificationInfoSearch();
+
+            }
+        });
+    }
+
+    //#endregion
+
+    //#region 파일 관리
+
+    function QualificationInfoSearchFile(emp_cd, license_cd) {
+
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_SearchFile',
+            data: {
+                emp_cd: emp_cd,
+                license_cd: license_cd
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result);
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#QualificationInfoFileGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#QualificationInfoFileGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+    // 파일 첨부
+    function QualificationInfoFileAdd() {
+        var licenseGrid = $("#QualificationInfoLicenseGrid").dxDataGrid("instance");
+
+        if (licenseGrid.totalCount() <= 0) {
+            alert("자격 정보를 먼저 입력 해 주세요.");
+            return;
+        }
+
+        //파일 선택 팝업 오픈
+        $("#QualificationInfo_Tap_1 #QI_fileData").click();
+    }
+
+    $("#QualificationInfo_Tap_1 #QI_fileData").change(function () {
+        var formData = new FormData($("#QualificationInfo #QI_fileSubmitForm")[0]);
+
+        // 첨부파일 그리드
+        var licenseGrid = $("#QualificationInfoLicenseGrid").dxDataGrid("instance");
+        var licenseData = getGridRowByKey("QualificationInfoLicenseGrid", licenseGrid.option("focusedRowKey"));
+
+
+        formData.set("emp_cd", licenseData.emp_cd);
+        formData.set("license_cd", licenseData.license_cd);
+        formData.set("license_no", licenseData.license_cd); //license_no는 뭔지 모르겠음....진짜 자격번호면 넣는데가 없는데?
+
+
+        formData.append("uploadfile", $("#QualificationInfo_Tap_1 #QI_fileData")[0].files[0]);
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/QualificationInfo_FileAdd',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (result) {
+                alert(result);
+
+                $("#QualificationInfo_Tap_1 #QI_fileData").val("");
+                //QualificationInfoSearchFile(emp_cd, license_cd);
+                QualificationInfoEditCheck(false, 'N');
+                QualificationInfo_crudGubun = "";
+                QualificationInfoSearch();
+            }
+        });
+    });
+
+
+    // 파일 삭제
+    function QualificationInfoFileDelete() {
+        // 첨부파일 그리드
+        var fileGrid = $("#QualificationInfoFileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("삭제할 문서가 없습니다.");
+
+            return;
+        } 
+
+
+
+        var formData = new FormData();
+        var fileData = getGridRowByKey("QualificationInfoFileGrid", fileGrid.option("focusedRowKey"));
+        // 첨부파일 그리드
+        var licenseGrid = $("#QualificationInfoLicenseGrid").dxDataGrid("instance");
+        var licenseData = getGridRowByKey("QualificationInfoLicenseGrid", licenseGrid.option("focusedRowKey"));
+
+
+        formData.set("emp_cd", licenseData.emp_cd);
+        formData.append("file_id", fileData.doc_file_id);
+        formData.append("license_cd", licenseData.license_cd);
+        formData.append("license_no", licenseData.license_cd);
+
+
+
+        if (confirm("삭제하시겠습니까?")) {
+            $.ajax({
+                type: 'POST',
+                url: '/Education/QualificationInfo_FileDelete',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    alert(result);
+
+                    QualificationInfoEditCheck(false, 'N');
+                    QualificationInfo_crudGubun = "";
+                    QualificationInfoSearch();
+                }
+            });
+        }
+    }
+
+    // 파일열기
+    function QualificationInfoFileOpen() {
+        var fileGrid = $("#QualificationInfoFileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("첨부된 문서가 없습니다.")
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("QualificationInfoFileGrid", fileGrid.option("focusedRowKey"));
+
+        document.location.assign('/Education/FileOpen?file_id=' + fileData.doc_file_id);
+
+        //$.ajax({
+        //    type: 'POST',
+        //    url: '/Education/QualificationInfo_FileOpen',
+        //    data: {
+        //        file_id: fileData.doc_file_id
+        //    },
+        //    success: function (result) {
+        //        if (result != "") {
+
+        //            var json = JSON.parse(result);
+        //            if (json.hasOwnProperty('sessionLoss')) {
+        //                alert("세션이 만료되었습니다.");
+        //                sessionStorage.clear();
+        //                location.replace("/Comm/Login");
+        //            }
+        //        }
+
+        //    }
+        //});
+    }
+
+    //#endregion
+
+    //#region 팝업처리
+    //사원 검색
+    function QualificationInfo_Employee() {
+        //팝업띄우고
+        var popup = $("#QualificationInfo_EmployeePopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function QualificationInfo_EmployeeRowDblClick(selectedItems) {
+
+        $("#QualificationInfoSearchForm input[name=QI_search_emp_cd]").val(selectedItems.values[0]);
+        $("#QualificationInfoSearchForm input[name=QI_search_emp_nm]").val(selectedItems.values[1]);
+
+        var popup = $("#QualificationInfo_EmployeePopup").dxPopup("instance");
+
+        popup.hide();
+    }
+    //#endregion
+
+    //#region 미리보기 (리포트)
+    function QualificationInfoPrint() {
+
+        var qi_report = new ReportHelper($(event.target));
+        var emp_cd = $("#QualificationInfoEmpForm input[name=QI_emp_cd]").val();
+
+        if (emp_cd == "" || emp_cd == null || emp_cd == undefined) {
+            alert("교육 목록이 없습니다.");
+            return;
+        }
+
+
+        qi_report.addParam({
+            objFile: { path: "Education", RptFileName: "PersonalEducationRecord" },
+            objSp: { SpName: "SP_QualificationInfo_AOS", gubun: "PersonalEducationRecordReport", reportParam: "emp_cd:" + emp_cd },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+        //개인별 건강관리카드 -> 한풍에서만 씀. 영진에 없음.
+        //qi_report.addParam({
+        //    objFile: { path: "QualificationInfo", RptFileName: "PersonalCheckupRecord" },
+        //    objSp: { SpName: "SP_QualificationInfo_AOS", gubun: "PersonalChekupRecordReport", reportParam: "emp_cd:" + emp_cd },
+        //    objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        //});
+
+        //qi_report.testObj();
+        qi_report.run();
+    }
+
+
+    //#endregion
+
+</script>
+
+<div id="QualificationInfo" autoresize="Y">
+    <div id="QualificationInfo_EmployeePopup"></div>
+
+    <form id="QI_fileSubmitForm" enctype="multipart/form-data" style="display: none;">
+    </form>
+
+    <div class="mainTop row">
+        <div class="col-4" id="QualificationInfoSearchOptions">
+            <form id="QualificationInfoSearchForm">
+                <div class="input-wrapper col-12" style="padding:0px">
+                    <div class="input-group input-group-sm col-6">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사원명</span>
+                        </div>
+                        <input type="text" class="form-control" name="QI_search_emp_nm" id="QI_search_emp_nm" />
+                        <input type="text" id="QI_search_emp_cd" name="QI_search_emp_cd" style="display: none;" />
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-secondary" onclick="QualificationInfo_Employee()"><i class="fa fa-search"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="col-8 CRUD-btn">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Print;Preview");}
+        </div>
+    </div>
+
+
+    <div class="row p-0 m-0" >
+        <div class="col-4 p-0">
+            <div class="box mb-0 mr-1" style="height:870px">
+                <div class="divName">
+                    <p>작업원 목록</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("QualificationInfoEmpGrid")
+                    .Height("831")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .KeyExpr("emp_cd")
+                    .ShowBorders(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Columns(c =>
+                    {
+                        c.Add()
+                            .DataField("emp_cd")
+                            .Caption("사원코드").Alignment(HorizontalAlignment.Center).Width("30%");
+                        c.Add()
+                            .DataField("emp_nm")
+                            .Caption("사원명").Alignment(HorizontalAlignment.Center).Width("30%");
+                        c.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서명").Alignment(HorizontalAlignment.Center).Width("40%");
+                    })
+                    .OnFocusedRowChanged("QualificationInfoEmp_changed")
+                    )
+            </div>
+        </div>
+
+
+        <div class="col-8 p-0">
+            <div class="box mb-0" style="height:870px">
+                <div class="divName">
+                    <p>작업원 정보</p>
+                </div>
+
+                <form id="QualificationInfoEmpForm">
+                    <div class="input-wrapper col-12" style="padding:5px">
+                        <div class="input-group col-2" style="padding-right:5px">
+                            <div class="input-group-append">
+                                <span class="input-group-text">사번</span>
+                            </div>
+                            <input type="text" class="form-control" name="QI_emp_cd" id="QI_emp_cd" readonly />
+                        </div>
+                        <div class="input-group col-3" style="padding-right:5px">
+                            <div class="input-group-append">
+                                <span class="input-group-text">사원명</span>
+                            </div>
+                            <input type="text" class="form-control" name="QI_emp_nm" id="QI_emp_nm" readonly />
+                        </div>
+                        <div class="input-group col-2" style="padding-right:5px">
+                            <div class="input-group-append">
+                                <span class="input-group-text">부서코드</span>
+                            </div>
+                            <input type="text" class="form-control" name="QI_dept_cd" id="QI_dept_cd" readonly />
+                        </div>
+                        <div class="input-group col-3" style="padding-right:5px">
+                            <div class="input-group-append">
+                                <span class="input-group-text">부서명</span>
+                            </div>
+                            <input type="text" class="form-control" name="QI_dept_nm" id="QI_dept_nm" readonly />
+                        </div>
+                    </div>
+                </form>
+
+                <ul class="nav nav-tabs col-12" id="QualificationInfo_Tap">
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link active" onclick="menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 1)">업무자격 정보</a>
+                    </li>
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link" onclick="menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 2); refresh_Edu_IN();">내부교육 정보</a>
+                    </li>
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link" onclick="menutab('QualificationInfo_Tap', 'QualificationInfo_Tap', 3); refresh_Edu_OUT();">외부교육 정보</a>
+                    </li>
+                </ul>
+
+                <div id="QualificationInfo_Tap">
+                    <div id="QualificationInfo_Tap_1" style="padding-left:0px;height:765px">
+                        <div class="row mb-0" style="margin:0px">
+                            <div class="col-5 box mb-0" style="margin-right:0px;padding:0px">
+                                <div class="divName">
+                                    <p>자격정보</p>
+                                </div>
+                                @(Html.DevExtreme().DataGrid()
+                            .ID("QualificationInfoLicenseGrid")
+                            .Height("723")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .KeyExpr("license_nm")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Columns(c =>
+                            {
+                                c.Add()
+                                    .DataField("license_nm")
+                                    .Caption("자격");
+                            })
+                            .OnFocusedRowChanged("QualificationInfo_changed")
+                            )
+                            </div>
+                            <div class="col-7 box" style="margin:0px;padding:0px">
+                                <div class="divName">
+                                    <p>상세정보</p>
+                                </div>
+
+                                <form id="QualificationInfoLicenseForm" name="QualificationInfoLicenseForm" enctype="multipart/form-data">
+                                    <div class="input-wrapper">
+                                        <div class="input-group">
+                                            <label class="col-3" align="center">자격</label>
+                                            <div class="input-group col-8">
+                                                @*<input type="text" class=" form-control col-12" name="QI_license_nm" id="QI_license_nm" />*@
+
+                                                <select class="col-12 form-control" name="QI_license_nm" id="QI_license_nm">
+                                                    @foreach (DataRow row in ((DataTable)ViewBag.LicenseData).Rows)
+                                                    {
+                                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="input-wrapper">
+                                        <div class="input-group">
+                                            <label class="col-3" align="center">자격 및 <br />면허사항</label>
+                                            <div class="input-group col-8">
+                                                <textarea type="text" rows="3" class=" form-control col-12" name="QI_license_info" id="QI_license_info" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="input-wrapper">
+                                        <div class="input-group">
+                                            <label class="col-3" align="center">비고</label>
+                                            <div class="input-group col-8">
+                                                <textarea type="text" rows="3" class=" form-control col-12" name="QI_remark" id="QI_remark" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                                <br />
+                                <div class="divName">
+                                    <p>파일관리</p>
+                                </div>
+
+                                <div align="right" id="QI_btnDiv" style="margin: 10px; padding-right:10px">
+                                    <button type="button" id="QI_file_Insert" class="btn btn-secondary" onclick="QualificationInfoFileAdd()">첨부</button>
+                                    <button type="button" id="QI_file_Open" class="btn btn-secondary" onclick="QualificationInfoFileOpen()">파일열기</button>
+                                    <button type="button" id="QI_file_Delete" class="btn btn-secondary" onclick="QualificationInfoFileDelete()">삭제</button>
+                                    <input type="file" id="QI_fileData" style="display: none;" />
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                    .ID("QualificationInfoFileGrid")
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height("523")
+                                    .HoverStateEnabled(true)
+                                    .ColumnAutoWidth(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("doc_name").Caption("파일이름").Width("60%");
+                                        c.Add().DataField("emp_nm").Caption("첨부자").Width("40%");
+                                        c.Add().DataField("doc_file_id").Visible(false);
+                                    })
+                                    .KeyExpr("doc_name")
+                                    .OnRowDblClick("QualificationInfoFileOpen")
+                                )
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <div id="QualificationInfo_Tap_2" class="display-none col-12 mb-0" style="padding: 0px; height:765px">
+                        <div class="divName">
+                            <p>내부교육 정보</p>
+                        </div>
+                        @(Html.DevExtreme().DataGrid()
+                        .ID("QualificationInfoEduInGrid")
+                        .Height("724")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .KeyExpr("edu_no")
+                        .ShowBorders(true)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Columns(c =>
+                        {
+                            c.Add()
+                                .DataField("title")
+                                .Caption("교육과정").Alignment(HorizontalAlignment.Center);
+                            c.Add()
+                                .DataField("edu_start_date")
+                                .Caption("교육일자").Alignment(HorizontalAlignment.Center);
+                            c.Add()
+                                .DataField("edu_time")
+                                .Caption("교육시간").Alignment(HorizontalAlignment.Center);
+                            c.Add()
+                                .DataField("complete_yn")
+                                .Caption("이수여부").Alignment(HorizontalAlignment.Center).DataType(GridColumnDataType.Boolean);
+                        })
+                        )
+                    </div>
+                    <div id="QualificationInfo_Tap_3" class="display-none col-12 mb-0" style="padding:0px; height:765px">
+                        <div class="divName">
+                            <p>외부교육 정보</p>
+                        </div>
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("QualificationInfoEduOutGrid")
+                            .Height("724")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .KeyExpr("edu_no")
+                            .ShowBorders(true)
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Columns(c =>
+                            {
+                                c.Add()
+                                    .DataField("title")
+                                    .Caption("교육과정").Alignment(HorizontalAlignment.Center);
+                                c.Add()
+                                    .DataField("edu_start_date")
+                                    .Caption("교육일자").Alignment(HorizontalAlignment.Center);
+                                c.Add()
+                                    .DataField("edu_time")
+                                    .Caption("교육시간").Alignment(HorizontalAlignment.Center);
+                                c.Add()
+                                    .DataField("complete_yn")
+                                    .Caption("이수여부").Alignment(HorizontalAlignment.Center).DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.complete_yn == ""1"" || rowData.complete_yn == true); }");
+                            })
+                            )
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

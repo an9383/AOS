@@ -1,0 +1,480 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "ProductTransfer";
+}
+
+@{
+    var ProductTransferData = @Html.Raw(Json.Encode(ViewBag.ProductTransferData.Data));
+    var ProductTransferAuth = @Html.Raw(Json.Encode(ViewBag.ProductTransferAuth.Data));
+
+    var PT_itemCDJson = @Html.Raw(Json.Encode(ViewBag.PT_itemCD.Data));
+}
+
+<script type="text/javascript" id="ProductTransferJs">
+
+    // SP 구문, gubun 변수
+    var ProductTransfer_Gubun = "";
+
+    // 메뉴 권한
+    var _ProductTransferAuth;
+
+    $(function () {
+
+        if (@ProductTransferData !== "") {
+            $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ProductTransferData));
+            $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //datepicker start
+        setDatePicker("#ProductTransfer .datepicker");
+
+        /* (검색) 제품 팝업 */
+        var PT_itemCDPopup_Data = @PT_itemCDJson;
+
+        var columns1 = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("PT_itemCD", "제품 조회", PT_itemCDPopup_Data, columns1, "item_cd");
+
+    });
+
+    // 조회
+    function ProductTransferSearch() {
+
+        // 초기화
+        $("#ProductTransfer_DownGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#ProductTransfer_UpGrid").dxDataGrid("instance").selectRows([]) // 체크해제
+
+        var formData = new FormData($("#ProductTransfer_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/ProductTransfer_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                //debugger;
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                // 그리드 항목이 하나 일때, 그리드 changed() 를 호출 할 수 있도록 설정                
+                $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    // 위 그리드 체인지
+    function ProductTransfer_UpGrid_changed() {
+
+        // 아래 그리드 초기화
+        $("#ProductTransfer_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        if ($("#ProductTransfer_UpGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            
+            return;
+        }
+
+        var grid = $("#ProductTransfer_UpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ProductTransfer_UpGrid', grid.option("focusedRowKey"));
+
+        /* 오른쪽 아래 그리드 셋팅 */
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/ProductTransfer_DownGrid',
+            data: {
+                item_stock_id: gridData.item_stock_id
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                var ArrayCheck = Array.isArray(result);
+
+                if (!ArrayCheck && JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                /* 아래 그리드 데이터 */
+                if (result[0] != "") {
+                    $("#ProductTransfer_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+
+            }
+        });
+    }
+
+    // 엑셀 다운로드
+    function ProductTransferExcel(gridName, ExcelName) {
+        gridExportToExcel("ProductTransfer_UpGrid", "완제품 인수인계");
+    }
+
+    // (검색) 제품 팝업
+    function SearchPT_itemCD() {
+
+        var popup = $("#PT_itemCDPopup").dxPopup("instance");
+
+        popup.show();
+
+    }
+
+    // (검색) 제품 더블클릭
+    function PT_itemCDRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#ProductTransfer input[name=item_cd_S]").val(data.item_cd);
+        $("#ProductTransfer input[name=item_nm_S]").val(data.item_nm);
+
+        var popup = $("#PT_itemCDPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    // 인수인계
+    function Trans_Stock_Click() {
+
+        var formData = new FormData($("#ProductTransfer_DownL_form")[0]);
+
+        var dataGrid = $("#ProductTransfer_UpGrid").dxDataGrid("instance");
+        var selectedKeys = dataGrid.getSelectedRowKeys();
+        var gridData;
+
+        if (selectedKeys.length === 0) {
+            alert("선택된 값이 없습니다.");
+            return;
+        }
+
+        for (var i = 0; i < selectedKeys.length; i++) {
+
+            gridData = getGridRowByKey('ProductTransfer_UpGrid', selectedKeys[i]);
+
+            if (gridData.shipping_recognition_status === null || gridData.shipping_recognition_status !== "승인") {
+
+                alert("출하승인상태가 승인 일 때 인수인계가 가능합니다. ");
+                return;
+            }
+
+            if (gridData.transfer_date !== null && gridData.transfer_date !== "") {
+
+                alert("이미 이관된 제품 입니다.");
+                return;
+            }
+
+        }
+
+        formData.set("selectedKeys", selectedKeys);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdIn/Trans_Stock',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                //alert(json.message);
+                alert("완료되었습니다.");
+
+                ProductTransferSearch();
+            }
+        });
+
+    }
+
+    // 프린트
+    function ProductTransferPrint() {
+
+        var grid = $("#ProductTransfer_UpGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("조회된 품목이 없습니다.")
+            return;
+        }
+
+        var report = new ReportHelper($(event.target));
+
+        var reportParam = "packing_order_work_date_start_s:" + $("#ProductTransfer input[name=start_date_S]").val() + ";";
+        reportParam += "packing_order_work_date_end_s:" + $("#ProductTransfer input[name=end_date_S]").val() + ";";
+        reportParam += "item_cd_s:" + $("#ProductTransfer input[name=item_cd_S]").val() + ";";
+        reportParam += "lot_no_s:;";
+        reportParam += "issue_status:" + $("#ProductTransfer select[name=s_issue_status]").val() + ";";
+        reportParam += "receipt_status:" + $("#ProductTransfer select[name=s_receipt_status]").val() + ";";
+        reportParam += "search_ck:" + $("#ProductTransfer select[name=search_ck]").val() + ";";
+        reportParam += "prod_return_status:" + $("#ProductTransfer select[name=prod_return_status]").val();
+
+        var grid = $("#ProductTransfer_UpGrid").dxDataGrid("instance");
+        var packing_qty_sum = grid.getTotalSummaryValue("packing_qty");
+
+        var subParam = "receipt_gubun=" + $("#ProductTransfer select[name=prod_return_status] option:selected").text() + ";";
+        subParam += "sDate=" + $("#ProductTransfer input[name=start_date_S]").val() + ";";
+        subParam += "eDate=" + $("#ProductTransfer input[name=end_date_S]").val() + ";";
+        subParam += "packing_qty_summary=" + packing_qty_sum;
+
+        report.addParam({
+            objFile: { path: "PrdIn", RptFileName: "ProductTransferR" },
+            objSp: { SpName: "SP_ProductTransfer", gubun: "R", reportParam: reportParam },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: subParam, viewerName: "", nCopies: 1 },
+            objTblNm: { tblName: "ProducttransferT" }
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+
+        report.testObj();
+        report.run();
+    }
+
+</script>
+
+
+<div id="ProductTransfer" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="PT_itemCDPopup"></div>
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="ProductTransfer_form">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <select class="form-control" name="search_ck">
+                            <option value="0">포장일자</option>
+                            <option value="1">출하승인일자</option>
+                            <option value="2">이관일자</option>
+                        </select>
+                        <input type="text" class="form-control datepicker text-center" name="start_date_S" value="@DateTime.Today.AddDays(-7).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date_S" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm_S" >
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="SearchPT_itemCD()">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="item_cd_S">
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고구분</span>
+                        </div>
+                        <select class="form-control" name="prod_return_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.search_prod_return_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입고상태</span>
+                        </div>
+                        <select class="form-control" name="s_receipt_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.search_receipt_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">출하승인상태</span>
+                        </div>
+                        <select class="form-control" name="s_issue_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.search_issue_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Print;Preview");}
+        </div>
+
+    </div>
+
+
+    <div class="row">
+
+        <!-- 위 그리드 -->
+        <div class="col-12 pb-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ProductTransfer_UpGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_stock_id")
+                    .Height(400)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("shipping_recognition_date").Caption("출하승인일자");
+                        c.Add().DataField("prod_return_ck_nm").Caption("입고구분").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("packing_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("packing_date").Caption("포장일자").AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Desc);
+                        c.Add().DataField("test_request_date").Caption("시험의뢰일자");
+                        c.Add().DataField("testrequest_no").Caption("의뢰번호");
+                        c.Add().DataField("test_status_nm").Caption("시험상태");
+                        c.Add().DataField("transfer_date").Caption("입고일자");
+                        c.Add().DataField("receipt_status").Caption("입고상태");
+                        c.Add().DataField("shipping_recognition_status").Caption("출하승인상태").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("transfer_date").Caption("승인일자");
+
+                    })
+                    .OnFocusedRowChanged("ProductTransfer_UpGrid_changed")
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 입고량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("packing_qty")
+                                .ShowInColumn("packing_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- 아래 왼쪽 그리드 -->
+        <div class="col-8 pr-0">
+
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>목록</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ProductTransfer_DownGrid")
+                    .ShowBorders(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("box_barcode_no")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("box_barcode_no").Caption("팔레트바코드번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("prod_qty").Caption("포장단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("stock_qty").Caption("재고량").Alignment(HorizontalAlignment.Center);
+                    })
+                )
+            </div>
+
+        </div>
+
+        <!-- 아래 오른쪽 폼 -->
+        <div class="col-4">
+
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>인수인계</p>
+                </div>
+
+                <form id="ProductTransfer_DownL_form">
+
+                    <div class="input-wrapper">
+
+                        <label class="col-2">인수일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control col-12 required datepicker" name="transfer_date" value="@DateTime.Today.ToShortDateString()" />
+                        </div>
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="Trans_Stock_Click()">인수인계</button>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+</div>

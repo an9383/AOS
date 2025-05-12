@@ -1,0 +1,1636 @@
+﻿@using HACCP.Libs;
+@{
+    ViewBag.Title = "SmartFactory_InfomationStatePopUp_Che_Che";
+    Layout = null;
+
+    var factoryInfomation1 = @Html.Raw(Json.Encode(ViewBag.factoryInfomation1.Data));
+    var factoryInfomation2 = @Html.Raw(Json.Encode(ViewBag.factoryInfomation2.Data));
+    var factoryInfomation3 = @Html.Raw(Json.Encode(ViewBag.factoryInfomation3.Data));
+}
+
+<script>
+    //우측 상단 현재시간 새로고침
+    var SmartFactory_InfomationStatePopUp_Che_TimeInterval = setInterval(function () {
+        SmartFactory_InfomationStatePopUp_Che_Time();
+    }, (1000));
+
+    //새로고침
+    var SmartFactory_InfomationStatePopUp_Che_TimeInterval2 = setInterval(function () {
+        NextPage();
+    }, (15000));
+
+    var item_packunit;
+    var item_content_unit;
+    var result_progress_rate;
+    var plan_work_time;
+    var result_work_time;
+    var plan_ups_qty;
+    var result_ups_qty;
+    var plan_weight;
+    var result_weight;
+    var SmartFact_InfomationState_defect_qty;
+    var SmartFact_InfomationState_defect_rate;
+
+
+    $(function () {
+        SmartFactory_InfomationStatePopUp_Che_Time();
+        document.documentElement.webkitRequestFullscreen();
+
+        var popup = $("#SmartFactory_InfomationStatePopUp_Che_popup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SmartFactory_InfomationStatePopUp_Che_popupTemplate"));
+        popup.show();
+
+        var jsonData = new Array();
+        if ((@factoryInfomation1).length > 0) {
+
+            jsonData[0] = JSON.parse(@factoryInfomation1);
+        } else {
+            jsonData[0] = null;
+        }
+        if ((@factoryInfomation2).length > 0) {
+
+            jsonData[1] = JSON.parse(@factoryInfomation2);
+        } else {
+            jsonData[1] = null;
+        }
+        if ((@factoryInfomation3).length > 0) {
+
+            jsonData[2] = JSON.parse(@factoryInfomation3);
+        } else {
+            jsonData[2] = null;
+        }
+
+        SmartFactory_InfomationStatePopUp_Che_popup_DateInsert(jsonData);
+
+
+        $("#SmartFactory_InfomationStatePopUp_Che_popup a[data-slide='prev']").on("click", NextPage);
+        $("#SmartFactory_InfomationStatePopUp_Che_popup a[data-slide='next']").on("click", NextPage);
+
+
+    })
+
+
+    // #region 팝업 종료, 풀스크린 종료 시
+    document.addEventListener('fullscreenchange', exitHandler);
+    document.addEventListener('webkitfullscreenchange', exitHandler);
+    document.addEventListener('mozfullscreenchange', exitHandler);
+    document.addEventListener('MSFullscreenChange', exitHandler);
+
+    function exitHandler() {
+        if (!document.fullscreenElement && !document.webkitIsFullScreen && !document.mozFullScreen && !document.msFullscreenElement) {
+            var popup = $("#SmartFactory_InfomationStatePopUp_Che_popup").dxPopup("instance");
+            popup.option("contentTemplate", $("#SmartFactory_InfomationStatePopUp_Che_popupTemplate"));
+            popup.hide();
+        }
+    }
+
+    function FullScreenOff() {
+        document.exitFullscreen();
+    }
+
+    function ThisTabOff() {
+        $("button#SmartFactory_InfomationStatePopUp_Che_Tab > span").click();
+
+    }
+    // #endregion
+
+
+    // 조회
+    function SmartFactory_InfomationStatePopUp_CheSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/SmartFactory_InfomationState2_Che',
+            success: function (result) {
+                if (result != "") {
+                    var jsonData = new Array();
+                    for (let i = 0; i < result.length; i++) {
+
+                        if (result[i] != "" && result[i] != null) {
+                            jsonData[i] = JSON.parse(result[i]);
+                        }
+                        else {
+                            jsonData[i] = result[i];
+                        }
+
+                    }
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    var date = new Date();
+                    $("#SmartFactory_InfomationStatePopUp_Che_popup div#last_div p.text-danger").text(date.format("yyyy-MM-dd hh:mm:ss"));
+
+                    SmartFactory_InfomationStatePopUp_Che_popup_DateInsert(jsonData);
+
+                }
+
+            }
+        })
+    }
+
+
+    function SmartFactory_InfomationStatePopUp_Che_popup_DateInsert(data) {
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").addClass("circle_style_stop");
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").removeClass("circle_style_start");
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").text("정지 중");
+
+        if (data[0] != null) {
+            PlanData_Insert(data);
+
+            // lot_num
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(0) p").text(data[0][0].lot_num);
+            // 목표수량
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(1) p").text(Number_Format((data[0][0].packing_order_qty)) + " " + data[0][0].item_packunit);
+            // 제품명
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(2) p").text(data[0][0].item_nm);
+
+            ItemImgSearch(data[0][0].item_cd);
+        } else {
+            return;
+        }
+
+
+        if (data[1] != null) {
+            if (data[1][0].EQW_STATUS == 1) {
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").addClass("circle_style_start");
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").removeClass("circle_style_stop");
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").text("가동 중");
+            } else {
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").addClass("circle_style_stop");
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").removeClass("circle_style_start");
+                $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").text("정지 중");
+            }
+
+            ResultData_Insert(data);
+            ChartDraw();
+            CircleChartDraw(data);
+            BarSplineChartDraw(data);
+        } else {
+            return;
+        }
+
+
+        //if (data[1][0].EQW_STATUS == 1) {
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").addClass("circle_style_start");
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").removeClass("circle_style_stop");
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").text("가동 중");
+        //} else {
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").addClass("circle_style_stop");
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").removeClass("circle_style_start");
+        //    $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").text("정지 중");
+        //}
+
+        //if (data[0] == null) {
+        //    var date = new Date(data[1][0].I_DATE);
+        //    var ok_qty = data[1][0].EQW_CNT_OK_APD;
+        //    var ng_qty = data[1][0].EQW_CNT_NG_APD;
+
+
+        //    $("#SmartFactory_InfomationStatePopUp_Che_popup div#last_div p.text-danger").text(date.format("yyyy-MM-dd hh:mm:ss"));
+
+        //    // 생산수량
+        //    $("div#result_div tbody tr:eq(0) td:eq(1)").text(Number_Format(ok_qty));
+        //    $("div#result_div tbody tr:eq(0) td:eq(2)").text(item_packunit);
+
+        //    // 불량
+        //    $("div#result_div tbody tr:eq(2) td:eq(3)").text(ng_qty);
+
+        //    // 평균중량
+        //    var weight_avg = data[2][0].weight_avg;
+
+        //    //result_weight = Number_Format((weight_avg).toFixed("3"));
+        //    result_weight = Number_Format(Number_Change(weight_avg, 2));
+        //    $("div#result_div tbody tr:eq(4) td:eq(1)").text(result_weight);
+
+        //    // 표준편차
+        //    //$("div#result_div tbody tr:eq(4) td:eq(4)").text(Number_Format((data[2][0].weight_stdev).toFixed("3")));
+        //    $("div#result_div tbody tr:eq(4) td:eq(4)").text(Number_Format(Number_Change(data[2][0].weight_stdev, 2)));
+        //    return;
+        //}
+
+        //// lot_num
+        //$("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(0) p").text(data[0][0].lot_num);
+        //// 목표수량
+        //$("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(1) p").text(Number_Format((data[0][0].packing_order_qty)) + " " + data[0][0].item_packunit);
+        //// 제품명
+        //$("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row fieldset.prescriptionFieldSet:eq(2) p").text(data[0][0].item_nm);
+
+        //PlanData_Insert(data);
+
+        //ResultData_Insert(data);
+        //ChartDraw();
+        //CircleChartDraw(data);
+        //BarSplineChartDraw(data);
+
+    }
+
+
+    // 생산계획 테이블
+    function PlanData_Insert(data) {
+        item_packunit = data[0][0].item_packunit;
+        item_content_unit = data[0][0].item_content_unit;
+
+        // 목표수량
+        $("div#plan_div tbody tr:eq(0) td:eq(1)").text(Number_Format((data[0][0].packing_order_qty)));
+        $("div#plan_div tbody tr:eq(0) td:eq(2)").text(item_packunit);
+
+        // 생산시간
+        var start_hour = (data[0][0].plan_start_time).substr(0, 16);
+        var stop_hour = (data[0][0].plan_stop_time).substr(0, 16);
+
+        $("div#plan_div tbody tr:eq(2) td:eq(1)").text(start_hour + " ~ " + stop_hour);
+
+        if (start_hour.length > 0 && stop_hour.length > 0) {
+            var start_time = new Date(start_hour);
+            var stop_time = new Date(stop_hour);
+            var lunch = 12;
+            var dinner = 18;
+
+            plan_work_time = stop_time - start_time;
+            if (parseInt(start_hour.substr(11, 2)) <= lunch && parseInt(stop_hour.substr(11, 2)) > lunch) {
+                plan_work_time = plan_work_time - 3600000;
+            }
+            if (parseInt(start_hour.substr(11, 2)) <= dinner && parseInt(stop_hour.substr(11, 2)) > dinner) {
+                plan_work_time = plan_work_time - 3600000;
+            }
+
+            var hour = Math.floor((plan_work_time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            var min = Math.floor((plan_work_time % (1000 * 60 * 60)) / (1000 * 60));
+            if (plan_work_time >= 86400000) {
+                var day = parseInt(plan_work_time / 86400000);
+
+                hour = hour + (day * 24);
+            }
+
+            var hour_min = hour + "시간 " + min + "분";
+            $("div#plan_div tbody tr:eq(2) td:eq(2)").text(hour_min);
+        } else {
+            $("div#plan_div tbody tr:eq(2) td:eq(2)").text("-");
+        }
+
+
+        // 시간당 생산량
+        //$("div#plan_div tbody tr:eq(1) td:eq(1)").text(Number_Format(Math.floor(data[0][0].plan_UPH_qty).toFixed("0")));
+        $("div#plan_div tbody tr:eq(1) td:eq(1)").text(Number_Format(Number_Change(data[0][0].plan_UPH_qty, 0)));
+        $("div#plan_div tbody tr:eq(1) td:eq(2)").text(item_packunit + "/HR");
+        // 초당 생산량
+        //plan_ups_qty = Number_Format((data[0][0].plan_UPS_qty).toFixed("2"));
+        plan_ups_qty = Number_Format(Number_Change(data[0][0].plan_UPS_qty, 2));
+        $("div#plan_div tbody tr:eq(1) td:eq(3)").text(plan_ups_qty);
+        $("div#plan_div tbody tr:eq(1) td:eq(4)").text(item_packunit + "/SEC");
+
+
+        // 중량
+        //plan_weight = Number_Format((data[0][0].item_content).toFixed("3"));
+        plan_weight = Number_Format(Number_Change(data[0][0].item_content, 2));
+        $("div#plan_div tbody tr:eq(3) td:eq(1)").text(plan_weight);
+        $("div#plan_div tbody tr:eq(3) td:eq(2)").text(data[0][0].item_content_unit);
+
+        // 편차
+        //$("div#plan_div tbody tr:eq(3) td:eq(4)").text(Number_Format((data[0][0].item_error_range).toFixed("3")));
+        $("div#plan_div tbody tr:eq(3) td:eq(4)").text(Number_Format(Number_Change(data[0][0].item_error_range, 2)));
+
+        // 투입인원
+        $("div#plan_div tbody tr:eq(4) td:eq(1)").text(data[0][0].plan_worker_qty);
+        // MAN
+        $("div#plan_div tbody tr:eq(4) td:eq(3)").text(Number_Format((data[0][0].plan_MEN).toFixed("0")));
+        $("div#plan_div tbody tr:eq(4) td:eq(4)").text(item_packunit + "/MAN");
+
+        // 관리자
+        $("div#plan_div tbody tr:eq(5) td:eq(1)").text(data[0][0].emp_nm);
+        $("div#plan_div tbody tr:eq(5) td:eq(2)").text(data[0][0].emp_post_nm);
+    }
+
+
+    // 생산실적 테이블
+    function ResultData_Insert(data) {
+        if (data[1] == null) return;
+        var date = new Date(data[1][0].I_DATE);
+
+        $("#SmartFactory_InfomationStatePopUp_Che_popup div#last_div p.text-danger").text(date.format("yyyy-MM-dd hh:mm:ss"));
+
+        var ok_qty = data[1][0].EQW_CNT_OK_APD;
+        var ng_qty = data[1][0].EQW_CNT_NG_APD;
+
+        // 생산수량
+        $("div#result_div tbody tr:eq(0) td:eq(1)").text(Number_Format(ok_qty));
+        $("div#result_div tbody tr:eq(0) td:eq(2)").text(item_packunit);
+
+        // 진행율
+        //result_progress_rate = Number_Format(((ok_qty / data[0][0].packing_order_qty) * 100).toFixed("1"));
+        result_progress_rate = Number_Format(Number_Change(((ok_qty / data[0][0].packing_order_qty) * 100), 0));
+        $("div#result_div tbody tr:eq(0) td:eq(4)").text(result_progress_rate);
+
+
+        // 생산시간
+        var start_hour = data[0][0].result_start_time == 0 ? "" : (data[0][0].result_start_time).substr(0, 16);
+        var stop_hour = data[0][0].result_stop_time == 0 ? getFormatDate(new Date()).substr(0, 16) : (data[0][0].result_stop_time).substr(0, 16);
+
+        $("div#result_div tbody tr:eq(3) td:eq(1)").text(start_hour + " ~ " + stop_hour);
+
+        if (start_hour.length > 0 && stop_hour.length > 0) {
+            var start_time = new Date(start_hour);
+            var stop_time = new Date(stop_hour);
+            var lunch = 12;
+            var dinner = 18;
+            result_work_time = stop_time - start_time;
+            if (parseInt(start_hour.substr(11, 2)) <= lunch && parseInt(stop_hour.substr(11, 2)) > lunch) {
+                result_work_time = result_work_time - 3600000;
+            }
+            if (parseInt(start_hour.substr(11, 2)) <= dinner && parseInt(stop_hour.substr(11, 2)) > dinner) {
+                result_work_time = result_work_time - 3600000;
+            }
+
+            var hour = Math.floor((result_work_time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            var min = Math.floor((result_work_time % (1000 * 60 * 60)) / (1000 * 60));
+            var sec = result_work_time / 1000;
+            if (result_work_time >= 86400000) {
+                var day = parseInt(result_work_time / 86400000);
+
+                hour = hour + (day * 24);
+            }
+
+            var hour_min = hour + "시간 " + min + "분";
+            $("div#result_div tbody tr:eq(3) td:eq(2)").text(hour_min);
+
+            var UPH_qty = Number_Format(Number_Change((ok_qty / hour), 0));
+            result_ups_qty = Number_Format(Number_Change((ok_qty / sec), 2));
+            $("div#result_div tbody tr:eq(1) td:eq(1)").text(UPH_qty);
+            $("div#result_div tbody tr:eq(1) td:eq(3)").text(result_ups_qty);
+
+        } else {
+            $("div#result_div tbody tr:eq(2) td:eq(2)").text("-");
+
+            $("div#result_div tbody tr:eq(1) td:eq(1)").text("0");
+            $("div#result_div tbody tr:eq(1) td:eq(3)").text("0");
+        }
+
+        $("div#result_div tbody tr:eq(1) td:eq(2)").text(item_packunit + "/HR");
+        $("div#result_div tbody tr:eq(1) td:eq(4)").text(item_packunit + "/SEC");
+
+        //var start_time = (data[0][0].result_start_time).substring(11, 13);
+        //var stop_time = data[0][0].result_stop_time == "0" ? 0 : (data[0][0].result_stop_time).substring(11, 13);
+        //var work_time = 0;
+
+        //stop_time = parseInt(stop_time) == 0 ? new Date().getHours() : stop_time;
+
+        //$("div#result_div tbody tr:eq(3) td:eq(1)").text(start_time <= 0 ? "0" + start_time + ":00" : start_time + ":00");
+        //$("div#result_div tbody tr:eq(3) td:eq(3)").text(stop_time <= 0 ? "0" + stop_time + ":00" : stop_time + ":00");
+
+        //if (start_time > 0 && stop_time > 0) {
+        //    var temp_start = parseInt(start_time);
+        //    var temp_stop = parseInt(stop_time);
+        //    if (start_time <= 12 && temp_stop > 12) {
+        //        temp_start = temp_start + 1;
+        //    }
+
+        //    if (start_time <= 18 && temp_stop > 18) {
+        //        temp_start = temp_start + 1;
+        //    }
+
+        //    if (temp_start < temp_stop) {
+        //        work_time = temp_stop - temp_start;
+        //        result_work_time = work_time;
+        //        $("div#result_div tbody tr:eq(3) td:eq(5)").text(work_time + " HR");
+        //    }
+        //} else {
+        //    $("div#result_div tbody tr:eq(3) td:eq(5)").text("- HR");
+        //}
+
+        //$("div#result_div tbody tr:eq(1) td:eq(2)").text(item_packunit + "/HR");
+        //$("div#result_div tbody tr:eq(1) td:eq(4)").text(item_packunit + "/SEC");
+        //if (work_time > 0) {
+        //    // 시간당 생산량
+        //    //$("div#result_div tbody tr:eq(1) td:eq(1)").text(Number_Format((ok_qty / work_time).toFixed("3")));
+        //    $("div#result_div tbody tr:eq(1) td:eq(1)").text(Number_Format(Number_Change(ok_qty / work_time, 0)));
+        //    // 초당 생산량
+        //    //result_ups_qty = Number_Format(((ok_qty / work_time) / 3600).toFixed("3"));
+        //    result_ups_qty = Number_Format(Number_Change((ok_qty / work_time) / 3600, 2));
+        //    $("div#result_div tbody tr:eq(1) td:eq(3)").text(result_ups_qty);
+        //} else {
+        //    $("div#result_div tbody tr:eq(1) td:eq(1)").text("0");
+        //    $("div#result_div tbody tr:eq(1) td:eq(3)").text("0");
+        //}
+
+
+        // 불량
+        SmartFact_InfomationState_defect_qty = ng_qty;
+        $("div#result_div tbody tr:eq(2) td:eq(3)").text(ng_qty + item_packunit);
+
+        // 불량율
+        //SmartFact_InfomationState_defect_rate = Number_Format(((ng_qty / data[1][0].EQW_CNT_TOT) * 100).toFixed("1"));
+        SmartFact_InfomationState_defect_rate = Number_Format(Number_Change((ng_qty / data[1][0].EQW_CNT_TOT) * 100, 1));
+        $("div#result_div tbody tr:eq(2) td:eq(4)").text(SmartFact_InfomationState_defect_rate);
+
+        // 양품율
+        //$("div#result_div tbody tr:eq(2) td:eq(1)").text(Number_Format(((ok_qty / data[1][0].EQW_CNT_TOT) * 100).toFixed("1")));
+        $("div#result_div tbody tr:eq(2) td:eq(1)").text(Number_Format(Number_Change((ok_qty / data[1][0].EQW_CNT_TOT) * 100, 1)));
+
+
+        // 평균중량
+        var weight_avg = data[2][0].weight_avg;
+        if (data[0][0].item_content_unit == "MG") {
+            weight_avg = weight_avg * 1000;
+        } else if (data[0][0].item_content_unit == "KG") {
+            weight_avg = weight_avg / 1000;
+        }
+
+        //result_weight = Number_Format((weight_avg).toFixed("3"));
+        result_weight = Number_Format(Number_Change(weight_avg, 2));
+        $("div#result_div tbody tr:eq(4) td:eq(1)").text(result_weight);
+        $("div#result_div tbody tr:eq(4) td:eq(2)").text(data[0][0].item_content_unit);
+
+        // 표준편차
+        //$("div#result_div tbody tr:eq(4) td:eq(4)").text(Number_Format((data[2][0].weight_stdev).toFixed("3")));
+        $("div#result_div tbody tr:eq(4) td:eq(4)").text(Number_Format(Number_Change(data[2][0].weight_stdev, 2)));
+
+
+        // 투입인원
+        $("div#result_div tbody tr:eq(5) td:eq(1)").text(data[0][0].result_worker_qty);
+        // MAN
+        //$("div#result_div tbody tr:eq(5) td:eq(3)").text(Number_Format((ok_qty / data[0][0].result_worker_qty).toFixed("0")));
+        $("div#result_div tbody tr:eq(5) td:eq(3)").text(Number_Format(Number_Change(ok_qty / data[0][0].result_worker_qty, 0)));
+        $("div#result_div tbody tr:eq(5) td:eq(4)").text(item_packunit + "/MAN");
+
+    }
+
+
+    // #region first_page chart
+    function ChartDraw() {
+        // 진행율 차트
+        ProgressChartDraw();
+        // 생산시간 차트
+        ProductTimeChartDraw();
+        //초당 생산율 차트
+        UPSQtyChartDraw();
+        // 중량 차트
+        WeightChartDraw();
+    }
+
+
+    function ProgressChartDraw() {
+        $("#progress_chart").dxChart("option", "dataSource", []);
+
+        var dataSource = [{
+            state: "진행율(%)",
+            plan: 100.000,
+            result: typeof result_progress_rate == "undefined" ? 0 : parseFloat(result_progress_rate.replace(/,/g, ""))
+        }];
+
+        $("#progress_chart").dxChart("option", "dataSource", dataSource);
+    }
+
+
+    function ProductTimeChartDraw() {
+        $("#productTime_chart").dxChart("option", "dataSource", []);
+
+        var plan_min = 0;
+        plan_min = Math.floor(plan_work_time / 60000);
+        if (plan_work_time >= 86400000) {
+            var day = parseInt(plan_work_time / 86400000);
+
+            plan_min = plan_min + (day * 24 * 60);
+        }
+
+        var result_min = 0;
+        result_min = Math.floor(result_work_time / 60000);
+        if (result_work_time >= 86400000) {
+            var day = parseInt(result_work_time / 86400000);
+
+            result_min = result_min + (day * 24 * 60);
+        }
+
+        var dataSource = [{
+            state: "생산시간(분)",
+            plan: plan_min,
+            result: result_min
+        }];
+
+        $("#productTime_chart").dxChart("option", "dataSource", dataSource);
+    }
+
+
+    function UPSQtyChartDraw() {
+        $("#UPSQty_chart").dxChart("option", "dataSource", []);
+
+        var dataSource = [{
+            state: item_packunit + "/SEC",
+            plan: parseFloat(plan_ups_qty),
+            result: typeof result_ups_qty == "undefined" ? 0 : parseFloat(result_ups_qty)
+        }];
+
+        $("#UPSQty_chart").dxChart("option", "dataSource", dataSource);
+    }
+
+
+    function WeightChartDraw() {
+        $("#weight_chart").dxChart("option", "dataSource", []);
+        var dataSource = [{
+            state: "중량(" + item_content_unit + ")",
+            plan: parseFloat(plan_weight),
+            result: typeof result_weight == "undefined" ? 0 : parseFloat(result_weight)
+        }];
+
+        $("#weight_chart").dxChart("option", "dataSource", dataSource);
+    }
+    // #endregion
+
+
+    // #region second_page chart
+    function CircleChartDraw(data) {
+        var ok_apd = data[1] == null ? 0 : data[1][0].EQW_CNT_OK_APD;
+
+        // 생산수량 게이지 차트
+        OrderQtyChartDraw(data[0][0].packing_order_qty, ok_apd);
+        // 불량수량 게이지 차트
+        DefectRateChartDraw();
+        // 생산시간 게이지 차트
+        WorkTimeChartDraw();
+    }
+
+
+    function OrderQtyChartDraw(order_qty, ok_qty) {
+        var rate = typeof result_progress_rate == "undefined" ? 0 : result_progress_rate;
+        var end = rate.replace(/,/g, "") > 100 ? rate : 100;
+
+        $("#order_qty_chart").dxBarGauge("option", "EndValue", end);
+        $("#order_qty_chart").dxBarGauge({
+            endValue: end,
+            values: [100, rate.replace(/,/g, "")]
+        });
+
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1 div#order_qty_chart_div div.sub_info").text(Number_Format(ok_qty) + item_packunit
+            + " (" + Math.floor(rate.replace(/,/g, "")) + "%)");
+
+    }
+
+
+    function DefectRateChartDraw() {
+        var qty = typeof SmartFact_InfomationState_defect_qty == "undefined" ? 0 : SmartFact_InfomationState_defect_qty;
+        var rate = typeof SmartFact_InfomationState_defect_rate == "undefined" ? 0 : SmartFact_InfomationState_defect_rate;
+
+        $("#defect_chart").dxBarGauge({
+            endValue: 100,
+            values: [100, rate]
+        });
+
+
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1 div#defect_chart_div div.sub_info").text(Number_Format(qty) + item_packunit
+            + " (" + Math.floor(rate) + "%)");
+    }
+
+
+    function WorkTimeChartDraw() {
+        $("#work_time_chart").dxBarGauge({
+            endValue: plan_work_time >= result_work_time ? plan_work_time : result_work_time,
+            values: [plan_work_time, result_work_time]
+
+        });
+
+        var hour = Math.floor((result_work_time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var min = Math.floor((result_work_time % (1000 * 60 * 60)) / (1000 * 60));
+        if (result_work_time >= 86400000) {
+            var day = parseInt(result_work_time / 86400000);
+
+            hour = hour + (day * 24);
+        }
+
+        var hour_min = hour + "시간 " + min + "분";
+
+        $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1 div#work_time_chart_div div.sub_info")
+            .text(hour_min + " (" + Math.floor((result_work_time / plan_work_time) * 100) + "%)");
+    }
+
+
+    function BarSplineChartDraw(data) {
+        var start_time = data[0][0].result_start_time == 0 ? new Date() : new Date(data[0][0].result_start_time);
+        var stop_time = (data[0][0].result_stop_time).substring(11, 13) <= 0 ? new Date() : new Date(data[0][0].result_stop_time);
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Mont/BarSplineChartDataSearch',
+            data: {
+                start_time: getFormatDate(start_time),
+                stop_time: getFormatDate(stop_time)
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#bar_spline_chart").dxChart("option", "dataSource", []);
+                    $("#bar_spline_chart").dxChart("option", "dataSource", json);
+
+                } else {
+                    $("#bar_spline_chart").dxChart("option", "dataSource", []);
+
+                }
+            }
+        })
+
+    }
+    // #endregion
+
+
+    //제품 이미지 검색
+    function ItemImgSearch(item_cd) {
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/ItemImgSearch',
+            data: {
+                item_cd: item_cd
+            },
+            success: function (result) {
+
+                $("div#img_div_abs img#item_img").attr("src", JSON.parse(result)[0].upper_image);
+
+            }
+        })
+    }
+
+    // 우측 상단 현재시간 표시
+    function SmartFactory_InfomationStatePopUp_Che_Time() {
+        var date = new Date();
+        $("div#TopRight_Div p").first().text(date.format("yyyy년 MM월 dd일 a/p hh시 mm분 ss초"));
+    }
+
+
+    //좌우 버튼
+    function NextPage() {
+        var page_check = $("div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1").hasClass("display-none");
+
+        if (page_check) {
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1").removeClass("display-none");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2").removeClass("display-none");
+
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1").addClass("display-none");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_2").addClass("display-none");
+
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").css("right", "40px");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#img_div_abs").css("bottom", "70px");
+
+        } else {
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1").removeClass("display-none");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_2").removeClass("display-none");
+
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1").addClass("display-none");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2").addClass("display-none");
+
+
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs").css("right", "110px");
+            $("div#SmartFactory_InfomationStatePopUp_Che_popup div#img_div_abs").css("bottom", "130px");
+        }
+
+
+       SmartFactory_InfomationStatePopUp_CheSearch();
+    }
+
+
+    // 3자리 ,
+    function Number_Format(number) {
+        return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+
+    function Number_Change(number1, number2) {
+
+        if (number2 == 0) {
+            var result = Math.floor(number1);
+
+            return result;
+        } else {
+            var count = Math.pow(10, number2);
+            var num = Math.floor(number1 * count) / count;
+            var result = num.toFixed(number2)// 0을 채워주기 toFixed를 이용
+
+            return result;
+        }
+    }
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+
+        var hour = date.getHours();
+        hour = hour >= 10 ? hour : '0' + hour;
+
+        var min = date.getMinutes();
+        min = min >= 10 ? min : '0' + min;
+
+        var sec = date.getSeconds();
+        sec = sec >= 10 ? sec : '0' + sec;
+
+        return year + '-' + month + '-' + day + " " + hour + ":" + min + ":" + sec;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+</script>
+
+<style>
+    div#SmartFactory_InfomationStatePopUp_Che_popup {
+        height: 100%;
+    }
+
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup .test {
+            border: 1px solid red;
+        }
+
+
+    .dx-popup-content {
+        padding-bottom: 3px;
+        padding-top: 3px;
+    }
+
+
+    /*타이틀 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#first_row {
+        height: 5%;
+    }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_row div#TopLeft_Div p {
+            color: #2a68d4;
+            font-weight: 800;
+        }
+
+
+    /*Lot번호, 목표수량~~ div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row {
+        height: 10%;
+    }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row .prescriptionFieldSet .prescriptionLegend {
+            font-size: 25px;
+            font-weight: 600;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row .prescriptionFieldSet .divName p {
+            font-size: 25px;
+            font-weight: 600;
+        }
+
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#second_row #TopRight_Div {
+            font-size: 33px;
+            font-weight: 600;
+            padding-top: 2%;
+        }
+
+
+    /*테이블 태그 공통*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup table tr td:first-child {
+        width: 145px;
+    }
+
+
+    /*1페이지 상단 테이블 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 {
+        height: 50%;
+    }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 div.divName {
+            text-align: center;
+            font-size: 25px;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 table {
+            font-size: 25px;
+            font-weight: 600;
+            height: 91%;
+            text-align: center;
+        }
+
+            div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 table td {
+                padding-bottom: 0 !important;
+                padding-top: 2.5% !important;
+                padding-left: 0;
+                padding-right: 0;
+                border: 1px solid black;
+            }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 .unit_style {
+            color: #2424248a;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 .plan_style {
+            background: #0E858F;
+            color: white;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 div#plan_div td {
+            border: 1px solid #095359;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 .result_style {
+            background: #8F0500;
+            color: white;
+        }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_1 div#result_div td {
+            border: 1px solid #6E0400;
+        }
+
+
+    /*1페이지 하단 차트 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2 {
+        height: 32%;
+    }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2 div#legend_div {
+            height: 10%;
+            text-align: center;
+            position: relative;
+        }
+
+            div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2 div#legend_div div {
+                height: 80%;
+                width: 2%;
+                position: absolute;
+                top: 10%;
+            }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2 div#chart_div {
+            height: 90%;
+        }
+
+            div#SmartFactory_InfomationStatePopUp_Che_popup div#first_page_div_2 div#chart_div div.container-fluid {
+                height: 100%;
+            }
+
+
+    /* 2페이지 상단 차트 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1 {
+        height: 45%;
+    }
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_1 div.sub_info {
+            font-size: 25px;
+            font-weight: 600;
+        }
+
+
+    /* 2페이지 하단 차트 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#second_page_div_2 {
+        height: 37%;
+    }
+
+
+    /*하단 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#last_div {
+        height: 3%;
+    }
+
+
+        /*하단 div*/
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#last_div div.col-4 {
+            margin-left: 82%;
+        }
+
+
+    /*제품 이미지 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#img_div_abs {
+        height: 320px;
+        width: 270px;
+        line-height: 320px;
+        position: absolute;
+        bottom: 70px;
+        right: 50px;
+    }
+
+
+        div#SmartFactory_InfomationStatePopUp_Che_popup div#img_div_abs img {
+            max-height: 100%;
+            max-width: 100%;
+            vertical-align: middle;
+        }
+
+
+    /* 원 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#circle_div_abs {
+        border-radius: 50%;
+        height: 150px;
+        width: 150px;
+        line-height: 150px;
+        text-align: center;
+        position: absolute;
+        right: 40px;
+        top: 250px;
+        font-size: 25px;
+        font-weight: 600;
+    }
+
+
+    /* 로고 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#logo_div_abs {
+        position: absolute;
+        top: 0%;
+        right: 0%;
+        height: 9%;
+    }
+
+
+    /* 로고 div*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup div#logo_div_abs img{
+        height: 100%
+    }
+
+    div#SmartFactory_InfomationStatePopUp_Che_popup .circle_style_stop {
+        border: 1px solid #F3BB87;
+        background: #F3BB87;
+    }
+
+    div#SmartFactory_InfomationStatePopUp_Che_popup .circle_style_start {
+        border: 1px solid #BDED9F;
+        background: #BDED9F;
+    }
+
+
+    /*width 2%*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup .w_2p {
+        width: 2%;
+    }
+
+    /*텍스트 정렬*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup .text_aling_right {
+        text-align: right;
+    }
+
+
+    /*페이지 버튼 관련*/
+    div#SmartFactory_InfomationStatePopUp_Che_popup span.carousel-control-prev-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='black' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath d='M5.25 0l-4 4 4 4 1.5-1.5L4.25 4l2.5-2.5L5.25 0z'/%3e%3c/svg%3e");
+    }
+
+    div#SmartFactory_InfomationStatePopUp_Che_popup span.carousel-control-next-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='black' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath d='M2.75 0l-1.5 1.5L3.75 4l-2.5 2.5L2.75 8l4-4-4-4z'/%3e%3c/svg%3e");
+    }
+</style>
+
+
+<div id="SmartFactory_InfomationStatePopUp_Che" autoresize="Y">
+    @* === 개정 조회 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("SmartFactory_InfomationStatePopUp_Che_popup")
+        .Width(1910)
+        .Height(1070)
+        .ShowTitle(true)
+        .Visible(false)
+        .DragEnabled(false)
+        .CloseOnOutsideClick(true)
+        .DragEnabled(true)
+        .ResizeEnabled(true)
+        .ShowTitle(false)
+        //.FullScreen(true)
+        .OnHiding("FullScreenOff")
+        .OnHidden("ThisTabOff")
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("SmartFactory_InfomationStatePopUp_Che_popupTemplate"))
+    {
+        <div id="SmartFactory_InfomationStatePopUp_Che_popup">
+            <div class="row" id="first_row">
+                <div id="TopLeft_Div" class="col-8">
+                    <p class="h1">
+                        스마트팩토리 정보현황
+                    </p>
+                </div>
+            </div>
+
+            <div class="row" id="second_row">
+                <div class="col-12 display-flex">
+                    <fieldset class="border prescriptionFieldSet col-2">
+                        <legend class="prescriptionLegend pl-2">Lot 번호</legend>
+                        <div class="divName mb-0">
+                            <p>-</p>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="border prescriptionFieldSet col-2">
+                        <legend class="prescriptionLegend pl-2">목표수량</legend>
+                        <div class="divName mb-0">
+                            <p>-</p>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="border prescriptionFieldSet col-4">
+                        <legend class="prescriptionLegend pl-2">제품명</legend>
+                        <div class="divName mb-0">
+                            <p>-</p>
+                        </div>
+                    </fieldset>
+
+                    <div class="col-4" id="TopRight_Div">
+                        <p>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row" id="first_page_div_1">
+
+                <div id="plan_div" class="col-5 mt-4 mb-4 ml-5 mr-3 p-0">
+                    <div class="divName plan_style mb-0">
+                        <p>생산계획</p>
+                    </div>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td class="plan_style">목표수량</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="plan_style">표준시간</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="plan_style">생산시간</td>
+                                <td colspan="4">-</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td class="plan_style">중량</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td class="plan_style">편차</td>
+                                <td>-</td>
+                                <td class="unit_style">±</td>
+                            </tr>
+                            <tr>
+                                <td class="plan_style">투입인원</td>
+                                <td>-</td>
+                                <td class="unit_style">명</td>
+                                <td>-</td>
+                                <td class="unit_style">MAN</td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="plan_style">관리자</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="result_div" class="col-5 mt-4 mb-4 ml-3 mr-3 p-0">
+
+                    <div class="divName result_style mb-0">
+                        <p>생산실적</p>
+                    </div>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td class="result_style">생산수량</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td class="result_style">진행율</td>
+                                <td>-</td>
+                                <td class="unit_style">%</td>
+                            </tr>
+                            <tr>
+                                <td class="result_style">표준시간</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="result_style">양품율</td>
+                                <td>-</td>
+                                <td class="result_style">불량율</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td class="unit_style">%</td>
+                            </tr>
+                            <tr>
+                                <td class="result_style">생산시간</td>
+                                <td colspan="4">-</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td class="result_style">평균중량</td>
+                                <td>-</td>
+                                <td class="unit_style">-</td>
+                                <td class="result_style">표준편차</td>
+                                <td>-</td>
+                                <td class="unit_style">±</td>
+                            </tr>
+                            <tr>
+                                <td class="result_style">투입인원</td>
+                                <td>-</td>
+                                <td class="unit_style">명</td>
+                                <td>-</td>
+                                <td class="unit_style">MAN</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+            <div class="row" id="first_page_div_2">
+                <div class="col-10">
+                    <div class="col-12" id="legend_div">
+                        <div style="background: #1DB2F5; left: 45%; width: 2%;"></div>
+                        <div style="left: 48%; top: 20%; font-size: 18px; font-weight: 600; width: 3%;">계획</div>
+                        <div style="background: #F5564A; left: 53%; width: 2%;"></div>
+                        <div style="left: 56%; top: 20%; font-size: 18px; font-weight: 600; width: 3%;">실적</div>
+                    </div>
+
+                    <div class="col-12 display-flex" id="chart_div">
+                        <div class="col-3" id="progress_chart_div">
+                            @(Html.DevExtreme().Chart()
+                                .ID("progress_chart")
+                                .CommonSeriesSettings(s => s
+                                    .ArgumentField("state")
+                                    .Type(SeriesType.Bar)
+                                    .HoverMode(ChartSeriesHoverMode.None)
+                                    .SelectionMode(ChartSeriesSelectionMode.None)
+                                    .Label(l => l
+                                        .Visible(true)
+                                        .Format(f => f
+                                            .Type(Format.FixedPoint)
+                                            .Precision(0)
+                                        )
+                                        .Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .Series(s =>
+                                {
+                                    s.Add().ValueField("plan").Name("계획");
+                                    s.Add().ValueField("result").Name("실적");
+                                })
+                                .Size(s => s
+                                    .Height(300)
+                                    .Width(380)
+                                )
+                                .Legend(l => l
+                                    .Visible(false)
+                                )
+                                .Margin(m => m
+                                    .Right(30)
+                                )
+                                .ArgumentAxis(a =>
+                                    a.Label(l =>
+                                        l.Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .DataSource(new[] {
+                                    new { state = "진행율(%)", plan = 0, result = 0 }
+                                })
+                            )
+
+                        </div>
+                        <div class="col-3" id="productTime_chart_div">
+                            @(Html.DevExtreme().Chart()
+                                .ID("productTime_chart")
+                                .CommonSeriesSettings(s => s
+                                    .ArgumentField("state")
+                                    .Type(SeriesType.Bar)
+                                    .HoverMode(ChartSeriesHoverMode.None)
+                                    .SelectionMode(ChartSeriesSelectionMode.None)
+                                    .Label(l => l
+                                        .Visible(true)
+                                        .Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .Series(s =>
+                                {
+                                    s.Add().ValueField("plan").Name("계획");
+                                    s.Add().ValueField("result").Name("실적");
+                                })
+                                .Size(s => s
+                                    .Height(300)
+                                    .Width(380)
+                                )
+                                .Legend(l => l
+                                    .Visible(false)
+                                )
+                                .Margin(m => m
+                                    .Right(30)
+                                )
+                                .ArgumentAxis(a =>
+                                    a.Label(l =>
+                                        l.Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .DataSource(new[] {
+                                    new { state = "생산시간", plan = 0, result = 0 }
+                                })
+                            )
+                        </div>
+                        <div class="col-3" id="UPSQty_chart_div">
+                            @(Html.DevExtreme().Chart()
+                                .ID("UPSQty_chart")
+                                .CommonSeriesSettings(s => s
+                                    .ArgumentField("state")
+                                    .Type(SeriesType.Bar)
+                                    .HoverMode(ChartSeriesHoverMode.None)
+                                    .SelectionMode(ChartSeriesSelectionMode.None)
+                                    .Label(l => l
+                                        .Visible(true)
+                                        .Format(f => f
+                                            .Type(Format.FixedPoint)
+                                            .Precision(2)
+                                        )
+                                        .Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .Series(s =>
+                                {
+                                    s.Add().ValueField("plan").Name("계획");
+                                    s.Add().ValueField("result").Name("실적");
+                                })
+                                .Size(s => s
+                                    .Height(300)
+                                    .Width(380)
+                                )
+                                .Legend(l => l
+                                    .Visible(false)
+                                )
+                                .Margin(m => m
+                                    .Right(30)
+                                )
+                                .ArgumentAxis(a =>
+                                    a.Label(l =>
+                                        l.Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .DataSource(new[] {
+                                    new { state = "-/SEC", plan = 0, result = 0 }
+                                })
+                            )
+
+                        </div>
+                        <div class="col-3" id="weight_chart_div">
+                            @(Html.DevExtreme().Chart()
+                                .ID("weight_chart")
+                                .CommonSeriesSettings(s => s
+                                    .ArgumentField("state")
+                                    .Type(SeriesType.Bar)
+                                    .HoverMode(ChartSeriesHoverMode.None)
+                                    .SelectionMode(ChartSeriesSelectionMode.None)
+                                    .Label(l => l
+                                        .Visible(true)
+                                        .Format(f => f
+                                            .Type(Format.FixedPoint)
+                                            .Precision(2)
+                                        )
+                                        .Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .Series(s =>
+                                {
+                                    s.Add().ValueField("plan").Name("계획");
+                                    s.Add().ValueField("result").Name("실적");
+                                })
+                                .Size(s => s
+                                    .Height(300)
+                                    .Width(380)
+                                )
+                                .Legend(l => l
+                                    .Visible(false)
+                                )
+                                .Margin(m => m
+                                    .Right(30)
+                                )
+                                .ArgumentAxis(a =>
+                                    a.Label(l =>
+                                        l.Font(f => f
+                                            .Size(20)
+                                            .Weight(600)
+                                        )
+                                    )
+                                )
+                                .DataSource(new[] {
+                                    new { state = "중량", plan = 0, result = 0 }
+                                })
+                            )
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="row display-none" id="second_page_div_1">
+                <div id="circle_chart_div" class="col-10 mt-4 mb-4 ml-5 mr-3 p-0 display-flex">
+                    <div class="col-4" id="order_qty_chart_div">
+                        @(Html.DevExtreme().BarGauge()
+                            .ID("order_qty_chart")
+                            .StartValue(0)
+                            .EndValue(100)
+                            .Values(new[] { 0.0, 0.0 })
+                            .Label(l => l
+                                .Visible(true)
+                                .ConnectorWidth(2)
+                                .Indent(1)
+                                .CustomizeText(@<text>
+                                    function (arg) {
+                                        return arg.valueText + " %";
+                                    }
+                                </text>)
+                                .Format(f => f
+                                    .Type(Format.FixedPoint)
+                                    .Precision(0)
+                                )
+                                .Font(f => f
+                                    .Size(20)
+                                    .Weight(600)
+                                )
+                            )
+                            .Title(t => t
+                                .Text("생산율")
+                                .Font(f => f
+                                    .Size(25)
+                                    .Weight(600)
+                                )
+                                .Margin(m => m
+                                    .Top(5)
+                                    .Bottom(0)
+                                )
+                            )
+                            .Size(s => s
+                                .Height(400)
+                                .Width(500)
+                            )
+                            .Geometry(g => g
+                                .EndAngle(90)
+                                .StartAngle(90)
+                            )
+                        )
+
+                        <div class="sub_info align-center">
+                            -
+                        </div>
+                    </div>
+
+                    <div class="col-4" id="defect_chart_div">
+                        @(Html.DevExtreme().BarGauge()
+                            .ID("defect_chart")
+                            .StartValue(0)
+                            .EndValue(100)
+                            .Values(new[] { 0.0, 0.0 })
+                            .Label(l => l
+                                .Visible(true)
+                                .ConnectorWidth(2)
+                                .Indent(1)
+                                .CustomizeText(@<text>
+                                    function (arg) {
+                                        return arg.valueText + " %";
+                                    }
+                                </text>)
+                                .Format(f => f
+                                    .Type(Format.FixedPoint)
+                                    .Precision(1)
+                                )
+                                .Font(f => f
+                                    .Size(20)
+                                    .Weight(600)
+                                )
+                            )
+                            .Title(t => t
+                                .Text("불량율")
+                                .Font(f => f
+                                    .Size(25)
+                                    .Weight(600)
+                                )
+                                .Margin(m => m
+                                    .Top(5)
+                                    .Bottom(0)
+                                )
+                            )
+                            .Size(s => s
+                                .Height(400)
+                                .Width(500)
+                            )
+                            .Geometry(g => g
+                                .EndAngle(90)
+                                .StartAngle(90)
+                            )
+                        )
+
+                        <div class="sub_info align-center">
+                            -
+                        </div>
+
+                    </div>
+
+                    <div class="col-4" id="work_time_chart_div">
+                        @(Html.DevExtreme().BarGauge()
+                            .ID("work_time_chart")
+                            .StartValue(0)
+                            .EndValue(8)
+                            .Values(new[] { 0.0, 0.0 })
+                            .Label(l => l
+                                .Visible(true)
+                                .ConnectorWidth(2)
+                                .Indent(1)
+                                .CustomizeText(@<text>
+                                    function (arg) {
+                                        return Math.floor((arg.value / (1000 * 60 * 60))) + "시간 " +
+                                            Math.floor((arg.value / (1000 * 60)) % 60) + "분";
+                                    }
+                                </text>)
+                                .Font(f => f
+                                    .Size(20)
+                                    .Weight(600)
+                                )
+                            )
+                            .Title(t => t
+                                .Text("생산시간")
+                                .Font(f => f
+                                    .Size(25)
+                                    .Weight(600)
+                                )
+                                .Margin(m => m
+                                    .Top(5)
+                                    .Bottom(0)
+                                )
+                            )
+                            .Size(s => s
+                                .Height(400)
+                                .Width(500)
+                            )
+                            .Geometry(g => g
+                                .EndAngle(90)
+                                .StartAngle(90)
+                            )
+                        )
+
+                        <div class="sub_info align-center">
+                            -
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="row display-none" id="second_page_div_2">
+                <div id="bar_spline_chart_div" class="col-10">
+                    @(Html.DevExtreme().Chart()
+                        .ID("bar_spline_chart")
+                        .ArgumentAxis(a => a
+                            .Label(l => l
+                                .OverlappingBehavior(OverlappingBehavior.Stagger)
+                            )
+                        )
+                        .ValueAxis(a => {
+                            a.Add()
+                                .Name("ok_axis")
+                                .Position(Position.Left);
+                            a.Add()
+                                .Name("defect_axis")
+                                .Position(Position.Right);
+                        })
+                        .Series(s => {
+                            s.Add()
+                                .Type(SeriesType.Bar)
+                                .ArgumentField("no")
+                                .ValueField("ok")
+                                .Axis("ok_axis")
+                                .Name("양품수량")
+                                //.HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(2)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                            s.Add()
+                                .Type(SeriesType.Spline)
+                                .ArgumentField("no")
+                                .ValueField("ng")
+                                .Axis("defect_axis")
+                                .Name("불량수량")
+                                //.HoverMode(ChartSeriesHoverMode.None)
+                                .SelectionMode(ChartSeriesSelectionMode.None)
+                                .Label(l => l
+                                    .Visible(true)
+                                    .Format(f => f
+                                        .Type(Format.FixedPoint)
+                                        .Precision(2)
+                                    )
+                                    .Font(f => f
+                                        .Size(20)
+                                        .Weight(600)
+                                    )
+                                );
+                        })
+                        .Legend(l => l
+                            .VerticalAlignment(VerticalEdge.Bottom)
+                            .HorizontalAlignment(HorizontalAlignment.Center)
+                            .Font(f => f
+                                .Size(20)
+                                .Weight(600)
+                            )
+                        )
+                        .DataSource(new[]
+                        {
+                            new {}
+                        })
+                        .Size(s => s
+                            .Height(380)
+                            .Width(1500)
+                        )
+                        .ResolveLabelOverlapping(ChartResolveLabelOverlapping.Stack)
+                    )
+                </div>
+            </div>
+
+            <div class="row" id="last_div">
+                <div class="col-4 display-flex text_aling_right">
+                    <p class="h5 display_inline">
+                        latest date :
+                    </p>
+                    &nbsp
+                    &nbsp
+                    <p class="h5 display_inline text-danger">
+                        -
+                    </p>
+                </div>
+            </div>
+
+
+            <a class="carousel-control-prev w_2p ml-3" role="button" data-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="sr-only">Previous</span>
+            </a>
+            <a class="carousel-control-next w_2p mr-3" role="button" data-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="sr-only">Next</span>
+            </a>
+
+            <div id="img_div_abs" class="align-center">
+                <img id="item_img" alt="Product Image">
+            </div>
+
+            <div class="circle_style_stop" id="circle_div_abs">
+                -
+            </div>
+
+            @if (Public_Function.selectedDB.Equals("RTEGMS_CHEBIGEN"))
+            {
+                <div class="align-center p-2" id="logo_div_abs"><img src="~/Content/image/chebigen_logo.jpg" /></div>
+            }
+            else if (Public_Function.selectedDB.Equals("RTEGMS_AOS"))
+            {
+                <div class="align-center p-2" id="logo_div_abs"><img src="~/Content/image/aos_logo.jpg" /></div>
+            }
+        </div>
+    }
+</div>
+

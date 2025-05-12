@@ -1,0 +1,321 @@
+﻿@model HACCP.Models.SysSet.Parameter
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+
+    // 1.2. 좌측 Grid
+    var Parameter = Html.Raw(Json.Encode(ViewBag.Parameter.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+}
+
+@*파라미터 관리*@
+
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";    // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    // SP 구문, gubun 변수
+    var curGubun = "";
+    var Parameter_dataGrid;
+    var Parameter_selectedItemCd;
+    var Parameter_duplicatedCheck = false;
+
+    // 스크립트 시작
+    $(function () {
+
+        if (@Parameter) {
+            $("#Parameter_GridContainer").dxDataGrid("instance").option("dataSource", JSON.parse(@Parameter));
+            $("#Parameter_GridContainer").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        Parameter_EditCheck(false);
+    });
+
+    // 수정중인지 체크
+    function Parameter_EditCheck(nowEdit) {
+        if (nowEdit) {
+            $("#ParameterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ParameterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ParameterSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ParameterInput").dxButton().parent().parent().addClass("display-none");
+            $("#ParameterEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ParameterDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ParameterWriteForm :disabled").attr('disabled', false);
+            $("#Parameter_GridContainer").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#ParameterSave").dxButton().parent().parent().addClass("display-none");
+            $("#ParameterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ParameterSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ParameterInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ParameterEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ParameterDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ParameterWriteForm :enabled").attr('disabled', true);
+            $("#Parameter_GridContainer").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    function Parameter_onFocusedRowChanged(e) {
+        if (e.row && e.row.data) {
+            $("#parameter_code").val(e.row.data.parameter_code);
+            $("#parameter_value").val(e.row.data.parameter_value);
+            $("#parameter_remark").val(e.row.data.parameter_remark);
+        } else {
+            $("#ParameterWriteForm")[0].reset();
+        }
+    }
+
+    // 조회버튼 기능
+    function ParameterSearch() {
+        $("#Parameter #Gubun").val("S");
+
+        //event.preventDefault();
+        var form = $('#ParameterSearchForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/ParameterSelect',
+            data: data,
+            async: false,
+            contentType: false,
+            processData: false,
+            //cache: false,
+            //timeout: 600000,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    $("#Parameter_GridContainer").dxDataGrid("option", "dataSource", json);
+                } else {
+                    $("#Parameter_GridContainer").dxDataGrid("option", "dataSource", []);
+                    $("#ParameterWriteForm")[0].reset();
+                }
+
+                $("#Parameter #Gubun").val("S");
+            }
+        })
+        UtilView.setGridFocus("G", "Parameter_GridContainer");
+
+    }
+
+    // 입력 버튼
+    function ParameterInput() {
+        $("#ParameterWriteForm")[0].reset();
+        Parameter_EditCheck(true);
+        $("#Parameter #Gubun").val("I");
+    }
+
+    // 수정 버튼
+    function ParameterEdit() {
+        // 키값을 미리 변수에 넣어 둔 다음 처리한다.
+        var s_parameter_code = $("#parameter_code").val();
+        Parameter_EditCheck(true);
+
+        $("#parameter_code").val(s_parameter_code);
+        $("input[name=parameter_code]").attr("readonly", true);
+
+        $("#Parameter #Gubun").val("U");
+    }
+
+    // 취소 버튼
+    function ParameterUndo() {
+        Parameter_EditCheck(false);
+        $("#Parameter #Gubun").val("S");
+    }
+
+    // 저장 버튼
+    function ParameterSave() {
+        if (UtilView.checkValidForm("ParameterWriteForm")) {
+            //var sGubun = $("#Gubun").val();
+
+            var form = $('#ParameterWriteForm')[0];
+            var data = new FormData(form);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/ParameterSave',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.Ok) {
+                        alert("저장되었습니다");
+                        //complete('Parameter');
+                    }
+                    else {
+                        alert("저장에 실패하였습니다");
+                    }
+
+                    Parameter_EditCheck(false);
+                    ParameterSearch();
+                    Parameter_duplicatedCheck = false;
+                }
+            })
+        }
+    }
+
+    // 삭제 버튼
+    function ParameterDelete() {
+
+        if (confirm("삭제하시겠습니까?")) {
+
+            var grid = $("#Parameter_GridContainer").dxDataGrid("instance");
+            if (grid.totalCount() <= 0) return;
+            var data = getGridRowByKey('Parameter_GridContainer', grid.option("focusedRowKey"));
+
+            // 키값(data)을 Form 데이터에 세팅
+            $("#pParameter_Code").val(data.parameter_code);
+            var form = $('#Parameter_code_Form')[0];
+            var data = new FormData(form);
+            $("#Parameter #Gubun").val("D");
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/ParameterDelete',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result) {
+                        alert("삭제되었습니다.");
+                    } 
+                    else alert("삭제에 실패하였습니다");
+
+                    ParameterSearch();
+                }
+            });
+
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" autoresize="Y">
+    <form id="Parameter_code_Form">
+        <input type="hidden" name="pParameter_Code" id="pParameter_Code" />
+    </form>
+
+    <div id="ParameterTop" class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">파라미터</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_parameter_code">
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설명</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_parameter_remark">
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("Parameter_GridContainer")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                //.DataSource((System.Collections.IEnumerable)ViewBag.parameter)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Height(900)
+                .KeyExpr("parameter_code")
+                .Columns(c =>
+                {
+                    c.Add().DataField("parameter_code").Caption("파라미터");
+                    c.Add().DataField("parameter_value").Caption("값");
+                })
+                .OnFocusedRowChanged("Parameter_onFocusedRowChanged")
+            )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box">
+                <div class="divName">
+                    <p>파라미터 정보</p>
+                </div>
+
+                <div class="menuDiv">
+                    <form id="@(pagePrefix)WriteForm">
+                        <input type="text" name="Gubun" id="Gubun" hidden="hidden" />
+
+
+                        <div class="input-wrapper">
+                            <label class="col-3">파라미터</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control required" name="parameter_code" id="parameter_code" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">값</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control required" name="parameter_value" id="parameter_value" required />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">설명</label>
+                            <div class="input-group col-8">
+                                <textarea class="form-control" name="parameter_remark" id="parameter_remark"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>

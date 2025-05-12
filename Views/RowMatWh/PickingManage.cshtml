@@ -1,0 +1,573 @@
+﻿@model HACCP.Models.RowMatWh.PickingManage
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "PickingManage";
+    String sData = ViewData["data"] as String;
+}
+@{
+    var PickingManageData = @Html.Raw(Json.Encode(ViewBag.PickingManageData.Data));
+    var PickingManageAuth = @Html.Raw(Json.Encode(ViewBag.PickingManageAuth.Data));
+}
+@{
+    string[] PM_gridkey = { "order_no", "process_cd" };
+    string[] PM_gridUpkey = { "item_cd", "qc_no", "order_qty" };
+}
+
+<script id="PickingManageJs" type="text/javascript">
+    var _PickingManageAuth;
+    var PickingManageData = @PickingManageData;
+
+    //유형 타입
+    var PickingManage_type = "M";
+
+    //그리드 수정 내용 담는 Array
+    var _pickingManageList = new Array();
+
+        $(function () {
+            setDatePicker("#PickingManage .datepicker");
+
+            //좌측 그리드 생성
+            if (PickingManageData.length <= 0) {
+                $("#PickingManageGrid_M").dxDataGrid("instance").option("dataSource", []);
+                $("#PickingManageGrid_M").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#PickingManageGrid_M").dxDataGrid("instance").option("dataSource", JSON.parse(@PickingManageData));
+                $("#PickingManageGrid_M").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PickingManageGrid_M").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //사용자 권한
+            _PickingManageAuth = JSON.parse(@PickingManageAuth)[0];
+
+            if (_PickingManageAuth.form_edit != "Y") {
+                $("#PickingManageSearch").remove();
+            }
+            if (_PickingManageAuth.form_edit != "Y") {
+                $("#PickingManageEdit").remove();
+            }
+
+            //수정중 체크
+            Pick_EditCheck(false);
+
+            //첫화면 제조지시 보이기
+            $("#PickingManageGrid_P").addClass("display-none");
+
+        });
+
+    //수정중인지 체크
+    function Pick_EditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#PickingManageSearch").dxButton().parent().parent().addClass("display-none");
+            $("#PickingManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#PickingManageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#PickingManageEdit").dxButton().parent().parent().addClass("display-none");
+
+        }
+        if (!nowEdit) {
+            $("#PickingManageSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#PickingManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#PickingManageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#PickingManageEdit").dxButton().parent().parent().removeClass("display-none");
+
+        }
+    }
+
+    //조회
+    function PickingManageSearch() {
+        var formData = new FormData($("#PickingManage_form")[0]);
+        formData.set("start_date", $("#PickingManage_form input[name=Pick_start_date]").val());
+        formData.set("end_date", $("#PickingManage_form input[name=Pick_end_date]").val());
+
+        //Grid 초기화
+        $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("focusedRowIndex", -1);
+
+        //이전 유형 Grid 숨기기        
+        $("#PickingManageGrid_" + PickingManage_type).addClass("display-none");
+        PickingManage_type = $("#PickingManage_form input[name=s_gubun]:checked").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/PickingManage_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("focusedRowKey", "");
+                    $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#PickingManageRightUpGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageRightUpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#PickingManageGrid_" + PickingManage_type).removeClass("display-none");
+                    return;
+                }
+
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+                
+                //유형 별로 Grid 활성화                
+                $("#PickingManageGrid_" + PickingManage_type).removeClass("display-none");
+
+                $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance").option("focusedRowIndex", 0);
+                
+            }
+        });
+    }
+
+    //좌측 row 정보 -> 우측 상단 그리드 출력
+    function PickingManage_LeftChanged() {
+
+        if ($("#PickingManageGrid_" + PickingManage_type).dxDataGrid("option", "focusedRowIndex") < 0) {
+
+            return;
+        }        
+
+        var grid = $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingManageGrid_" + PickingManage_type, grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/PickingManage_Select2',
+            data: {
+                order_no: gridData.order_no,
+                input_order_id: gridData.input_order_id,
+                process_cd: gridData.process_cd,
+                s_gubun: $("#PickingManage_form input[name=s_gubun]:checked").val()
+            },
+            success: function (result) {
+                if (result.length <= 0) {                    
+                    $("#PickingManageRightUpGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageRightUpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+                
+                $("#PickingManageRightUpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PickingManageRightUpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PickingManageRightUpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                
+            }
+        });
+    }
+
+    //우측 상단 row 정보 -> 우측 하단 그리드 출력
+    function PickingManage_RightChanged() {
+
+        if ($("#PickingManageRightUpGrid").dxDataGrid("option", "focusedRowIndex") < 0) {
+
+            return;
+        }
+
+        var grid = $("#PickingManageRightUpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PickingManageRightUpGrid", grid.option("focusedRowKey"));
+
+        //우측 하단 그리드 원료명 출력
+        $("#PickingManage_RightDown input[name=PackingName]").val(gridData.item_nm + " : " + gridData.order_qty);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/PickingManage_Select3',
+            data: {
+                order_no: gridData.order_no,
+                input_order_id: gridData.input_order_id,
+                process_cd: gridData.process_cd,
+                qc_no: gridData.qc_no,
+                s_gubun: $("#PickingManage_form input[name=s_gubun]:checked").val()
+            },
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PickingManageRightDownGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+                
+                $("#PickingManageRightDownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PickingManageRightDownGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PickingManageRightDownGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    //CRUD 수정 버튼 클릭
+    function PickingManageEdit() {
+        if ($("#PickingManageRightDownGrid").dxDataGrid("instance").totalCount() <= 0) {
+            alert("Picking할 원료가 존재하지 않습니다.");
+            return;
+        }
+
+        Pick_EditCheck(true);
+        _pickingManageList = new Array();
+
+
+        var editing = {
+            allowUpdating: true,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+
+        $("#PickingManageRightDownGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    //Dev 수정
+    function PickingManageUpdate(info) {
+        Pick_EditCheck(true);
+        var data = info.data;
+        data.gubun = "Update";
+
+        _pickingManageList.push(data);
+        
+    }
+
+    //CRUD 저장 버튼 클릭
+    async function PickingManageSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) {
+            return;
+        }
+
+        await $("#PickingManageRightDownGrid").dxDataGrid("instance").saveEditData();
+
+        PickingManage_TRX(_pickingManageList);
+    }
+
+    //batch모드 값 전달
+    function PickingManage_TRX(data) {
+        console.log(data);
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/PickingManage_TRX',
+            data: {
+                pModel: JSON.stringify(data)
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert("Picking 되었습니다.");
+
+                Pick_EditCheck(false);
+                _pickingManageList = new Array();
+
+                var editing = {
+                    allowUpdating: false,
+                    allowAdding: false,
+                    allowDeleting: false,
+                    selectTextOnEditStart: true,
+                    mode: 'batch'
+                }
+
+                $("#PickingManageRightDownGrid").dxDataGrid("option", "editing", editing);
+
+                PickingManageSearch();
+            }
+        });
+
+    }
+
+    //CRUD 취소 버튼 클릭
+    function PickingManageUndo() {
+        Pick_EditCheck(false);
+
+        _pickingManageList = new Array();
+
+        var editing = {
+            allowUpdating: false,
+            allowAdding: false,
+            allowDeleting: false,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+
+        $("#PickingManageRightDownGrid").dxDataGrid("option", "editing", editing);
+
+        PickingManageSearch();
+    }
+
+    //cell readonly
+    function PickingManageEditableCell(e) {
+        if (e.parentType === "dataRow") {
+            if (e.columnIndex == 0 || e.dataField == "cell_nm") {
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 1 || e.dataField == "receipt_pack_barcode") {
+                e.editorOptions.disabled = true;
+            }
+            if (e.columnIndex == 2 || e.dataField == "receipt_pack_remain_qty") {
+                e.editorOptions.disabled = true;
+            }
+        }
+    }
+
+    //저장 버튼 비활성화
+    function PickingManage_ToolbarEdit(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+    function PickingManagePrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var grid = $("#PickingManageGrid_" + PickingManage_type).dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("조회된 품목이 없습니다.")
+            return;
+        }
+
+        var data = getGridRowByKey('PickingManageGrid_' + PickingManage_type, grid.option("focusedRowKey"));       
+
+
+        var s_gubun = $("#PickingManage_form input[name=s_gubun]:checked").val();
+
+        var report = new ReportHelper();
+
+        if (s_gubun === "M") {
+            report.addParam({
+                objFile: { path: "RowMatWh", RptFileName: "PickingRabel" },
+                objSp: { SpName: "SP_PickingManage", gubun: "RPT", reportParam: "order_no:" + data.order_no + ";input_order_id:" + data.input_order_id + ";process_cd:" + data.process_cd + ";s_gubun:" + s_gubun},
+                objEtcInfo: { subParam: "item_nm2=" + data.item_cd + " " + data.item_nm },
+                objTblNm: { tblName: "" }
+            });
+        }
+        else if (s_gubun === "P") {
+            report.addParam({
+                objFile: { path: "RowMatWh", RptFileName: "PickingRabel2" },
+                objSp: { SpName: "SP_PickingManage", gubun: "RPT", reportParam: "order_no:" + data.order_no + ";input_order_id:" + data.input_order_id + ";process_cd:" + data.process_cd + ";s_gubun:" + s_gubun },
+                objEtcInfo: { subParam: "item_nm2=" + data.item_cd + " " + data.item_nm },
+                objTblNm: { tblName: "" }
+            });
+        }
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+
+    }
+
+</script>
+
+<div id="PickingManage" autoresize="Y">
+    @*<h4 class="divTitle">Picking 관리</h4>*@
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="PickingManage_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">작업지시일</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Pick_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Pick_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">유형</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="M" name="s_gubun" checked="checked" @*onclick="PickingManageSearch()"*@/>
+                        </div>
+                        <span class="form-control-sm"><label>제조지시</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="P" name="s_gubun" @*onclick="PickingManageSearch()"*@ />
+                        </div>
+                        <span class="form-control-sm"><label>포장지시</label></span>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Print");}
+        </div>
+
+    </div>
+
+    <div class="row" id="PickingManageDiv">
+        <!--#region 좌측 그리드-->        
+        <div id="PickingManage_LeftMain" class="col-5 pr-0">
+            
+            <!--#region 제조지시-->
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("PickingManageGrid_M")
+                .ShowBorders(true)
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .HoverStateEnabled(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .KeyExpr(PM_gridkey)
+                .Height(850)
+                .Columns(c =>
+                {
+                    c.Add().DataField("planned_date").Caption("작업지시일").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                    c.Add().DataField("lot_no").Caption("제조번호");
+                    c.Add().DataField("process_nm").Caption("공정");
+                    c.Add().DataField("item_cd").Caption("품목코드");
+                    c.Add().DataField("item_nm").Caption("품목");
+                    c.Add().DataField("item_unit").Caption("단위").Width(100);
+                })
+                .OnFocusedRowChanged("PickingManage_LeftChanged")
+                )            
+            <!--#endregion-->
+
+            <!--#region 포장지시-->            
+                @(Html.DevExtreme().DataGrid()
+                .ID("PickingManageGrid_P")
+                .ShowBorders(true)
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .HoverStateEnabled(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .KeyExpr(PM_gridkey)
+                .Height(850)
+                .Columns(c =>
+                {
+                    c.Add().DataField("planned_date").Caption("작업지시일").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                    c.Add().DataField("order_no").Caption("포장지시번호");
+                    c.Add().DataField("lot_no").Caption("제조번호");
+                    c.Add().DataField("process_nm").Caption("공정");
+                    c.Add().DataField("item_cd").Caption("품목코드");
+                    c.Add().DataField("item_nm").Caption("품목");
+                    c.Add().DataField("item_unit").Caption("단위").Width(100);
+                })
+                .OnFocusedRowChanged("PickingManage_LeftChanged")
+                )
+            </div>
+            <!--#endregion-->
+
+        </div>
+        <!--#endregion-->
+
+        <!--우측 상단그리드-->
+        <div class="col-7 pl-1">
+            <div id="PickingManage_RightUp">
+                <div class="box mb-1">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("PickingManageRightUpGrid")
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .HoverStateEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .AllowColumnResizing(true)
+                        .ShowColumnLines(true)
+                        .KeyExpr(PM_gridUpkey)
+                        .Height(395)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("item_cd").Caption("원료코드");
+                            c.Add().DataField("item_nm").Caption("원료명");
+                            c.Add().DataField("item_unit").Caption("단위").Width(100);
+                            c.Add().DataField("order_qty").Caption("불출지시량").Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("qc_no").Caption("시험번호");
+                        })
+                        .OnFocusedRowChanged("PickingManage_RightChanged")
+                    )
+                </div>
+            </div>
+
+            <!--우측 하단그리드-->
+            <div id="PickingManage_RightDown">
+                <div class="box mb-0">
+                    <div class="divName">
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="PackingName" value="원료명(원료코드) : 필요량" readonly />
+                        </div>
+                    </div>
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("PickingManageRightDownGrid")
+                        .ShowBorders(true)
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .ColumnAutoWidth(true)
+                        .AllowColumnResizing(true)
+                        .KeyExpr("receipt_pack_barcode")
+                        .Height(900)
+                        .Editing(editing =>
+                        {
+                            editing.Mode(GridEditMode.Batch);
+                            editing.AllowUpdating(false);
+                        })
+                        .OnRowUpdated("PickingManageUpdate")
+                        .OnEditorPreparing("PickingManageEditableCell")
+                        .OnToolbarPreparing("PickingManage_ToolbarEdit")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("cell_nm").Caption("위치");
+                            c.Add().DataField("receipt_pack_barcode").Caption("팩 바코드").Width(200);
+                            c.Add().DataField("receipt_pack_remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                            c.Add().DataField("input_check").Caption("불출선택").Width(100).DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return (rowData.input_check == ""Y"" || rowData.input_check == true); }");
+                        })
+                    )
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+</div>
+

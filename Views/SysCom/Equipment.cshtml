@@ -1,0 +1,1751 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Equipment";
+
+    var equipmentData = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.equipmentData.Data));
+    var facilityPopupData = @Html.Raw(Json.Encode(ViewBag.facilityPopupData.Data));
+    var workroomPopupData = @Html.Raw(Json.Encode(ViewBag.workroomPopupData.Data));
+    var equipmentPopupData = @Html.Raw(Json.Encode(ViewBag.equipmentPopupData.Data));
+    var lineEquipPopupData = @Html.Raw(Json.Encode(ViewBag.lineEquipPopupData.Data));
+    var reponseEmpPopupData = @Html.Raw(Json.Encode(ViewBag.reponseEmpPopupData.Data));
+    var deptPopupData = @Html.Raw(Json.Encode(ViewBag.deptPopupData.Data));
+    var workroomResponseEmpPopupData = @Html.Raw(Json.Encode(ViewBag.workroomResponseEmpPopupData.Data));
+    var equipManageCustPopupData = @Html.Raw(Json.Encode(ViewBag.equipManageCustPopupData.Data));
+    var equipProdCustPopupData = @Html.Raw(Json.Encode(ViewBag.equipProdCustPopupData.Data));
+    var equipBuyCustPopupData = @Html.Raw(Json.Encode(ViewBag.equipBuyCustPopupData.Data));
+
+}
+
+@*설비 관리*@
+
+    <script id="EquipmentJs">
+
+        var _equipmentCRUDGubun;
+
+        $(function () {
+            setDatePicker("#Equipment .datepicker");
+
+            var equip_data = @equipmentData;
+
+            if (equip_data.length > 0) {
+                $("#EquipmentGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@equipmentData));
+                $("#EquipmentGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#EquipmentGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            var columns1 = [
+                { dataField: "equip_cd", caption: "설비코드" },
+                { dataField: "equip_nm", caption: "설비명" }
+            ];
+
+            createPopup("EquipmentFacility", "설비 조회", @facilityPopupData, columns1, "equip_cd");
+            createPopup("EquipmentLineEquip", "기계기구조회 조회", @lineEquipPopupData, columns1, "equip_cd");
+
+            var columns2 = [
+                { dataField: "workroom_cd", caption: "작업실 코드" },
+                { dataField: "workroom_nm", caption: "작업실명" },
+                { dataField: "common_part_nm", caption: "팀구분" }
+            ];
+
+            createPopup("EquipmentWorkRoom", "작업실 조회", @workroomPopupData, columns2, "workroom_cd");
+
+            var columns3 = [
+                { dataField: "equip_cd", caption: "기계기구코드" },
+                { dataField: "equip_nm", caption: "기계기구명" },
+                { dataField: "equip_type", caption: "종류" }
+            ];
+
+            createPopup("EquipmentEquip", "기계기구조회", @equipmentPopupData, columns3, "equip_cd");
+
+            var columns4 = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("EquipmentReponseEmp", "사원조회", @reponseEmpPopupData, columns4, "emp_cd");
+            createPopup("EquipmentDeptReponseEmp", "사원조회", @workroomResponseEmpPopupData, columns4, "emp_cd");
+
+            var columns5 = [
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("EquipmentDept", "사원조회", @deptPopupData, columns5, "dept_cd");
+
+             var columns6 = [
+                { dataField: "vender_cd", caption: "관리업체 코드" },
+                { dataField: "vender_nm", caption: "관리업체명" }
+            ];
+
+            console.log(JSON.parse('@equipManageCustPopupData'));
+
+            createPopup("EquipmentEquipManageCust", "관리업체조회", @equipManageCustPopupData, columns6, "vender_cd");
+
+            var columns7 = [
+                { dataField: "vender_cd", caption: "위탁제조원코드" },
+                { dataField: "vender_nm", caption: "위탁제조원명" }
+            ];
+
+            createPopup("EquipmentEquipProdCust", "위탁제조업체 조회", @equipProdCustPopupData, columns7, "vender_cd");
+
+            var columns8 = [
+                { dataField: "vender_cd", caption: "판매업체코드" },
+                { dataField: "vender_nm", caption: "판매업체명" }
+            ];
+
+            createPopup("EquipmentEquipBuyCust", "판매업체 조회", @equipBuyCustPopupData, columns8, "vender_cd");
+
+            $($("#EquipmentImageUploaderBtn")).click(function (event) {
+
+                if (_equipmentCRUDGubun !== "U"){
+                    return;
+                }
+
+                var fileUploader = $('#EquipmentImageUploader').dxFileUploader('instance');
+
+                console.log(fileUploader);
+
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            equipmentEditCheck(false);
+
+        });
+
+        function equipmentUploadFile(num) {
+
+            if (_equipmentCRUDGubun !== "U") {
+                return;
+            }
+
+            var fileUploader = $('#EquipmentFileUploader'+num).dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        }
+
+        function EquipmentSelectEquipment() {
+
+            var grid = $("#EquipmentGrid").dxDataGrid("instance");
+
+            var data = getGridRowByKey('EquipmentGrid', grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(data)) return;
+
+            $("#equipmentBasicInfoForm input[name=equip_cd]").val(data.equip_cd);
+            $("#equipmentBasicInfoForm input[name=equip_nm]").val(data.equip_nm);
+            $("#equipmentBasicInfoForm input[name=equip_enm]").val(data.equip_enm);
+            $("#equipmentBasicInfoForm input[name=equip_manage_num]").val(data.equip_manage_num);
+            $("#equipmentBasicInfoForm select[name=plant_cd]").val(data.plant_cd);
+            $("#equipmentBasicInfoForm input[name=workroom_cd]").val(data.workroom_cd);
+            $("#equipmentBasicInfoForm input[name=workroom_nm]").val(data.workroom_nm);
+            if (data.equip_use_gb === "Y") {
+                $("#equipmentBasicInfoForm input[name=equip_use_gb][value='Y']").prop("checked", true);
+            } else {
+                $("#equipmentBasicInfoForm input[name=equip_use_gb][value='N']").prop("checked", true);
+            }
+
+            $("#equipmentAttachFileForm input[name=equip_doc1_nm]").val(data.equip_doc1_nm);
+            $("#equipmentAttachFileForm input[name=equip_doc2_nm]").val(data.equip_doc2_nm);
+            $("#equipmentAttachFileForm input[name=equip_doc3_nm]").val(data.equip_doc3_nm);
+            $("#equipmentAttachFileForm input[name=equip_doc4_nm]").val(data.equip_doc4_nm);
+            $("#equipmentAttachFileForm input[name=equip_doc1_id]").val(data.equip_doc1_id);
+            $("#equipmentAttachFileForm input[name=equip_doc2_id]").val(data.equip_doc2_id);
+            $("#equipmentAttachFileForm input[name=equip_doc3_id]").val(data.equip_doc3_id);
+            $("#equipmentAttachFileForm input[name=equip_doc4_id]").val(data.equip_doc4_id);
+
+            $("#equipmentClassificationInfoForm select[name=equip_type]").val(data.equip_type);
+            $("#equipmentClassificationInfoForm select[name=equip_type2]").val(data.equip_type2);
+            $("#equipmentClassificationInfoForm input[name=equip_mcd]").val(data.equip_mcd);
+            $("#equipmentClassificationInfoForm input[name=line_equip_cd]").val(data.line_equip_cd);
+            $("#equipmentClassificationInfoForm select[name=equip_essential_level]").val(data.equip_essential_level);
+            $("#equipmentClassificationInfoForm input[name=equip_purpose]").val(data.equip_purpose);
+
+            console.log(data);
+
+            $("#equipmentManagementInfoForm input[name=equip_response_emp]").val(data.equip_response_emp);
+            $("#equipmentManagementInfoForm input[name=equip_response_emp_nm]").val(data.equip_response_emp_nm);
+            $("#equipmentManagementInfoForm input[name=dept_cd]").val(data.dept_cd);
+            $("#equipmentManagementInfoForm input[name=dept_nm]").val(data.dept_nm);
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp]").val(data.workroom_response_emp);
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp_nm]").val(data.workroom_response_emp_nm);
+            $("#equipmentManagementInfoForm input[name=equip_install_date]").val(data.equip_install_date);
+            $("#equipmentManagementInfoForm input[name=equip_work_date]").val(data.equip_work_date);
+            $("#equipmentManagementInfoForm input[name=equip_disuse_date]").val(data.equip_disuse_date);
+            $("#equipmentManagementInfoForm select[name=equip_disuse_reason]").val(data.equip_disuse_reason);
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust]").val(data.equip_manage_cust);
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust_nm]").val(data.equip_manage_cust_nm);
+            $("#equipmentManagementInfoForm input[name=sop_no]").val(data.sop_no);
+            $("#equipmentManagementInfoForm textarea[name=unusual_memo]").text(data.unusual_memo);
+
+
+            $("#equipmentProductInfoForm input[name=equip_prod_cust_cd]").val(data.equip_prod_cust_cd);
+            $("#equipmentProductInfoForm input[name=equip_prod_cust]").val(data.equip_prod_cust);
+            $("#equipmentProductInfoForm input[name=equip_item_nm]").val(data.equip_item_nm);
+            $("#equipmentProductInfoForm input[name=equip_model_num]").val(data.equip_model_num);
+            $("#equipmentProductInfoForm input[name=equip_serial_num]").val(data.equip_serial_num);
+            $("#equipmentProductInfoForm input[name=equip_prod_num]").val(data.equip_prod_num);
+            $("#equipmentProductInfoForm textarea[name=equip_property]").text(data.equip_property);
+            $("#equipmentProductInfoForm input[name=equip_volume]").val(data.equip_volume);
+            $("#equipmentProductInfoForm input[name=equip_standard]").val(data.equip_standard);
+            $("#equipmentProductInfoForm input[name=manufacture_date]").val(data.manufacture_date);
+            $("#equipmentProductInfoForm textarea[name=unusual_memo]").text(data.unusual_memo);
+
+
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust_cd]").val(data.equip_buy_cust_cd);
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust]").val(data.equip_buy_cust);
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_date]").val(data.equip_buy_date);
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_amt]").val(data.equip_buy_amt);
+
+
+            $("#equipmentInterfaceInfoForm select[name=interface_cd]").val(data.interface_cd);
+            $("#equipmentInterfaceInfoForm input[name=w_port_no]").val(data.w_port_no);
+            $("#equipmentInterfaceInfoForm input[name=plc_node_no]").val(data.plc_node_no);
+            $("#equipmentInterfaceInfoForm input[name=interval]").val(data.interval);
+            $("#equipmentInterfaceInfoForm select[name=error_unit]").val(data.error_unit);
+            $("#equipmentInterfaceInfoForm input[name=error_minus]").val(data.error_minus);
+            $("#equipmentInterfaceInfoForm input[name=error_plus]").val(data.error_plus);
+            $("#equipmentInterfaceInfoForm select[name=interface_type]").val(data.interface_type);
+            $("#equipmentInterfaceInfoForm input[name=ip_address]").val(data.ip_address);
+            $("#equipmentInterfaceInfoForm input[name=ip_subnet]").val(data.ip_subnet);
+            $("#equipmentInterfaceInfoForm input[name=ip_port]").val(data.ip_port);
+            $("#equipmentInterfaceInfoForm select[name=com_port]").val(data.com_port);
+            $("#equipmentInterfaceInfoForm select[name=com_baud_rate]").val(data.com_baud_rate);
+            $("#equipmentInterfaceInfoForm select[name=com_data_bits]").val(data.com_data_bits);
+            $("#equipmentInterfaceInfoForm select[name=com_parity]").val(data.com_parity);
+            $("#equipmentInterfaceInfoForm select[name=com_stop_bits]").val(data.com_stop_bits);
+            $("#equipmentInterfaceInfoForm select[name=com_handshaking]").val(data.com_handshaking);
+
+
+            console.log(data.interface_use_gb);
+            if (data.interface_use_gb == "0") {
+                $("#equipmentInterfaceInfoForm input[name=interface_use_gb][value='0']").prop("checked", true);
+            } else if (data.interface_use_gb == "1") {
+                $("#equipmentInterfaceInfoForm input[name=interface_use_gb][value='1']").prop("checked", true);
+            } else {
+                $("#equipmentInterfaceInfoForm input[name=interface_use_gb][value='2']").prop("checked", true);
+            }
+            console.log(data.ccp_mont_gb);
+            if (data.ccp_mont_gb == "0") {
+                $("#equipmentInterfaceInfoForm input[name=ccp_mont_gb][value='0']").prop("checked", true);
+            } else {
+                $("#equipmentInterfaceInfoForm input[name=ccp_mont_gb][value='1']").prop("checked", true);
+            }
+            console.log(data.alarm_code);
+
+            $("#equipmentInterfaceInfoForm select[name=alarm_code]").val(data.alarm_code);
+
+            selectEquipImage(data.equip_cd);
+        }
+
+        // 수정중인지 체크
+        function equipmentEditCheck(nowEdit) {
+
+            //$("#WorkRoom input[name=emp_cd_1]").attr("readonly", false);
+            //$("#WorkRoom input[name=emp_cd_2]").attr("readonly", false);
+
+            if (nowEdit) {
+
+                $("#EquipmentSave").dxButton().parent().parent().removeClass("display-none");
+                $("#EquipmentUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#EquipmentSearch").dxButton().parent().parent().addClass("display-none");
+                $("#EquipmentInput").dxButton().parent().parent().addClass("display-none");
+                $("#EquipmentEdit").dxButton().parent().parent().addClass("display-none");
+                $("#EquipmentDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#equipmentBasicInfoForm :disabled").attr('disabled', false);
+                $("#equipmentClassificationInfoForm :disabled").attr('disabled', false);
+                $("#equipmentAttachFileForm :disabled").attr('disabled', false);
+                $("#equipmentManagementInfoForm :disabled").attr('disabled', false);
+                $("#equipmentProductInfoForm :disabled").attr('disabled', false);
+                $("#equipmentPurchaseInfoForm :disabled").attr('disabled', false);
+                $("#equipmentInterfaceInfoForm :disabled").attr('disabled', false);
+                //$("#workRoomProductGrid").dxDataGrid("option", "disabled", false);
+                $("#EquipmentGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#EquipmentSave").dxButton().parent().parent().addClass("display-none");
+                $("#EquipmentUndo").dxButton().parent().parent().addClass("display-none");
+                $("#EquipmentSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#EquipmentInput").dxButton().parent().parent().removeClass("display-none");
+                $("#EquipmentEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#EquipmentDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#equipmentBasicInfoForm :enabled").attr('disabled', true);
+                $("#equipmentClassificationInfoForm :enabled").attr('disabled', true);
+                $("#equipmentAttachFileForm :enabled").attr('disabled', true);
+                $("#equipmentManagementInfoForm :enabled").attr('disabled', true);
+                $("#equipmentProductInfoForm :enabled").attr('disabled', true);
+                $("#equipmentPurchaseInfoForm :enabled").attr('disabled', true);
+                $("#equipmentInterfaceInfoForm :enabled").attr('disabled', true);
+                //$("#workRoomProductGrid").dxDataGrid("option", "disabled", true);
+                $("#EquipmentGrid").dxDataGrid("option", "disabled", false);
+            }
+        }
+
+        function reLoadEquipImage() {
+            selectEquipImage($("#equipmentBasicInfoForm input[name=equip_cd]").val());
+        }
+
+        function selectEquipImage(equip_cd) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/SelectEquipImage',
+                data: {
+                    equip_cd: equip_cd
+                },
+                success: function (result) {
+
+                    if (result === "" || result == null) {
+                        $("#equipImage").attr('src', '/Content/image/defaultSign.png');
+                    } else {
+                        $("#equipImage").attr('src', result);
+                    }
+                }
+            })
+        }
+
+        // 설비 사진 업로드
+        function equipmentUploadImage(e) {
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "equip_cd", $("#equipmentBasicInfoForm input[name=equip_cd]").val());
+
+            e.component.option("uploadUrl", url);
+        }
+
+        function clearEquipmentForm() {
+            $("#equipmentBasicInfoForm")[0].reset();
+            $("#equipmentClassificationInfoForm")[0].reset();
+            $("#equipmentManagementInfoForm")[0].reset();
+            $("#equipmentProductInfoForm")[0].reset();
+            $("#equipmentPurchaseInfoForm")[0].reset();
+            $("#equipmentInterfaceInfoForm")[0].reset();
+            $("#equipmentAttachFileForm")[0].reset();
+
+            $("#equipImage").attr('src', '/Content/image/defaultSign.png');
+        }
+
+        // 팝업 관련 -------------------------------------------------------------------------
+
+        function equipmentSearchEquip() {
+            $("#EquipmentFacilityPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchWorkRoom() {
+            $("#EquipmentWorkRoomPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchMcd() {
+            $("#EquipmentEquipPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchLineEquip() {
+            $("#EquipmentLineEquipPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchReponseEmp() {
+            $("#EquipmentReponseEmpPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchDept() {
+            $("#EquipmentDeptPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchWorkRoomResponseEmp() {
+            $("#EquipmentDeptReponseEmpPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchManageCust() {
+            $("#EquipmentEquipManageCustPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchProdCust() {
+            $("#EquipmentEquipProdCustPopup").dxPopup("instance").show();
+        }
+
+        function equipmentSearchBuyCust() {
+            $("#EquipmentEquipBuyCustPopup").dxPopup("instance").show();
+        }
+
+        function EquipmentFacilityRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#EquipmentSearchForm input[name=equip_cd]").val(data.equip_cd);
+            $("#EquipmentFacilityPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentLineEquipRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentClassificationInfoForm input[name=line_equip_cd]").val(data.equip_cd);
+            $("#equipmentClassificationInfoForm input[name=line_equip_nm]").val(data.equip_nm);
+            $("#EquipmentLineEquipPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentWorkRoomRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentBasicInfoForm input[name=workroom_cd]").val(data.workroom_cd);
+            $("#equipmentBasicInfoForm input[name=workroom_nm]").val(data.workroom_nm);
+            $("#EquipmentWorkRoomPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentEquipRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentClassificationInfoForm input[name=equip_mcd]").val(data.equip_cd);
+            $("#equipmentClassificationInfoForm input[name=equip_mcd_nm]").val(data.equip_nm);
+            $("#EquipmentEquipPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentReponseEmpRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentManagementInfoForm input[name=equip_response_emp]").val(data.emp_cd);
+            $("#equipmentManagementInfoForm input[name=equip_response_emp_nm]").val(data.emp_nm);
+            $("#EquipmentReponseEmpPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentDeptReponseEmpRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp]").val(data.emp_cd);
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp_nm]").val(data.emp_nm);
+            $("#EquipmentDeptReponseEmpPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentDeptRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentManagementInfoForm input[name=dept_cd]").val(data.dept_cd);
+            $("#equipmentManagementInfoForm input[name=dept_nm]").val(data.dept_nm);
+            $("#EquipmentDeptPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentEquipManageCustRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust]").val(data.vender_cd);
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust_nm]").val(data.vender_nm);
+            $("#EquipmentEquipManageCustPopup").dxPopup("instance").hide();
+        }
+
+        function EquipmentEquipProdCustRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            $("#equipmentProductInfoForm input[name=equip_prod_cust_cd]").val(data.vender_cd);
+            $("#equipmentProductInfoForm input[name=equip_prod_cust]").val(data.vender_nm);
+            $("#EquipmentEquipProdCustPopup").dxPopup("instance").hide();
+
+        }
+
+        function EquipmentEquipBuyCustRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust_cd]").val(data.vender_cd);
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust]").val(data.vender_nm);
+            $("#EquipmentEquipBuyCustPopup").dxPopup("instance").hide();
+        }
+
+        // ----------------------------------------------------------------------------------------------------------------
+
+        function equipmentClearLineEquipForm() {
+            $("#equipmentClassificationInfoForm input[name=line_equip_cd]").val("");
+            $("#equipmentClassificationInfoForm input[name=line_equip_nm]").val("");
+        }
+
+        function equipmentClearWorkRoomForm() {
+            $("#equipmentBasicInfoForm input[name=workroom_cd]").val("");
+            $("#equipmentBasicInfoForm input[name=workroom_nm]").val("");
+        }
+
+        function equipmentClearMcdForm() {
+            $("#equipmentClassificationInfoForm input[name=equip_mcd]").val("");
+            $("#equipmentClassificationInfoForm input[name=equip_mcd_nm]").val("");
+        }
+
+        function equipmentClearReponseEmpForm() {
+            $("#equipmentManagementInfoForm input[name=equip_response_emp]").val("");
+            $("#equipmentManagementInfoForm input[name=equip_response_emp_nm]").val("");
+        }
+
+        function equipmentClearWorkRoomResponseEmpForm() {
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp]").val("");
+            $("#equipmentManagementInfoForm input[name=workroom_response_emp_nm]").val("");
+        }
+
+        function equipmentClearDeptForm() {
+            $("#equipmentManagementInfoForm input[name=dept_cd]").val("");
+            $("#equipmentManagementInfoForm input[name=dept_nm]").val("");
+        }
+
+        function equipmentClearManageCustForm() {
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust]").val("");
+            $("#equipmentManagementInfoForm input[name=equip_manage_cust_nm]").val("");
+        }
+
+        function equipmentClearProdCustForm() {
+            $("#equipmentProductInfoForm input[name=equip_prod_cust_cd]").val("");
+            $("#equipmentProductInfoForm input[name=equip_prod_cust]").val("");
+
+        }
+
+        function equipmentClearBuyCustForm() {
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust_cd]").val("");
+            $("#equipmentPurchaseInfoForm input[name=equip_buy_cust]").val("");
+        }
+
+        function EquipmentSearch() {
+
+            var formData = new FormData($("#EquipmentSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysCom/SelectEquipment',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#EquipmentGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#EquipmentGrid").dxDataGrid("instance").option("dataSource", []);
+                        clearEquipmentForm();
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "EquipmentGrid");
+        }
+
+        function EquipmentInput() {
+            _equipmentCRUDGubun = "I";
+
+            clearEquipmentForm();
+            $("#equipmentBasicInfoForm select[name=plant_cd]").val("PC001");
+
+            equipmentEditCheck(true);
+
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $('#equipmentBasicInfoForm input[name=equip_cd]').attr('readonly', false);
+            }
+        }
+
+        function EquipmentEdit() {
+            _equipmentCRUDGubun = "U";
+
+            equipmentEditCheck(true);
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $('#equipmentBasicInfoForm input[name=equip_cd]').attr('readonly', true);
+            }
+        }
+
+        function EquipmentDelete() {
+
+            if (!confirm("선택된 설비를 삭제하시겠습니까?")) {
+                return;
+            }
+
+            var grid = $("#EquipmentGrid").dxDataGrid("instance");
+
+            var data = getGridRowByKey('EquipmentGrid', grid.option("focusedRowKey"));
+
+            _equipmentCRUDGubun = "D";
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/EquipmentCRUD',
+                data: {
+                    equip_cd: data.equip_cd,
+                    gubun: _equipmentCRUDGubun
+                },
+                success: function (result) {
+                    EquipmentSearch();
+                }
+            })
+
+            equipmentEditCheck(false);
+
+        }
+
+        function EquipmentSave() {
+
+            if (!UtilView.checkValidForm("equipmentBasicInfoForm")) {
+                return;
+            }
+            if (!UtilView.checkValidForm("equipmentClassificationInfoForm")) {
+                return;
+            }
+
+            let formData = new FormData($("#equipmentBasicInfoForm")[0]);
+            var formDataPrecios = new FormData($("#equipmentClassificationInfoForm")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+            formDataPrecios = new FormData($("#equipmentManagementInfoForm")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+            formDataPrecios = new FormData($("#equipmentProductInfoForm")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+            formDataPrecios = new FormData($("#equipmentPurchaseInfoForm")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+            formDataPrecios = new FormData($("#equipmentInterfaceInfoForm")[0]);
+            for (var pair of formDataPrecios.entries()) {
+                formData.append(pair[0], pair[1]);
+            }
+
+            formData.set("gubun", _equipmentCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/EquipmentCRUD',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (result == '') {
+                        alert('동일한 코드의 설비가 존재합니다.\r\n확인 후 다시 시도해주십시오.');
+                    }
+                    else {
+                        alert(result);
+                        equipmentEditCheck(false);
+                        EquipmentSearch();
+                    }
+                }
+            })
+        }
+
+        function EquipmentUndo() {
+
+            equipmentEditCheck(false);
+
+            EquipmentSelectEquipment();
+        }
+
+        function equipmentUploadAttachedFile(e) {
+
+            var name = e.component.option("name");
+
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "equip_cd", $("#equipmentBasicInfoForm input[name=equip_cd]").val());
+            url = updateQueryStringParameter(url, "name", name);
+
+            console.log("equip_doc" + name.substring(name.length - 1) + "_id");
+
+            if ($("#equipmentAttachFileForm input[name=equip_doc" + name.substring(name.length - 1) + "_nm]").val()) {
+                url = updateQueryStringParameter(url, "gubun", "FE");
+                url = updateQueryStringParameter(url, "equip_doc_id", $("#equipmentAttachFileForm input[name=equip_doc" + name.substring(name.length - 1) + "_id]").val());
+            } else {
+                url = updateQueryStringParameter(url, "gubun", "F");
+            }
+
+            e.component.option("uploadUrl", url);
+        }
+
+        function equipmentDeleteAttachedFile(num) {
+
+            var equipDocNM = $("#equipmentAttachFileForm input[name=equip_doc" + num + "_nm]").val();
+
+            if (!equipDocNM) {
+                return;
+            }
+
+            var isOK = confirm("파일을 삭제하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/DeleteAttachedFile',
+                data: {
+                    equip_cd: $("#equipmentBasicInfoForm input[name=equip_cd]").val(),
+                    equip_doc_id: $("#equipmentAttachFileForm input[name=equip_doc" + num + "_id]").val(),
+                    fgubun: num
+                },
+                success: function (result) {
+                    reLoadEquipAttachmentFile();
+                }
+            })
+
+        }
+
+        function equipmentDownloadAttachedFile(num) {
+
+            var equipDocID = $("#equipmentAttachFileForm input[name=equip_doc" + num + "_id]").val();
+            var equipDocNM = $("#equipmentAttachFileForm input[name=equip_doc" + num + "_nm]").val();
+
+            if (!equipDocNM) {
+                return;
+            }
+
+            var url = '/SysCom/DownloadAttachedFile';
+            var params = { equip_doc_id: equipDocID };
+
+            document.location.assign('/SysCom/DownloadAttachedFile?equip_doc_id=' + equipDocID);
+
+        }
+
+        function reLoadEquipAttachmentFile() {
+
+            var formData = new FormData($("#EquipmentSearchForm")[0]);
+
+            formData.set("equip_cd", $("#equipmentBasicInfoForm input[name=equip_cd]").val());
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/SelectEquipment',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        $("#equipmentAttachFileForm input[name=equip_doc1_nm]").val(json[0].equip_doc1_nm);
+                        $("#equipmentAttachFileForm input[name=equip_doc2_nm]").val(json[0].equip_doc2_nm);
+                        $("#equipmentAttachFileForm input[name=equip_doc3_nm]").val(json[0].equip_doc3_nm);
+                        $("#equipmentAttachFileForm input[name=equip_doc4_nm]").val(json[0].equip_doc4_nm);
+                    } 
+                }
+            })
+        }
+
+        function EquipmentExcel() {
+            gridExportToExcel("EquipmentGrid", "설비관리_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+        function EquipmentPrint() {
+
+            var popup = $("#EquipmentReportParamPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#EquipmentReportParamPopupTemplate"));
+            popup.show();
+
+            var today = new Date();
+
+            $("#EquipmentReportParamPopupForm input[name=year]").val(today.getFullYear());
+            $("#EquipmentReportParamPopupForm input[name=month]").val(today.getMonth()+1);
+            $("#EquipmentReportParamPopupForm input[name=equip_cd]").val($("#EquipmentGrid").dxDataGrid("option", "focusedRowKey"));
+
+        }
+
+        function EquipmentPreviewOrPrint(str) {
+
+            var year = $("#EquipmentReportParamPopupForm input[name=year]").val();
+            var month = $("#EquipmentReportParamPopupForm input[name=month]").val();
+            var equip_cd = $("#EquipmentReportParamPopupForm input[name=equip_cd]").val();
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "SysCom", RptFileName: "Weighing_Method" },
+                objSp: { SpName: "SP_EQUIPMENT", gubun: "Report", reportParam: "year:" + year + ";month:" + month + ";equip_cd_rpt:" + equip_cd },
+                objEtcInfo: { subParam: "year=" + year + ";month=" + month },
+                objTblNm: { tblName: "Header,Weighing_Method" }
+            });
+
+            // 레포트테스트(생성객체확인)
+            report.testObj();
+
+            if (str === 'Preview') {
+                report.preview();
+            } else if (str === 'Print') {
+                report.print();
+            }
+        }
+
+    </script>
+
+
+<div id="Equipment">
+
+    <div id="EquipmentFacilityPopup"></div>
+    <div id="EquipmentLineEquipPopup"></div>
+    <div id="EquipmentWorkRoomPopup"></div>
+    <div id="EquipmentEquipPopup"></div>
+    <div id="EquipmentReponseEmpPopup"></div>
+    <div id="EquipmentDeptReponseEmpPopup"></div>
+    <div id="EquipmentDeptPopup"></div>
+    <div id="EquipmentEquipManageCustPopup"></div>
+    <div id="EquipmentEquipProdCustPopup"></div>
+
+    @(Html.DevExtreme().Popup()
+        .ID("EquipmentReportParamPopup")
+        .Width(450)
+        .Height(150)
+        .ShowTitle(true)
+        .Title("저울 점검기록서")
+        .Visible(false)
+        .DragEnabled(false)
+        .CloseOnOutsideClick(true)
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("EquipmentReportParamPopupTemplate"))
+    {
+
+        <form id="EquipmentReportParamPopupForm">
+
+            <div class="input-wrapper mb-1">
+                <div class="input-group col-4">
+                    <input class="form-control col-12" name="year" type="number" min="1" max="9999">
+                    <div class="input-group-append">
+                        <span class="input-group-text">년</span>
+                    </div>
+                </div>
+                <div class="input-group col-4">
+                    <input class="form-control col-12" name="month" type="number" min="1" max="12">
+                    <div class="input-group-append">
+                        <span class="input-group-text">월</span>
+                    </div>
+                </div>
+                <div class="input-group col-3">
+                    <input type="text" class="form-control col-12" name="equip_cd" readonly="readonly">
+                </div>
+            </div>
+
+            <div class="row">
+
+                <div class="col-6">
+                    <button type="button" class="btn btn-secondary col-12" onclick="EquipmentPreviewOrPrint('Preview')">미리보기</button>
+                </div>
+
+                <div class="col-6">
+                    <button type="button" class="btn btn-secondary col-12" onclick="EquipmentPreviewOrPrint('Print')">인쇄</button>
+                </div>
+
+            </div>
+
+        </form>
+    }
+
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="EquipmentSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">종류</span>
+                        </div>
+                        <select class="form-control" name="equip_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.manufacturingEquipment).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">설비</span>
+                        </div>
+                        <input type="text" class="form-control" name="equip_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchEquip()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="use_yn" checked="checked" onclick="EquipmentSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="use_yn" onclick="EquipmentSearch()" checked="checked" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="use_yn" onclick="EquipmentSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+                </div>
+
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EquipmentGrid")
+                    //.Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .Height(869)
+                    .KeyExpr("equip_cd")
+                    .OnFocusedRowChanged("EquipmentSelectEquipment")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface");
+                        c.Add().DataField("equip_manage_num").Caption("관리번호");
+                        c.Add().DataField("equip_cd").Caption("설비코드");
+                        c.Add().DataField("equip_nm").Caption("설비명");
+                        c.Add().DataField("workroom_nm").Caption("작업실명");
+                        c.Add().DataField("equip_purpose").Caption("용도");
+                        c.Add().DataField("equip_type_nm").Caption("설비종류");
+                        c.Add().DataField("equip_use_gb").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.equip_use_gb == ""Y"" || rowData.equip_use_gb == true); }");
+
+                    })
+                    .ShowBorders(true)
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box">
+
+                <ul class="nav nav-tabs" id="EquipmentMenuTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('EquipmentMenuTab', 'EquipmentMenuDiv', 1)">기본정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('EquipmentMenuTab', 'EquipmentMenuDiv', 2)">관리정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('EquipmentMenuTab', 'EquipmentMenuDiv', 3)">인터페이스정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('EquipmentMenuTab', 'EquipmentMenuDiv', 4)">설비이미지</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('EquipmentMenuTab', 'EquipmentMenuDiv', 5)">첨부파일</a>
+                    </li>
+                </ul>
+
+                <div id="EquipmentMenuDiv">
+
+                    <div id="EquipmentMenuDiv_1">
+
+                        <div class="divName">
+                            <p>기본 정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentBasicInfoForm">
+
+                                <div class="input-wrapper">
+                                    @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                                    {
+                                        <label class="col-3">설비코드 <star>*</star></label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 required" name="equip_cd">
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <label class="col-3">설비코드</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12" name="equip_cd" readonly="readonly">
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설비명 <star>*</star></label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12 required" name="equip_nm">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설비영문명</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_enm">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">관리코드</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="equip_manage_num">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">사업장 <star>*</star></label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12 required" name="plant_cd">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.plantGubun).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">작업실 <star>*</star></label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control required" name="workroom_cd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchWorkRoom()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="workroom_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">사용여부 <star>*</star></label>
+                                    <div class="input-group col-3">
+                                        <div class="radioDiv required col-12">
+                                            <label><input type="radio" name="equip_use_gb" value="Y" />예 </label>
+                                            <label><input type="radio" name="equip_use_gb" value="N" />아니오 </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                        <div class="divName">
+                            <p>분류 정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentClassificationInfoForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설비분류 <star>*</star></label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12 required" name="equip_type">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.facilityType).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설비종류</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control" name="equip_type2">
+                                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "SC041")).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">대표코드</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_mcd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchMcd()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_mcd_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">라인대표기계코드</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="line_equip_cd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchLineEquip()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="line_equip_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설비중요도</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="equip_essential_level">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.facilityCriticality).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">용도</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_purpose">
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+
+                    <div id="EquipmentMenuDiv_2" class="display-none">
+
+                        <div class="divName">
+                            <p>관리 정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentManagementInfoForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">책임자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_response_emp" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchReponseEmp()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_response_emp_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">부서</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="dept_cd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchDept()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="dept_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">실별책임자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="workroom_response_emp" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchWorkRoomResponseEmp()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="workroom_response_emp_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">설치일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker col-12" name="equip_install_date">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">기동일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker col-12" name="equip_work_date">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">폐기일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker col-12" name="equip_disuse_date">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">폐기사유</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="equip_disuse_reason">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.disposalReason).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">관리업체</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_manage_cust" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchManageCust()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_manage_cust_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">SOP번호</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="sop_no">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">특이사항</label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control col-12" rows="2" name="unusual_memo"></textarea>
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                        <div class="divName">
+                            <p>제품 정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentProductInfoForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">제조업체</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_prod_cust_cd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchProdCust()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_prod_cust" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">품명</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_item_nm">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">모델넘버</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_model_num">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">시리얼넘버</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_serial_num">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">제조번호</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_prod_num">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">형식및성능</label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control col-12" rows="2" name="equip_property"></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">용량</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_volume">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">규격</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="equip_standard">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">제조일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker" name="manufacture_date" readonly="readonly">
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <textarea class="form-control col-12" rows="2" name="unusual_memo"></textarea>
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                        <div class="divName">
+                            <p>구매정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div>
+
+                            <form id="equipmentPurchaseInfoForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">구매처</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_buy_cust_cd" readonly="readonly">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="equipmentSearchBuyCust()">
+                                                <i class="fa fa-search"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="equip_buy_cust" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">구매일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker col-12" name="equip_buy_date">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">구매금액</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control col-12" name="equip_buy_amt">
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                    <div id="EquipmentMenuDiv_3" class="display-none">
+
+                        <div class="divName">
+                            <p>인터페이스 정보</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentInterfaceInfoForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">인터페이스코드</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="interface_cd">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.interfaceCode).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">포트번호</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="w_port_no">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">PLC번호</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="plc_node_no">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">간격</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-12" name="interval">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">단위</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="error_unit">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.unit).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">간격</label>
+                                    <div class="input-group col-8">
+                                        <span class="pl-1">- </span>
+                                        <input type="number" class="form-control col-4" name="error_minus">
+                                        <span class="pr-1 pl-1">~    + </span>
+                                        <input type="number" class="form-control col-4" name="error_plus">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">Interface Type</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="interface_type">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.interfaceType).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">IP Address</label>
+                                    <div class="input-group col-8">
+                                        <input type="number" class="form-control col-12" name="ip_address">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">IP Subnet Mask</label>
+                                    <div class="input-group col-8">
+                                        <input type="number" class="form-control col-12" name="ip_subnet">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">IP Port</label>
+                                    <div class="input-group col-8">
+                                        <input type="number" class="form-control col-12" name="ip_port">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Port</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_port">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMPort).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Baud Rate</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_baud_rate">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMBaudRate).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Data Bits</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_data_bits">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMDataBits).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Parity</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_parity">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMParity).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Stop Bits</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_stop_bits">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMStopBits).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">COM Handshaking</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="com_handshaking">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.COMHandshaking).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="input-wrapper">
+                                    <label class="col-3">인터페이스 여부</label>
+                                    <div class="input-group col-4">
+                                        <div class="radioDiv col-12" style="background-color: #e9ecef;">
+                                            <label><input type="radio" name="interface_use_gb" value="0" />자동 </label>
+                                            <label><input type="radio" name="interface_use_gb" value="1" />수동 </label>
+                                            <label><input type="radio" name="interface_use_gb" value="2" />없음 </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">CCP모니터링 여부</label>
+                                    <div class="input-group col-4">
+                                        <div class="radioDiv col-12" style="background-color: #e9ecef;">
+                                            <label><input type="radio" name="ccp_mont_gb" value="0" />사용 </label>
+                                            <label><input type="radio" name="ccp_mont_gb" value="1" />사용안함 </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">알람 선택</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control col-12" name="alarm_code">
+                                            @foreach (DataRow row in ((DataTable)ViewBag.equipAlarmData).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["keyfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                    <div id="EquipmentMenuDiv_4" class="display-none">
+
+                        <div class="divName">
+                            <p>이미지 업로드</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <div class="col-12">
+                                <img id="equipImage" class="equipment-image" src="" alt="" />
+                            </div>
+
+                            <div class="align-end">
+                                <button id="EquipmentImageUploaderBtn" class="btn btn-sm btn-secondary" type="button">등록</button>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("EquipmentImageUploader")
+                                .Name("equipment-image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                //.UploadUrl(Url.Action("UploadImage", "Comm"))
+                                .UploadUrl(Url.Action("UploadEquipImage", "SysCom"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("equipmentUploadImage")
+                                .OnUploaded("reLoadEquipImage")
+                            )
+                        </div>
+
+                    </div>
+
+                    <div id="EquipmentMenuDiv_5" class="display-none">
+
+                        <div class="divName">
+                            <p>첨부파일</p>
+                            <span id="" class="text-danger display-none col-8"></span>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="equipmentAttachFileForm">
+
+                                <div class="input-wrapper col-12">
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc1_nm" />
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc1_id" hidden="hidden" />
+                                    @(Html.DevExtreme().FileUploader()
+                                        .Visible(false)
+                                        .ID("EquipmentFileUploader1")
+                                        .Name("equipmentAttachedFile1")
+                                        .Multiple(false)
+                                        //.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                                        .UploadUrl(Url.Action("UploadEquipAttachedFile", "SysCom"))
+                                        .UploadMode(FileUploadMode.Instantly)
+                                        .MaxFileSize(10000000)
+                                        .OnValueChanged("equipmentUploadAttachedFile")
+                                        .OnUploaded("reLoadEquipAttachmentFile")
+                                    )
+                                    <div class="align-end">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentUploadFile('1')">업로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDownloadAttachedFile('1')">다운로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDeleteAttachedFile('1')">삭제</button>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper col-12">
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc2_nm" />
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc2_id" hidden="hidden" />
+                                    @(Html.DevExtreme().FileUploader()
+                                            .Visible(false)
+                                            .ID("EquipmentFileUploader2")
+                                            .Name("equipmentAttachedFile2")
+                                            .Multiple(false)
+                                            //.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                                            .UploadUrl(Url.Action("UploadEquipAttachedFile", "SysCom"))
+                                            .UploadMode(FileUploadMode.Instantly)
+                                            .MaxFileSize(10000000)
+                                            .OnValueChanged("equipmentUploadAttachedFile")
+                                        .OnUploaded("reLoadEquipAttachmentFile")
+                                    )
+                                    <div class="align-end">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentUploadFile('2')">업로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDownloadAttachedFile('2')">다운로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDeleteAttachedFile('2')">삭제</button>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper col-12">
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc3_nm" />
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc3_id" hidden="hidden" />
+                                    @(Html.DevExtreme().FileUploader()
+                                            .Visible(false)
+                                            .ID("EquipmentFileUploader3")
+                                            .Name("equipmentAttachedFile3")
+                                            .Multiple(false)
+                                            //.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                                            .UploadUrl(Url.Action("UploadEquipAttachedFile", "SysCom"))
+                                            .UploadMode(FileUploadMode.Instantly)
+                                            .MaxFileSize(10000000)
+                                            .OnValueChanged("equipmentUploadAttachedFile")
+                                        .OnUploaded("reLoadEquipAttachmentFile")
+                                    )
+                                    <div class="align-end">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentUploadFile('3')">업로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDownloadAttachedFile('3')">다운로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDeleteAttachedFile('3')">삭제</button>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper col-12">
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc4_nm" />
+                                    <input type="text" class="form-control form-control-sm col-12" name="equip_doc4_id" hidden="hidden" />
+                                    @(Html.DevExtreme().FileUploader()
+                                            .Visible(false)
+                                            .ID("EquipmentFileUploader4")
+                                            .Name("equipmentAttachedFile4")
+                                            .Multiple(false)
+                                            //.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                                            .UploadUrl(Url.Action("UploadEquipAttachedFile", "SysCom"))
+                                            .UploadMode(FileUploadMode.Instantly)
+                                            .MaxFileSize(10000000)
+                                            .OnValueChanged("equipmentUploadAttachedFile")
+                                        .OnUploaded("reLoadEquipAttachmentFile")
+                                    )
+                                    <div class="align-end">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentUploadFile('4')">업로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDownloadAttachedFile('4')">다운로드</button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="equipmentDeleteAttachedFile('4')">삭제</button>
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

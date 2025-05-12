@@ -1,0 +1,639 @@
+﻿@*작업현황(칭량, 제조, 포장)*@
+@using System.Data
+@using HACCP.Libs
+@using Newtonsoft.Json;
+
+
+@{
+    //ViewBag.Title = "OperationStatus_Mont";
+    //Layout = null;
+    //var EquipmentOperationResultMontData = @Html.Raw(Json.Encode(ViewBag.EquipmentOperationResultMontData.Data));
+    //var data1 = @Html.Raw(Json.Encode(ViewBag.data1.Data));
+    //var data2 = @Html.Raw(Json.Encode(ViewBag.data2.Data));
+
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+
+@{
+    //var OperationSatus_Mont_data = Html.Raw(Json.Encode(ViewBag.OperationSatus_Mont_data.Data));
+    var OperationSatus_Mont_data = @Html.Raw(JsonConvert.SerializeObject(ViewBag.OperationSatus_Mont_data.Data));
+}
+
+<script type="text/javascript" id="OperationSatus_MontJs">
+
+    var time = 30;
+    var toDay = new Date();
+
+    var operationStatusMontPlanCnt = 0;
+    var operationStatusMontWaitCnt = 0;
+    var operationStatusMontComplCnt = 0;
+    var operationStatusMontProcessingCnt = 0;
+    var operationStatusMontRestCnt = 0;
+    var operationStatusMontUnableCnt = 0;
+
+
+    // 새로고침 객체
+    var OperationStatus_Mont_intervalSet = {
+        OperationStatus_Mont_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(OperationStatus_Mont_intervalSet).length;
+                var _thisViewId = "OperationStatus_Mont";
+
+                var time = 5;
+                if ($("#OperationStatus_MontSearchForm #refresh_time").val() == 0) $("#OperationStatus_MontSearchForm #refresh_time").val(1);
+                time = $("#OperationStatus_MontSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "OperationStatus_Mont";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        OperationStatus_Mont_interval_0: function () {
+            OperationStatus_MontSearch();
+
+            OperationStatus_Mont_intervalSet.OperationStatus_Mont_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+
+
+    $(function () {
+        $('#OperationStatus_Mont [data-toggle="tooltip"]').tooltip()
+        OperationStatus_Mont_intervalSet.OperationStatus_Mont_intervalMaster.intervalExcute();
+
+        var today = new Date();
+        $("#OperationStatus_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+
+        if ((@OperationSatus_Mont_data).length > 0) {
+
+            OperationSatus_Mont_Create(JSON.parse(@OperationSatus_Mont_data), "%");
+            $("#OperationStatus_Mont_Content > div.col-12").addClass("display-none");
+        } else {
+            OperationStatus_Mont_Content_Resize();
+            $("#OperationStatus_Mont_Content > div.col-12").removeClass("display-none");
+        }
+
+    })
+
+
+    $("#OperationStatus_MontSearchForm #refresh_time").blur(function () {
+
+        OperationStatus_Mont_intervalSet.OperationStatus_Mont_intervalMaster.intervalDelete(0, 1);
+        OperationStatus_Mont_intervalSet.OperationStatus_Mont_intervalMaster.intervalExcute();
+    });
+
+
+    $("#OperationStatus_MontSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#OperationStatus_MontSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    function OperationStatus_MontSearch() {
+        operationStatusMontPlanCnt = 0;
+        operationStatusMontWaitCnt = 0;
+        operationStatusMontComplCnt = 0;
+        operationStatusMontProcessingCnt = 0;
+        operationStatusMontRestCnt = 0;
+        operationStatusMontUnableCnt = 0;
+        var today = new Date();
+        $("#OperationStatus_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy-MM-dd HH시 mm분 ss초"));
+
+        $("div#OperationStatus_Mont_Content > div").not("div#OperationStatus_Mont_Content > div.col-12").remove();
+
+        $.ajax({
+            type: "POST",
+            url: "/ProductionManage/OperationStatus_MontSearch",
+            success: function (result) {
+
+
+
+                if (result <= 0) {
+
+                    OperationStatus_Mont_Content_Resize();
+                    $("#OperationStatus_Mont_Content > div.col-12").removeClass("display-none");
+
+                    return;
+                }
+
+
+                $("#OperationStatus_Mont_Content > div.col-12").addClass("display-none");
+                OperationSatus_Mont_Create(JSON.parse(result));
+
+               }
+        })
+
+    }
+
+
+    async function OperationSatus_Mont_Create(data) {
+
+        for (var i in data) {
+
+            await OperationSatus_Mont_Excute(data[i], i);
+        }
+
+        await OperationSatus_Mont_weighing_search();
+        await OperationSatus_Mont_waiting_search();
+        await OperationSatus_Mont_working_search();
+
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(0) input[type='text']").val(operationStatusMontPlanCnt);
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(1) input[type='text']").val(operationStatusMontWaitCnt);
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(2) input[type='text']").val(operationStatusMontComplCnt);
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(3) input[type='text']").val(operationStatusMontProcessingCnt);
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(4) input[type='text']").val(operationStatusMontRestCnt);
+        $("#OperationStatus_MontSearchForm div.input-group.input-group-sm:eq(4) input[type='text']").val(operationStatusMontUnableCnt);
+    }
+
+
+    function OperationSatus_Mont_Excute(data, count) {
+        var $rowDiv = $("#OperationStatus_Mont #OperationStatus_Mont_Content.row");
+
+        // 작업실 별 div
+        var $container_div = $("<div class='col-2 mb-2' id='workroom_" + count + "' workroom_cd='" + data.workroom_cd + "'>");
+        var $workroom_div = $("<div class='col-12 p-0 b_3_g'>");
+
+        // 작업실명 div
+        var $container_div1 = $("<div class='container b_b_3_g'>");
+        var $item_div1 = $("<div class='item b_t_r title_div'>").text(data.workroom_nm);  // 작업실
+
+        // 콘텐츠div
+        var $container_div2 = $("<div class='container'>");
+        var $item_div2 = $("<div class='item' style='height: 100%; flex-grow: 1;'>");
+
+        // 제품 이미지, 제품명, 온,습도
+        var $item_div2_container_div1 = $("<div class='container' style='height: 50%;'>");
+        var $item_div2_item_div1_1 = $("<div class='img_area b_r_3_g b_b_3_g'>");
+        var $img = $("<img src='/Content/image/NoImage.png'>");
+
+        var $item_div2_item_div1_2 = $("<div class='' style='height: 100%; width: 60%;'>");
+        var $item_div2_item_div1_2_container_div1 = $("<div class='container' style='height: 100%; flex-direction: column;'>");
+
+        var $item_div2_item_div1_2_item_div1 = $("<div class='item content_div text_over b_b_3_g' data-toggle='tooltip'>").text("-");                         // 제품명
+        var $item_div2_item_div1_2_item_div2 = $("<div class='item content_div text_over b_b_3_g' name='workroom_temp'>").text("-");    // 온도
+        var $item_div2_item_div1_2_item_div3 = $("<div class='item content_div text_over b_b_3_g' name='workroom_hum'>").text("-");     // 습도
+
+        var $item_div2_container_div2 = $("<div class='container' style='height: 50%; flex-direction: column;'>");
+        var $item_div2_item_div2_1 = $("<div class='item content_div text_over b_b_3_g' name='work_status'>").text("-");                // 작업상태
+        var $item_div2_item_div2_2 = $("<div class='item content_div text_over b_b_3_g' name='work_compl'>").text("-");                         // 완료/계획
+        var $item_div2_item_div2_3 = $("<div class='item content_div text_over' name='work_time'>").text("-");                         // 완료/계획
+
+        $item_div2_container_div2.append($item_div2_item_div2_1);
+        $item_div2_container_div2.append($item_div2_item_div2_2);
+        $item_div2_container_div2.append($item_div2_item_div2_3);
+
+        $item_div2_item_div1_2_container_div1.append($item_div2_item_div1_2_item_div1);
+        $item_div2_item_div1_2_container_div1.append($item_div2_item_div1_2_item_div2);
+        $item_div2_item_div1_2_container_div1.append($item_div2_item_div1_2_item_div3);
+        $item_div2_item_div1_2.append($item_div2_item_div1_2_container_div1);
+
+        $item_div2_item_div1_1.append($img);
+        $item_div2_container_div1.append($item_div2_item_div1_1);
+        $item_div2_container_div1.append($item_div2_item_div1_2);
+
+        $item_div2.append($item_div2_container_div1);
+        $item_div2.append($item_div2_container_div2);
+
+        $container_div2.append($item_div2);
+        $container_div1.append($item_div1);
+
+        $workroom_div.append($container_div1);
+        $workroom_div.append($container_div2);
+
+        $container_div.append($workroom_div);
+        $rowDiv.append($container_div);
+
+        switch (data.workroom_gubun) {
+            case 0:
+                $("div#workroom_" + count + " div").addClass("b_c_0");
+
+                break;
+            case 1:
+                $("div#workroom_" + count + " div").addClass("b_c_1");
+
+                break;
+            case 2:
+                $("div#workroom_" + count + " div").addClass("b_c_2");
+
+                break;
+            case 3:
+                $("div#workroom_" + count + " div").addClass("b_c_3");
+
+                break;
+        }
+    }
+
+
+    function OperationSatus_Mont_weighing_search() {
+        $.ajax({
+            type: 'POST',
+            url: "/ProductionManage/OperationSatus_Mont_weighing_search",
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+
+                var jsonData = new Array();
+                for (let i = 0; i < result.length; i++) {
+
+                    if (result[i] != "" && result[i] != null) {
+                        jsonData[i] = JSON.parse(result[i]);
+                    }
+                    else {
+                        jsonData[i] = result[i];
+                    }
+
+                }
+
+                operationStatusMontPlanCnt += parseInt(jsonData[0][0].Plan);
+                operationStatusMontWaitCnt += parseInt(jsonData[0][0].Wait);
+                operationStatusMontComplCnt += parseInt(jsonData[0][0].Complete);
+                operationStatusMontProcessingCnt += parseInt(jsonData[0][0].Processing);
+                operationStatusMontRestCnt += parseInt(jsonData[0][0].Rest);
+                operationStatusMontUnableCnt += parseInt(jsonData[0][0].Unable);
+
+                OperationSatus_Mont_DataInsert(jsonData[1]);
+            }
+        })
+    }
+
+
+    function OperationSatus_Mont_waiting_search() {
+        $.ajax({
+            type: 'POST',
+            url: "/ProductionManage/OperationSatus_Mont_waiting_search",
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+                var jsonData = new Array();
+                for (let i = 0; i < result.length; i++) {
+
+                    if (result[i] != "" && result[i] != null) {
+                        jsonData[i] = JSON.parse(result[i]);
+                    }
+                    else {
+                        jsonData[i] = result[i];
+                    }
+
+                }
+
+                operationStatusMontPlanCnt += parseInt(jsonData[0][0].Plan);
+                operationStatusMontWaitCnt += parseInt(jsonData[0][0].Wait);
+                operationStatusMontComplCnt += parseInt(jsonData[0][0].Complete);
+                operationStatusMontProcessingCnt += parseInt(jsonData[0][0].Processing);
+                operationStatusMontRestCnt += parseInt(jsonData[0][0].Rest);
+                operationStatusMontUnableCnt += parseInt(jsonData[0][0].Unable);
+
+                OperationSatus_Mont_DataInsert(jsonData[1]);
+            }
+        })
+    }
+
+
+    function OperationSatus_Mont_working_search() {
+        $.ajax({
+            type: 'POST',
+            url: "/ProductionManage/OperationSatus_Mont_working_search",
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+                var jsonData = new Array();
+                for (let i = 0; i < result.length; i++) {
+
+                    if (result[i] != "" && result[i] != null) {
+                        jsonData[i] = JSON.parse(result[i]);
+                    }
+                    else {
+                        jsonData[i] = result[i];
+                    }
+
+                }
+
+                operationStatusMontPlanCnt += parseInt(jsonData[0][0].Plan);
+                operationStatusMontWaitCnt += parseInt(jsonData[0][0].Wait);
+                operationStatusMontComplCnt += parseInt(jsonData[0][0].Complete);
+                operationStatusMontProcessingCnt += parseInt(jsonData[0][0].Processing);
+                operationStatusMontRestCnt += parseInt(jsonData[0][0].Rest);
+                operationStatusMontUnableCnt += parseInt(jsonData[0][0].Unable);
+
+                OperationSatus_Mont_DataInsert(jsonData[1]);
+            }
+        })
+    }
+
+
+    function OperationSatus_Mont_DataInsert(data) {
+
+        for (var i in data) {
+            var container_div = $("#OperationStatus_Mont [id^=workroom_");
+
+            for (var j in container_div) {
+                var divData = container_div[j];
+                var workroom_cd = $("#" + divData.id).attr("workroom_cd");
+
+                var count = 0;
+
+                for (var k in data) {
+                    if (data[i].workroom_cd == data[k].workroom_cd) count++;
+                }
+
+                if (workroom_cd == data[i].workroom_cd) {
+
+                    $("#" + divData.id + " div.item").first().text(data[i].workroom_title);
+
+                    if (count > 1) {
+                        $("#" + divData.id + " div.item.content_div").eq(0).text(data[i].ing_item_nm + " 외 " + (count - 1));
+                        $("#" + divData.id + " div.item.content_div").eq(0).attr("title", data[i].ing_item_nm + " 외 " + (count - 1))
+                    } else {
+                        $("#" + divData.id + " div.item.content_div").eq(0).text(data[i].ing_item_nm);
+                        $("#" + divData.id + " div.item.content_div").eq(0).attr("title", data[i].ing_item_nm)
+                    }
+
+                    $("#" + divData.id + " div.item.content_div").eq(1).text(data[i].workroom_temp + " ℃").css("color", "red");
+                    $("#" + divData.id + " div.item.content_div").eq(2).text(data[i].workroom_hum + " ％").css("color", "blue");
+                    $("#" + divData.id + " div.item.content_div").eq(3).text(data[i].detailproc_status_nm);
+
+
+                    if (data[i].order_operate_time == 0) {
+                        $("#" + divData.id + " div.item.content_div").eq(5).text("-");
+                    } else {
+                        $("#" + divData.id + " div.item.content_div").eq(5).text(data[i].order_operate_time + "분");
+                    }
+
+
+                    var compl_text;
+                    if (data[i].plan_end == "-") {
+
+                        compl_text = data[i].plan_end;
+
+                    } else {
+
+                        var position = (data[i].plan_end).indexOf("/");
+                        var plan = (data[i].plan_end).substr(position + 1);
+                        var compl = (data[i].plan_end).substr(0, position);
+
+                        compl_text = "완료: " + compl + " / 계획: " + plan;
+                    }
+
+
+                    $("#" + divData.id + " div.item.content_div").eq(4).text(compl_text);
+
+                    $("#" + divData.id + " div.img_area img").attr("src", data[i].item_img);
+
+                    break;
+                }
+            }
+        }
+    }
+
+
+    function OperationStatus_Mont_Content_Resize() {
+        var topPoint1 = document.getElementById("OperationStatus_Mont_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1) - 20
+
+        document.querySelector("#OperationStatus_Mont_Content > div.col-12 div.box").style.height = content_max_height + "px";
+    }
+
+
+</script>
+
+<style>
+    #OperationStatus_Mont .container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 0px;
+    }
+
+    #OperationStatus_Mont .col-2.mb-2 {
+        height: 300px;
+    }
+
+    #OperationStatus_Mont .col-12.p-0.b_3_g {
+        background-color: white;
+        height: 100%;
+        border-radius: 0.6em;
+    }
+
+    #OperationStatus_Mont .col-2.mb-2 .col-12.p-0.b_3_g .container.b_b_3_g {
+        height: 18%;
+        width: 100%;
+    }
+
+    #OperationStatus_Mont .col-2.mb-2 .col-12.p-0.b_3_g .container {
+        height: 82%;
+        width: 100%;
+    }
+
+
+    #OperationStatus_Mont .b_3_g {
+        border: 3px solid gray;
+    }
+
+    #OperationStatus_Mont .b_b_3_g {
+        border-bottom: 3px solid gray;
+    }
+
+    #OperationStatus_Mont .b_r_3_g {
+        border-right: 3px solid gray;
+    }
+
+    #OperationStatus_Mont .b_t_r {
+        border-top-left-radius: 0.25em;
+        border-top-right-radius: 0.25em;
+    }
+
+    #OperationStatus_Mont .title_div {
+        text-align: center;
+        font-size: 20px;
+        height: 100%;
+        width: 100%;
+        padding: 0.6em;
+        font-weight: 700;
+    }
+
+    #OperationStatus_Mont .content_div {
+        text-align: center;
+        font-size: 15px;
+        font-weight: 700;
+        padding: 0.6em;
+        width: 100%;
+        flex-grow: 1;
+    }
+
+    #OperationStatus_Mont .text_over {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        height: 20px;
+    }
+
+    #OperationStatus_Mont .img_area {
+        height: 100%;
+        font-size: 0;
+        text-align: center;
+        height: 100%;
+        width: 40%;
+    }
+
+    #OperationStatus_Mont .img_area:after {
+        display: inline-block;
+        height: 100%;
+        content: "";
+        vertical-align: middle;
+    }
+
+    #OperationStatus_Mont .img_area img {
+        max-height: 100%;
+        max-width: 100%;
+        vertical-align: middle;
+    }
+
+    #OperationStatus_Mont .b_c_0 {
+        border-color: #C3DDDF;
+    }
+
+    #OperationStatus_Mont .b_c_1 {
+        border-color: #6ACFC5;
+    }
+
+    #OperationStatus_Mont .b_c_2 {
+        border-color: #189AB4;
+    }
+
+    #OperationStatus_Mont .b_c_3 {
+        border-color: #0f4c81;
+    }
+
+    #OperationStatus_Mont .NoDataDiv {
+        height: 820px;
+        background-color: white;
+        color: #8a8a8a;
+        font-size: 14px;
+        font-family: Noto sans KR;
+        display: flex;
+        justify-content: center;
+        justify-items: center;
+    }
+</style>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <div id="OperationStatus_Mont_Top" class="mainTop row">
+        <div class="col-12">
+            <form id="OperationStatus_MontSearchForm" onsubmit="return false;">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">계획</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">대기</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">완료</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">휴지</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+                    <div class="input-group input-group-sm col-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">중지</span>
+                        </div>
+                        <input type="text" class="form-control" value=0 disabled>
+                    </div>
+
+                    <div class="input-group input-group-sm col-1">
+                    </div>
+
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="30" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="OperationStatus_Mont_Content" class="row">
+        <div class="col-12 display-none">
+            <div class="box NoDataDiv">
+                <div class="item" style="align-self: center;">
+                    데이터가 없습니다.
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+</div>

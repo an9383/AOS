@@ -1,0 +1,3119 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@using Newtonsoft.Json
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    //JavaScriptSerializer serializer = new JavaScriptSerializer();
+    //serializer.MaxJsonLength = Int32.MaxValue;
+
+    //var itemJson = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.items)));
+    var itemJson = @Html.Raw(JsonConvert.SerializeObject(ViewBag.items.Data));
+}
+
+@{
+    string[] TestMasterManagement3GridKey = { "item_cd", "test_type" };
+}
+
+@*시험규격 관리(TestMasterManagement3)*@
+
+<script id="@(pagePrefix)Js">
+
+    var _testMasterManagementData = "";
+    var _testMasterManagementDetailData = new Array();
+    var _testMasterManagementItemCd = "";
+    var _testMasterManagementSignData = "";
+    var _testMasterManagementSignCnt = "";
+    var _testMasterManagementSignGubun = "";
+    var _testMasterManagementCRUDStatus = "";
+    var _testMasterManagementTestItemCRUDStatus = "";
+    var _testMasterManagementTestItemNm = "";
+    var _testMasterManagementChanges = new Array();
+    var _testMasterManagementAddType = "";
+    var _testMasterManagementIsEditable = false;
+    var _testMasterManagementCellClickEvent = false;
+
+    $(function () {
+
+        var columns = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" },
+            { dataField: "item_top_nm", caption: "대표여부" }
+        ];
+
+        createPopup("TestMasterManagement3Item2", "품목조회", @itemJson, columns, "item_cd");
+
+        $('input[name=item_cd]+div>button' , $("#TestMasterManagement3SearchForm")).click(function (event) {
+            //$("#TestMasterManagement3Item1Popup").dxPopup("instance").show();
+            CreatePopupWithFilter('@CodeHelpType.item', '품목조회', 'item_cd', $("#TestMasterManagement3SearchForm input[name=item_cd]").val(),
+                function (selectedItems) {
+                    $("#TestMasterManagement3SearchForm input[name=item_cd]").val(selectedItems.item_cd);
+                    $("#TestMasterManagement3SearchForm input[name=item_nm]").val(selectedItems.item_nm);
+                }
+            );
+        });
+
+        TestMasterManagement3Search();
+
+        $($("#TestMasterManagementAttatchDocBtn")).click(function (event) {
+            TestMasterManagementAttatchDoc(event);
+        });
+
+        $($("#TestMasterManagementAttatchDocDownloadBtn")).click(function (event) {
+            TestMasterManagementDownloadDoc(event);
+        });
+
+        $($("#TestMasterManagementAttatchDocDeleteBtn")).click(function (event) {
+            TestMasterManagementDeleteDoc(event);
+        });
+
+        setDatePicker("#TestMasterManagement3 .datepicker");
+
+        TestMasterManagement3EditCheck(false, 'N');
+
+    });
+
+    function SetEmptyData() {
+
+    }
+
+    // 수정중인지 체크
+    function TestMasterManagement3EditCheck(nowEdit, status) {
+
+        UtilView.setActiveElementToolbar(nowEdit
+            , "TestMasterManagement3Toolbar"
+            , "TestMasterManagement3"
+        );
+
+        UtilView.setActiveElementGrids(nowEdit, "TestMasterManagement3Grid");
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+        var tabItemCnt = tabs.option("items").length;
+
+        _testMasterManagementCRUDStatus = status;
+
+        _testMasterManagementIsEditable = nowEdit;
+
+        if (nowEdit) {
+
+            for (var i = 0; i < tabItemCnt; i++) {
+                if (tabIndex === i) {
+                    continue;
+                }
+                tabs.option("items[" + i + "].disabled", true);
+            }
+
+            switch (tabIndex) {
+                case 0:
+
+                    UtilView.setActiveElementFormId(nowEdit
+                        , status
+                        , "TestMasterManagement3WriteForm"
+                        , "item");
+
+                    break;
+
+                case 1:
+
+                    $("#TestMasterManagement3TabContent2Div2 button").prop("disabled", false);
+
+                    var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+
+                    var editing = {
+                        //allowAdding: true,
+                        allowUpdating: true,
+                        allowDeleting: true,
+                        mode: 'batch'
+                    }
+
+                    treeList.option("editing", editing);
+
+                    break;
+
+                case 2:
+
+                    var grid = $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("instance");
+
+                    var editing = {
+                        allowAdding: true,
+                        allowUpdating: true,
+                        allowDeleting: true,
+                        mode: 'batch'
+                    }
+
+                    grid.option("editing", editing);
+
+                    break;
+
+                case 3:
+
+
+                    break;
+
+                case 4:
+
+
+                    break;
+            }
+        } else {
+
+            for (var i = 0; i < tabItemCnt; i++) {
+                tabs.option("items[" + i + "].disabled", false);
+            }
+
+            switch (tabIndex) {
+                case 0:
+
+                    UtilView.setActiveElementFormId(nowEdit
+                        , status
+                        , "TestMasterManagement3WriteForm"
+                        , "");
+
+                    $("#TestMasterManagementAttatchDocDownloadBtn").prop("disabled", false);
+
+                    break;
+
+                case 1:
+
+                    $("#TestMasterManagement3TabContent2Div2 button").prop("disabled", true);
+
+                    var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+
+                    var editing = {
+                        //allowAdding: false,
+                        allowUpdating: false,
+                        allowDeleting: false
+                    }
+
+                    treeList.option("editing", editing);
+
+                    _testMasterManagementChanges = new Array();
+
+                    break;
+
+                case 2:
+
+                    var grid = $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("instance");
+
+                    var editing = {
+                        allowAdding: false,
+                        allowUpdating: false,
+                        allowDeleting: false
+                    }
+
+                    grid.option("editing", editing);
+
+                    break;
+
+                case 3:
+
+
+                    break;
+
+                case 4:
+
+
+                    break;
+            }
+        }
+    }
+
+    function TestMasterManagement3TestCriteriaCellTemplate(element, info) {
+
+        var num = 20;
+
+        if (info.columnIndex === 0) {
+            num += (25 * (info.row.level + 1));
+        }
+
+        $("<div>")
+            .appendTo(element)
+            .text(info.value)
+            .css("width", info.column.width - num)
+            .css("height", "auto")
+            .css("white-space", "normal")
+            .css("overflow-wrap", 'break-word');
+    }
+
+    // 시험기준 항목 조회 스위치
+    function TestMasterManagement3Toggle() {
+
+        var isCollapsed = $("#TestMasterManagement3TabContent2Div1").hasClass("col-8");
+
+        if (isCollapsed) {
+
+            $("#TestMasterManagement3TabContent2Div1").removeClass("col-8");
+            //$("#TestMasterManagement3TabContent2Div1").removeClass("pr-0");
+            $("#TestMasterManagement3TabContent2Div1").addClass("col-12");
+            //$("#TestMasterManagement3TabContent2Div1").addClass("pr-1");
+
+            $("#TestMasterManagement3TabContent2Div2").hide();
+            $("#TestMasterManagement3TabContent2Div3").hide();
+
+        } else {
+
+            $("#TestMasterManagement3TabContent2Div1").addClass("col-8");
+            //$("#TestMasterManagement3TabContent2Div1").addClass("pr-0");
+            $("#TestMasterManagement3TabContent2Div1").removeClass("col-12");
+            //$("#TestMasterManagement3TabContent2Div1").removeClass("pr-1");
+
+            $("#TestMasterManagement3TabContent2Div2").show();
+            $("#TestMasterManagement3TabContent2Div3").show();
+
+        }
+    }
+
+    // 우측 디테일 초기화
+    function TestMasterManagement3ClearDetail() {
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        $("#TestMasterManagement3SearchForm input[name=approve_yn]").prop("checked", false);
+        $("#TestMasterManagement3SearchForm input[name=current_revision_yn]").prop("checked", false);
+
+        switch (tabIndex) {
+
+            case 0:
+
+                $("#TestMasterManagement3WriteForm")[0].reset();
+
+                $("#TestMasterManagement3RevisionGrid").dxDataGrid("option", "dataSource", []);
+
+                $("#TestMasterManagement3SignTable").dxDataGrid("option", "dataSource", []);
+
+                $("#TestMasterManagement3FileGrid").dxDataGrid("option", "dataSource", []);
+
+                break;
+
+            case 1:
+
+                $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("option", "dataSource", []);
+                //$("#TestMasterManagement3TestCriteriaGrid").dxTreeList("option", "focusedRowEnabled", false);
+
+                break;
+
+            case 2:
+
+                $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "dataSource", []);
+                //$("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "focusedRowEnabled", false);
+
+                break;
+        }
+
+    }
+
+    // 상단 개정 순번 셀렉트 박스 선택 변경
+    function TestMasterManagement3RevisionChange() {
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+        var data = "";
+        grid.getDataSource().store().load().done(function (tmpData) {
+            if (!grid.option("focusedRowKey")) {
+                alertError("데이터 로드 지연.");
+                return;
+            }
+            else {
+                data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+                TestMasterManagement3SelectDetail(data);
+            }
+        });
+    }
+
+    // 상세 데이터 로드
+    function TestMasterManagement3SelectDetail(data) {
+
+        _testMasterManagementDetailData = new Array();
+
+        var form = $("#TestMasterManagement3SearchForm")[0];
+        var formData = new FormData(form);
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagement3SelectDetail',
+            dataType: "json",
+            data: {
+                test_type: formData.get("test_type"),
+                item_cd: data.item_cd,
+                process_cd: data.process_cd,
+                revision_no: formData.get("revision_no"),
+                testmaster_id: data.testmaster_id,
+            },
+            success: function (result) {
+
+                _testMasterManagementSignCnt = 0;
+
+                try {
+
+                    for (var i = 0; i < result.length; i++) {
+                        if (result[i].length > 0) {
+                            _testMasterManagementDetailData.push(JSON.parse(result[i]));
+                        } else {
+                            _testMasterManagementDetailData.push(result[i]);
+                        }
+                    }
+
+                    for (var i = 0; i < _testMasterManagementDetailData[3].length; i++) {
+                        _testMasterManagementSignCnt += parseInt(_testMasterManagementDetailData[3][i].sign_yn);
+                    }
+
+                    if (_testMasterManagementDetailData[0][0].approve_yn === "Y") {
+                        $("#TestMasterManagement3SearchForm input[name=approve_yn]").prop("checked", true);
+                    } else {
+                        $("#TestMasterManagement3SearchForm input[name=approve_yn]").prop("checked", false);
+                    }
+
+                    if (_testMasterManagementDetailData[0][0].current_revision_yn === "Y") {
+                        $("#TestMasterManagement3SearchForm input[name=current_revision_yn]").prop("checked", true);
+                    } else {
+                        $("#TestMasterManagement3SearchForm input[name=current_revision_yn]").prop("checked", false);
+                    }
+
+                    TestMasterManagement3SetDetail();
+
+                } catch (e) {
+
+                    return;
+                }
+            }
+        })
+    }
+
+    // 그리드 셀 버튼
+    function TestMasterManagement3CellWithButton(container, cellInfo) {
+
+        if (_testMasterManagementIsEditable == false) {
+            $("<div>").html(cellInfo.value)
+                .appendTo(container);
+            return;
+        }
+
+        $("<div>").html("<div style='float:left; line-height: 2;'>" + (cellInfo.value ? cellInfo.value : "") + "</div><div style='float:right;' class='icon-plus'></div>")
+            .appendTo(container);
+
+        $(".icon-plus").dxButton({
+            icon: "search",
+            onClick: function (e) {
+
+            }
+        });
+    }
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function TestMasterManagement3Search() {
+
+        $("#TestMasterManagement3SearchForm select[name=revision_no]").empty();
+
+        var form = $('#TestMasterManagement3SearchForm');
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+
+        TestMasterManagement3ClearDetail();
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagement3Select',
+            data: form.serialize(),
+            processData: true,
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+            success: function (result) {
+
+                try {
+
+                    var jsonData = JSON.parse(result);
+                    grid.option("dataSource", jsonData);
+
+                    grid.getDataSource().store().load().done(function (tmpData) {
+                        if (!grid.option("focusedRowKey")) {
+                            grid.option("focusedRowIndex", 0);
+                        } else {
+                            TestMasterManagement3FocusChanged();
+                        }
+                    });
+
+                } catch (e) {
+                    grid.option("dataSource", []);
+                    grid.option("focusedRowKey", "");
+                    return;
+                }
+            }
+        })
+    }
+
+    // 입력
+    function TestMasterManagement3Input() {
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        switch (tabIndex) {
+
+            case 0:
+            case 1:
+
+                if (!confirm("시험규격에 대한 신규 개정을 생성 하시겠습니까?")) {
+                    return;
+                }
+
+                var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+                var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));;
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagement3TRX',
+                    dataType: "json",
+                    data: {
+                        test_type: $("#TestMasterManagement3SearchForm select[name=test_type]").val(),
+                        item_cd: data.item_cd,
+                        process_cd: data.process_cd,
+                        revision_no: $("#TestMasterManagement3SearchForm select[name=revision_no]").val() ? $("#TestMasterManagement3SearchForm select[name=revision_no]").val() : "0",
+                        gubun: 'C1'
+                    },
+                    success: function (result) {
+
+                        TestMasterManagement3Search();
+
+                    }
+                })
+
+                break;
+
+            case 2:
+
+                TestMasterManagement3EditCheck(true, 'I');
+
+                $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("instance").addRow();
+
+                break;
+
+            case 3:
+            case 4:
+
+
+                break;
+        }
+
+        //TestMasterManagement3EditCheck(true, 'I');
+        //TestMasterManagement3ClearDetail();
+    }
+
+    // 수정
+    function TestMasterManagement3Edit() {
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정할 사항이 없습니다.");
+            return;
+        }
+
+        if (_testMasterManagementSignCnt > 0) {
+            alert("이미 서명된 시험 규격은 수정 할 수 없습니다.");
+            return;
+        }
+
+        TestMasterManagement3EditCheck(true, 'U');
+    }
+
+    // 삭제
+    function TestMasterManagement3Delete() {
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        if (_testMasterManagementSignCnt > 0) {
+            alert("이미 서명된 시험 규격은 삭제 할 수 없습니다.");
+            return;
+        }
+
+        switch (tabIndex) {
+
+            case 0:
+            case 1:
+
+                if (!confirm("선택된 개정의 모든 정보를 삭제하시겠습니까?")) {
+                    return;
+                }
+
+                var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+                var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagement3TRX',
+                    dataType: "json",
+                    data: {
+                        test_type: $("#TestMasterManagement3SearchForm select[name=test_type]").val(),
+                        item_cd: data.item_cd,
+                        process_cd: data.process_cd,
+                        revision_no: $("#TestMasterManagement3SearchForm select[name=revision_no]").val() ? $("#TestMasterManagement3SearchForm select[name=revision_no]").val() : "0",
+                        gubun: 'D1'
+                    },
+                    success: function (result) {
+
+                        alert(result.message);
+
+                        TestMasterManagement3Search();
+
+                    }
+                })
+
+                break;
+
+            case 2:
+
+
+
+                break;
+
+            case 3:
+            case 4:
+
+
+                break;
+        }
+
+    }
+
+    // 저장
+    async function TestMasterManagement3Save() {
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        switch (tabIndex) {
+
+            case 0:
+
+                var form = $("#TestMasterManagement3WriteForm")[0];
+                var formData = new FormData(form);
+
+                formData.set("test_type", $('select[name=test_type]', $('#TestMasterManagement3SearchForm')).val());
+                formData.set("revision_no", $('select[name=revision_no]', $('#TestMasterManagement3SearchForm')).val());
+                formData.set("current_revision_yn", $('#TestMasterManagement3SearchForm input[name=current_revision_yn]').prop("checked") ? "Y" : "N");
+                formData.set("item_cd", _testMasterManagementItemCd);
+                formData.set("testmaster_id", _testMasterManagementDetailData[0][0].testmaster_id);
+                formData.set("gubun", "U1");
+
+                //var appendData = {
+                //    "test_type": $('select[name=test_type]', $('#TestMasterManagement3SearchForm')).val(),
+                //    "revision_no": $('select[name=revision_no]', $('#TestMasterManagement3SearchForm')).val(),
+                //    "current_revision_yn": $('#TestMasterManagement3SearchForm input[name=current_revision_yn]').prop("checked") ? "Y" : "N",
+                //    "item_cd": _testMasterManagementItemCd,
+                //    "testmaster_id": _testMasterManagementDetailData[0][0].testmaster_id,
+                //    "gubun": "U1"
+                //};
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagement3TRX',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (result) {
+
+                        alert(result.message);
+
+                        TestMasterManagement3Search();
+                        //TestMasterManagement3RevisionChange();
+                    }
+                })
+
+                //UtilView.dataGridTRX2(formData, appendData, () => TestMasterManagement3Search());
+
+                break;
+
+            case 1:
+
+                await $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance").saveEditData();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagement3CriteriaTRX',
+                    dataType: "json",
+                    data: {
+                        testMasterManagements: JSON.stringify(_testMasterManagementChanges)
+                    },
+                    success: function (result) {
+
+                        alert(result.message);
+
+                        TestMasterManagement3RevisionChange();
+                    }
+                })
+
+                break;
+
+            case 2:
+
+                await $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("instance").saveEditData();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagement3CommonSpecificationTRX',
+                    dataType: "json",
+                    data: {
+                        commonSpecifications: JSON.stringify(_testMasterManagementChanges)
+                    },
+                    success: function (result) {
+
+                        alert(result.message);
+
+                        TestMasterManagement3RevisionChange();
+                    }
+                })
+
+                break;
+
+            case 3:
+
+
+                break;
+
+            case 4:
+
+
+                break;
+        }
+
+        TestMasterManagement3EditCheck(false, 'N');
+    }
+
+    // 취소
+    function TestMasterManagement3Undo() {
+        TestMasterManagement3EditCheck(false, 'N');
+        TestMasterManagement3RevisionChange();
+    }
+
+    // 레포트 인쇄
+    function TestMasterManagement3Print() {
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestMasterManagement3Grid", grid.option("focusedRowKey"));
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "LIMSMaster", RptFileName: "TestCertificateCR" },
+            objSp: { SpName: "SP_TestCertificateReport", gubun: "SM", reportParam: "testmaster_id:" + gridData.testmaster_id },
+            objEtcInfo: { subParam: "" }
+        });
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+
+    }
+
+    // 외부파일
+    function TestMasterManagement3Excel() {
+        gridExportToExcel("TestMasterManagement3Grid", "시험규격관리_시험규격_" + '@DateTime.Now.ToShortDateString()');
+        gridExportToExcel("TestMasterManagement3RevisionGrid", "시험규격관리_시험규격_개정정보_" + '@DateTime.Now.ToShortDateString()');
+    }
+
+    //#endregion 툴바 클릭 이벤트 관련 END
+
+
+    //#region 시험 규격 그리드 관련
+
+    // 시험규격 좌측 그리드 포커스 체인지 이벤트
+    function TestMasterManagement3FocusChanged() {
+
+        _testMasterManagementDetailData = new Array();
+        _testMasterManagementData = "";
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+        var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+
+        _testMasterManagementData = data;
+
+        _testMasterManagementItemCd = data.item_cd;
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagement3SelectRevisionNo',
+            dataType: "json",
+            data: {
+                test_type: $("#TestMasterManagement3SearchForm select[name=test_type]").val(),
+                item_cd: data.item_cd,
+                process_cd: data.process_cd
+            },
+            success: function (result) {
+
+                var selectBox = $("#TestMasterManagement3SearchForm select[name=revision_no]");
+                selectBox.empty();
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    for (var i = 0; i < jsonData.length; i++) {
+                        var newOption = new Option(jsonData[i].revision_no_nm, jsonData[i].revision_no);
+                        selectBox.append(newOption);
+
+                        if (jsonData[i].current_revision_no === jsonData[i].revision_no) {
+                            selectBox.val(jsonData[i].revision_no);
+                        }
+                    }
+
+                    $("#TestMasterManagement3Edit").dxButton().parent().parent().removeClass("display-none");
+                    $("#TestMasterManagement3Delete").dxButton().parent().parent().removeClass("display-none");
+                    $("#TestMasterManagement3Print").dxButton().parent().parent().removeClass("display-none");
+                    $("#TestMasterManagement3Excel").dxButton().parent().parent().removeClass("display-none");
+                    $("#TestMasterManagement3Preview").dxButton().parent().parent().removeClass("display-none");
+                    $("#TestMasterManagement3Print").dxButton().parent().parent().removeClass("display-none");
+
+                } catch (e) {
+                    TestMasterManagement3ClearDetail();
+
+                    $("#TestMasterManagement3Edit").dxButton().parent().parent().addClass("display-none");
+                    $("#TestMasterManagement3Delete").dxButton().parent().parent().addClass("display-none");
+                    $("#TestMasterManagement3Print").dxButton().parent().parent().addClass("display-none");
+                    $("#TestMasterManagement3Excel").dxButton().parent().parent().addClass("display-none");
+                    $("#TestMasterManagement3Preview").dxButton().parent().parent().addClass("display-none");
+                    $("#TestMasterManagement3Print").dxButton().parent().parent().addClass("display-none");
+
+                    return;
+                }
+
+                TestMasterManagement3RevisionChange();
+
+            }
+        })
+    }
+
+    // 시험 규격 탭별 디테일 데이터 set
+    function TestMasterManagement3SetDetail(e) {
+
+        if (_testMasterManagementDetailData.length <= 0 ) {
+            TestMasterManagement3ClearDetail();
+            return;
+        }
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        switch (tabIndex) {
+
+            case 0:
+
+                var data = _testMasterManagementDetailData[0][0];
+                var formId = "TestMasterManagement3WriteForm";
+
+                for (var key in data) {
+                    //var tagName = $('[name='+key+']').prop('tagName').toUpperCase();
+                    var type = $('[name=' + key + ']').prop('type');
+                    type = type ? type.toLowerCase() : "";
+                    if (type == "radio" || type == "checkbox") {
+                        $('input[type=' + type + '][name=' + key + '][value="' + data[key] + '"]', $('#' + formId)).prop('checked', true);
+                    } else {
+                        if (key === "doc_cnt") {
+                            $('[name=' + key + ']', $('#' + formId)).val("등록파일 수: " + data[key] + " 건");
+                        } else {
+                            $('[name=' + key + ']', $('#' + formId)).val(data[key]);
+                        }
+                    }
+                }
+
+                var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+                var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+
+                $("#" + formId + " input[name=item_keep_condition]").val(data.item_keep_condition);
+
+                if (_testMasterManagementDetailData[2].length > 0) {
+                    console.log(_testMasterManagementDetailData[2]);
+                    $("#TestMasterManagement3RevisionGrid").dxDataGrid("option", "dataSource", _testMasterManagementDetailData[2]);
+                } else {
+                    $("#TestMasterManagement3RevisionGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+                if (_testMasterManagementDetailData[3].length > 0) {
+                    $("#TestMasterManagement3SignTable").dxDataGrid("option", "dataSource", _testMasterManagementDetailData[3]);
+                } else {
+                    $("#TestMasterManagement3SignTable").dxDataGrid("option", "dataSource", []);
+                }
+
+                if (_testMasterManagementDetailData[5].length > 0) {
+                    $("#TestMasterManagement3FileGrid").dxDataGrid("option", "dataSource", _testMasterManagementDetailData[5]);
+                } else {
+                    $("#TestMasterManagement3FileGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+                break;
+
+            case 1:
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                treeList.option("focusedRowIndex", -1);
+                if (_testMasterManagementDetailData[1].length > 0) {
+                    treeList.option("dataSource", _testMasterManagementDetailData[1]);
+                    treeList.refresh().done(function () {
+                        //treeList.option("focusedRowKey", "");
+                    });
+                } else {
+                    treeList.option("dataSource", []);
+                }
+
+                if (_testMasterManagementCRUDStatus === "N") {
+                    $("#TestMasterManagement3TabContent2Div2 button").prop("disabled", true);
+                }
+
+                $.ajax({
+                    type: 'GET',
+                    url: '/LIMSMaster/TestMasterManagementSelectTestCriteria',
+                    success: function (result) {
+                        try {
+                            var json = JSON.parse(result);
+                            $("#TestMasterManagement3TestCriteriaSearchGrid").dxDataGrid("option", "dataSource", json);
+                        } catch (e) {
+                            $("#TestMasterManagement3TestCriteriaSearchGrid").dxDataGrid("option", "dataSource", []);
+                        }
+                    }
+                });
+
+                break;
+
+            case 2:
+
+                if (_testMasterManagementDetailData[4].length > 0) {
+                    $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "dataSource", _testMasterManagementDetailData[4]);
+                    //$("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                } else {
+                    $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "dataSource", []);
+                    //$("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                }
+
+                break;
+
+            //case 3:
+
+
+            //    break;
+
+            //case 4:
+
+
+            //    break;
+        }
+
+    }
+
+    // 문서목록만 조회
+    function  TestMasterManagementSelectDocList() {
+
+        var testmaster_id = _testMasterManagementDetailData[0][0].testmaster_id;
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagementSelectDocList',
+            data: {
+                testmaster_id: testmaster_id
+            },
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+                    $("#TestMasterManagement3FileGrid").dxDataGrid("option", "dataSource", json);
+                } catch (e) {
+                    $("#TestMasterManagement3FileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 파일 업로드 버튼
+    function TestMasterManagementAttatchDoc(event) {
+
+        if (_testMasterManagementCRUDStatus !== "U") {
+            alert("수정중일때만 파일 첨부가 가능합니다.");
+            return;
+        }
+
+        var fileUploader = $('#TestMasterManagement3FileUploader').dxFileUploader('instance');
+        fileUploader._isCustomClickEvent = true;
+        fileUploader._$fileInput.click();
+    }
+
+    // 파일 업로드
+    function TestMasterManagement3UploadAttachedFile(e) {
+
+        var name = e.component.option("name");
+
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "testmaster_id", _testMasterManagementDetailData[0][0].testmaster_id);
+        url = updateQueryStringParameter(url, "name", name);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 파일 다운로드
+    function TestMasterManagementDownloadDoc(e) {
+
+        var grid = $("#TestMasterManagement3FileGrid").dxDataGrid("instance");
+
+        if (grid.option("focusedRowKey")) {
+            var gridData = getGridRowByKey("TestMasterManagement3FileGrid", grid.option("focusedRowKey"));
+            var fileId = gridData.worksheet_file_id;
+
+            if (fileId != "") {
+                document.location.assign('/LIMSMaster/TestMasterManagementDownload?testmaster_id=' + _testMasterManagementDetailData[0][0].testmaster_id + '&worksheet_file_id=' + fileId);
+            }
+        } else {
+            alert("선택된 파일이 없습니다.");
+        }
+    }
+
+    // 파일 삭제
+    function TestMasterManagementDeleteDoc() {
+
+        if (!confirm("선택한 문서를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        if (_testMasterManagementSignCnt > 0) {
+            alert("서명이 완료된 자료의 문서는 삭제 할 수 없습니다.");
+            return;
+        }
+
+        var grid = $("#TestMasterManagement3FileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestMasterManagement3FileGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestMasterManagementDeleteDoc',
+            data: {
+                testmaster_id: _testMasterManagementDetailData[0][0].testmaster_id,
+                worksheet_file_id: gridData.worksheet_file_id
+            },
+            success: function (result) {
+
+                alert("삭제하였습니다.");
+
+                TestMasterManagementSelectDocList();
+
+            }
+        });
+    }
+
+    // 전자서명
+    function TestMasterManagementSign(e) {
+
+        if (_testMasterManagementCRUDStatus != "N") {
+            return;
+        }
+
+        _testMasterManagementSignData = e.data;
+
+        console.log(_testMasterManagementSignData);
+
+        if (e.columnIndex == 3) {
+
+            _testMasterManagementSignGubun = "U";
+
+            if (e.data.prev_sign_yn == "0") {
+                alert("먼저 앞 단계 승인이 필요합니다.");
+                return;
+            }
+
+            if (e.data.sign_yn == "1") {
+
+                if ($("#TestMasterManagement3SearchForm input[name=current_revision_yn]").prop("checked")) {
+                    alert("사용중인 개정의 서명을 취소할 수 없습니다.");
+                    return;
+                }
+
+                if (e.data.next_sign_yn == "1") {
+                    alert("이미 다음 단계가 승인 되어 있습니다.\n먼저 다음 단계 승인을 삭제(취소)해주세요. ");
+                    return;
+                }
+
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                    _testMasterManagementSignGubun = "D";
+                } else {
+                    return;
+                }
+
+            }
+
+            var popup = $("#TestMasterManagementSignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#TestMasterManagementSignPopupTemplate"));
+            popup.show();
+
+        }
+    }
+
+    // 전자서명 입력
+    function TestMasterManagementSignSubmit() {
+
+        var data = new FormData($('#TestMasterManagementSignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    alert("잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                var jsonData = JSON.parse(result)[0];
+
+                var isOK = false;
+
+                if (_testMasterManagementSignData.responsible_emp_cd !== jsonData.emp_cd) {
+
+                    $.ajax({
+                        type: 'GET',
+                        url: '/Comm/DelegateCheck',
+                        data: {
+                            emp_cd: jsonData.emp_cd,
+                            sign_set_cd: "1410",
+                            sign_set_seq: _testMasterManagementSignData.sign_set_dt_seq
+                        },
+                        async: false,
+                        success: function (result) {
+
+                            if (result.length > 0) {
+                                isOK = true;
+                            } else {
+                                isOK = false;
+                            }
+                        }
+                    });
+                } else {
+                    isOK = true;
+                }
+
+                if (!isOK) {
+                    alert("권한이 없는 사용자입니다.");
+                    return;
+                }
+
+                var paramData = {
+                    gubun: _testMasterManagementSignGubun,
+                    emp_cd: jsonData.emp_cd,
+                    sign_type: "2",
+                    index_key: _testMasterManagementDetailData[0][0].testmaster_id,
+                    sign_set_dt_id: _testMasterManagementSignData.sign_set_dt_id
+                };
+
+                setTimeout(function () {
+                    $.ajax({
+                        type: 'POST',
+                        url: '/LIMSMaster/TestMasterManagementSignTRX',
+                        data: paramData,
+                        success: function (result) {
+
+                            alert(result.message);
+
+                            //TestMasterManagement3FocusChanged();
+                            TestMasterManagement3RevisionChange();
+                        }
+                    });
+
+                    _testMasterManagementSignGubun = "";
+
+                    var popup = $("#TestMasterManagementSignPopup").dxPopup("instance");
+                    popup.hide();
+                }, 1000);
+            }
+        });
+    }
+
+    // 전자서명 인풋 초기화
+    function ClearTestMasterManagementSignInput() {
+        $('#TestMasterManagementSignForm')[0].reset();
+    }
+
+    // 조회된 시험항목을 통해 시험기준 Edit()
+    function TestMasterManagementEditCriteria(gubun) {
+
+        var form = $('#TestMasterManagement3SearchForm')[0];
+        var formData = new FormData(form);
+
+        switch (gubun) {
+            case "A":
+
+                var grid = $("#TestMasterManagement3TestCriteriaSearchGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("TestMasterManagement3TestCriteriaSearchGrid", grid.option("focusedRowKey"));
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = "";
+                var isOk = true;
+                treeList.getDataSource().store().load().done(function (tmpData) {
+                    if (tmpData.length > 0) {
+                        if (!treeList.option("focusedRowKey")) {
+                            treeListData = tmpData[tmpData.length -1];
+                        }
+                        else {
+                            treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+                        }
+                    }
+                });
+
+                var data = {
+                    test_type: formData.get("test_type"),
+                    item_cd: _testMasterManagementData.item_cd,
+                    test_standard: _testMasterManagementData.test_standard,
+                    process_cd: _testMasterManagementData.process_cd,
+                    revision_no: formData.get("revision_no"),
+                    testitem_cd: gridData.testitem_cd,
+                    addtype: "A"
+                };
+
+                data.teststandardmaster_id = treeListData.teststandardmaster_id;
+
+                break;
+
+            case "B":
+
+                var grid = $("#TestMasterManagement3TestCriteriaSearchGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("TestMasterManagement3TestCriteriaSearchGrid", grid.option("focusedRowKey"));
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = "";
+                var isOk = true;
+                treeList.getDataSource().store().load().done(function (tmpData) {
+                    if (tmpData.length > 0) {
+                        if (!treeList.option("focusedRowKey")) {
+                            treeListData = tmpData[tmpData.length - 1];
+                        }
+                        else {
+                            treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+                        }
+                    }
+                    else {
+                        isOk = false;
+                    }
+                });
+
+                if (!isOk) {
+                    alertError("상위가될 시험항목이 없습니다.");
+                    return;
+                }
+
+                var data = {
+                    test_type: formData.get("test_type"),
+                    item_cd: _testMasterManagementData.item_cd,
+                    test_standard: _testMasterManagementData.test_standard,
+                    process_cd: _testMasterManagementData.process_cd,
+                    revision_no: formData.get("revision_no"),
+                    testitem_cd: gridData.testitem_cd,
+                    addtype: "B"
+                };
+
+                data.teststandardmaster_id = treeListData.teststandardmaster_id;
+
+                break;
+
+            case "C":
+
+                var grid = $("#TestMasterManagement3TestCriteriaSearchGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("TestMasterManagement3TestCriteriaSearchGrid", grid.option("focusedRowKey"));
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = "";
+                var isOk = true;
+
+                treeList.getDataSource().store().load().done(function (tmpData) {
+                    if (tmpData.length > 0) {
+                        if (!treeList.option("focusedRowKey")) {
+                            treeListData = tmpData[tmpData.length - 1];
+                        }
+                        else {
+                            treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+                        }
+                    }
+                });
+                
+
+                var data = {
+                    test_type: formData.get("test_type"),
+                    item_cd: _testMasterManagementData.item_cd,
+                    test_standard: _testMasterManagementData.test_standard,
+                    process_cd: _testMasterManagementData.process_cd,
+                    revision_no: formData.get("revision_no"),
+                    testitem_cd: gridData.testitem_cd,
+                    addtype: "C"
+                };
+
+                data.teststandardmaster_id = treeListData.teststandardmaster_id;
+
+                break;
+
+            case "D":
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = "";
+                var isOk = true;
+                treeList.getDataSource().store().load().done(function (tmpData) {
+                    if (tmpData.length > 0) {
+                        if (!treeList.option("focusedRowKey")) {
+                            treeListData = tmpData[tmpData.length - 1];
+                        }
+                        else {
+                            treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+                        }
+                    }
+                    else {
+                        isOk = false;
+                    }
+                });
+
+                if (!isOk) {
+                    alertError("삭제할 시험항목이 없습니다.");
+                    return;
+                }
+
+                var data = {
+                    testmaster_id: treeListData.testmaster_id,
+                    teststandardmaster_id: treeListData.teststandardmaster_id,
+                    addtype: "D"
+                };
+
+                break;
+
+            case "UP":
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+
+                var index = _testMasterManagementDetailData[1].indexOf(treeListData);
+
+                if (index < 1) {
+                    return;
+                }
+
+                if (parseInt(treeListData.level) > parseInt(_testMasterManagementDetailData[1][index-1].level)) {
+                    alert("같은 레벨에서만 이동이 가능합니다.!!!");
+                    return;
+                }
+
+                var data = {
+                    testmaster_id: treeListData.testmaster_id,
+                    teststandardmaster_id: treeListData.teststandardmaster_id,
+                    addtype: "UP"
+                };
+
+                break;
+
+            case "DOWN":
+
+                var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+                var treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+
+                var index = _testMasterManagementDetailData[1].indexOf(treeListData);
+
+                if (index >= treeList.option("dataSource").length - 1 ) {
+                    return;
+                }
+
+                if (parseInt(treeListData.level) > parseInt(_testMasterManagementDetailData[1][index + 1].level)) {
+                    alert("같은 레벨에서만 이동이 가능합니다.!!!");
+                    return;
+                }
+
+                var treeListData2 = _testMasterManagementDetailData[1][index + 1];
+
+                var isChk = false;
+
+                if (treeListData.code_type === "G" && treeListData.level == "1" && treeListData.level_confirm !== "0" && treeListData.level !== treeListData2.level2) {
+                    for (var k = index + 1; k < treeList.option("dataSource").length; k++)
+                    {
+                        if (parseInt(treeListData.level_confirm) > parseInt(_testMasterManagementDetailData[1][k].level_confirm)) {
+                            isChk = true;
+                        }
+
+                        else {
+                            isChk = false;
+                            break;
+                        }
+
+                    }
+                    if (isChk) return;
+                }
+
+
+                //하위 그룹일 경우 다음 레벨을 찾아 확인 후 없다면 이동 불가
+                if (treeListData.code_type === "G" && treeListData.level != "1" && treeListData.level_confirm === "0") {
+
+                    for (var m = index + 1; m <= treeList.option("dataSource").length; m++)
+                    {
+                        if (m == index) {
+                            isChk = false;
+                            return;
+                        }
+
+                        //하위 level_confirm =0 , 각 하위 레벨 비교
+                        if (treeListData.level_confirm === _testMasterManagementDetailData[1][m].level_confirm) {
+                            if (parseInt(treeListData.level) < parseInt(_testMasterManagementDetailData[1][m].level)) {
+                                isChk = false;
+                            }
+                            else if (parseInt(treeListData.level) === parseInt(_testMasterManagementDetailData[1][m].level)) {
+                                isChk = false;
+                                break;
+                            }
+
+                        }
+                        else isChk = true;
+
+                        if (isChk) {
+                            alert("같은 레벨에서만 이동이 가능합니다.!!!");
+                            return;
+                        }
+                    }
+                }
+
+                var data = {
+                    testmaster_id: treeListData.testmaster_id,
+                    teststandardmaster_id: treeListData.teststandardmaster_id,
+                    addtype: "DOWN"
+                };
+
+                break;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestMasterManagementTestCriteriaTRX',
+            data: data,
+            dataType: "json",
+            success: function (result) {
+                TestMasterManagement3RevisionChange();
+            }
+        });
+    }
+
+    // 시험기준 트리리스트 툴바
+    function TestMasterManagement3TestCriteriaToolbar(e) {
+
+        //e.toolbarOptions.items.unshift(
+        //{
+        //    location: "before",
+        //    widget: "dxButton",
+        //    options: {
+        //        text: "항목추가",
+        //        width: 82,
+        //        type: "success",
+        //        stylingMode: "contained",
+        //        onClick: function (e) {
+        //            TestMasterManagement3TestCriteriaShowPopup("I");
+        //        }
+        //    }
+        //    }, {
+        //    location: "before",
+        //    widget: "dxButton",
+        //    options: {
+        //        text: "하위추가",
+        //        width: 82,
+        //        type: "success",
+        //        stylingMode: "contained",
+        //        onClick: function (e) {
+        //            TestMasterManagement3TestCriteriaShowPopup("I2");
+        //        }
+        //    }
+        //}, {
+        //    location: "before",
+        //    widget: "dxButton",
+        //    options: {
+        //        text: "항목수정",
+        //        width: 82,
+        //        type: "success",
+        //        stylingMode: "contained",
+        //        onClick: function (e) {
+        //            TestMasterManagement3TestCriteriaShowPopup("U");
+        //        }
+        //    }
+        //}, {
+        //    location: "before",
+        //    widget: "dxButton",
+        //    options: {
+        //        text: "항목삭제",
+        //        width: 82,
+        //        type: "danger",
+        //        stylingMode: "contained",
+        //        onClick: function (e) {
+
+        //            if (_testMasterManagementCRUDStatus !== "U") {
+        //                alert("수정중일때만 삭제 가능합니다.");
+        //                return;
+        //            }
+
+        //            _testMasterManagementTestItemCRUDStatus = "D";
+        //            TestMasterManagementTestItemSubmit(true);
+
+        //        }
+        //    }
+        //});
+
+        var toolbarItems = e.toolbarOptions.items;
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton" || item.name == "exportButton" || item.name == "addRowButton") {
+                item.visible = false;
+            }
+        })
+    }
+
+    // 시험 항목명 팝업
+    function TestMasterManagement3TestCriteriaShowPopup(status) {
+
+        if (_testMasterManagementCRUDStatus !== "U") {
+            alert("수정중일때만 입력 가능합니다.");
+            return;
+        }
+
+        _testMasterManagementTestItemCRUDStatus = status;
+
+        var popup = $("#TestMasterManagementTestItemPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#TestMasterManagementTestItemPopupTemplate"));
+        popup.show();
+    }
+
+    // 입력된 시험 항목명 트리리스트에 입력
+    function TestMasterManagementTestItemSubmit(isOK) {
+
+        _testMasterManagementAddType = "";
+
+        if (isOK) {
+
+            _testMasterManagementTestItemNm = $("#TestMasterManagementTestItemForm input[name=testitem_nm]").val();
+
+            var popup = $("#TestMasterManagementTestItemPopup").dxPopup("instance");
+            popup.hide();
+
+            var treeList = $("#TestMasterManagement3TestCriteriaGrid").dxTreeList("instance");
+
+            if (_testMasterManagementTestItemCRUDStatus === "I") {
+                _testMasterManagementAddType = "A";
+                treeList.addRow();
+            }
+            else if (_testMasterManagementTestItemCRUDStatus === "I2") {
+                _testMasterManagementAddType = "B";
+                treeList.addRow(treeList.option("focusedRowKey"));
+                //console.log(treeList.option("focusedRowKey"));
+            }
+            else if (_testMasterManagementTestItemCRUDStatus === "U") {
+
+                var treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/LIMSMaster/TestMasterManagementTestItemUpdate',
+                    data: {
+                        testitem_cd: treeListData.testitem_cd,
+                        testitem_nm: _testMasterManagementTestItemNm
+                    },
+                    success: function (result) {
+                        TestMasterManagement3RevisionChange();
+                        //treeList.cellValue(treeList.getRowIndexByKey(treeList.option("focusedRowKey")), "teststandard_nm", _testMasterManagementTestItemNm);
+                        //treeList.cellValue(treeList.getRowIndexByKey(treeList.option("focusedRowKey")), "testitem_nm", _testMasterManagementTestItemNm);
+                    }
+                });
+            }
+            else if (_testMasterManagementTestItemCRUDStatus === "D") {
+                treeList.deleteRow(treeList.getRowIndexByKey(treeList.option("focusedRowKey")));
+            }
+
+        } else {
+            var popup = $("#TestMasterManagementTestItemPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+    }
+
+    // 신규 로우 추가시 입력된 시험 항목명 트리리스트에 입력
+    function TestMasterManagement3TestCriteriaNewRow(e) {
+        e.data.display_nm = _testMasterManagementTestItemNm;
+        e.data.testitem_nm = _testMasterManagementTestItemNm;
+        e.data.addtype = _testMasterManagementAddType;
+    }
+
+    // 시험기준 입력
+    function TestMasterManagementTestCriteriaInsert(info) {
+
+        var form = $('#TestMasterManagement3SearchForm')[0];
+        var formData = new FormData(form);
+
+        var data = info.data;
+
+        data.gubun = "I";
+        data.testmaster_id = _testMasterManagementData.testmaster_id;
+        data.test_type = formData.get("test_type");
+        data.item_cd = _testMasterManagementData.item_cd;
+        data.test_standard = _testMasterManagementData.test_standard;
+        data.process_cd = _testMasterManagementData.process_cd;
+        data.revision_no = formData.get("revision_no");
+
+        if ($("#TestMasterManagement3TestCriteriaGrid").dxTreeList("option", "dataSource").length > 0) {
+            var treeListData = treeListGetFocusedRowData("TestMasterManagement3TestCriteriaGrid");
+            data.teststandardmaster_id = treeListData.teststandardmaster_id;
+        }
+
+        _testMasterManagementChanges.push(data);
+
+    }
+
+    // 시험기준 수정
+    function TestMasterManagementTestCriteriaUpdate(info) {
+
+        var data = info.data;
+
+        data.gubun = "U";
+
+        _testMasterManagementChanges.push(data);
+
+    }
+
+    // 시험기준 삭제
+    function TestMasterManagementTestCriteriaDelete(info) {
+
+        var data = info.data;
+
+        data.gubun = "D";
+
+        _testMasterManagementChanges.push(data);
+
+    }
+
+    // 공통규격 그리드 품목 조회 팝업
+    function TestMasterManagement3CommonSpecificationGridPopup(e) {
+
+        if (!_testMasterManagementIsEditable) {
+            return;
+        }
+
+        _testMasterManagementCellClickEvent = e;
+
+        if (e.columnIndex == 1) {
+            var itemPopup = $("#TestMasterManagement3Item2Popup").dxPopup("instance");
+            itemPopup.show();
+        }
+    }
+
+    // 품목 조회 팝업 로우 더블클릭 이벤트
+    function TestMasterManagement3Item2RowDblClick(selectedItem) {
+
+        var data = selectedItem.data;
+
+        var tabs = $("#TestMasterManagement3TabPanel").dxTabPanel("instance");
+        var tabIndex = tabs.option("selectedIndex");
+
+        switch (tabIndex) {
+
+            case 2:
+
+                var grid = $("#TestMasterManagement3CommonSpecificationGrid").dxDataGrid("instance");
+
+                grid.cellValue(_testMasterManagementCellClickEvent.rowIndex, "item_cd", data.item_cd);
+                grid.cellValue(_testMasterManagementCellClickEvent.rowIndex, "item_nm", data.item_nm);
+
+                break;
+        }
+
+        itemPopup = $("#TestMasterManagement3Item2Popup").dxPopup("instance").hide();
+    }
+
+    // 공통규격 입력
+    function TestMasterManagement3CommonSpecificationInsert(info) {
+        var data = info.data;
+
+        data.gubun = "I";
+        data.testmaster_id = _testMasterManagementDetailData[0][0].testmaster_id;
+
+        _testMasterManagementChanges.push(data);
+    }
+
+    // 공통규격 수정
+    function TestMasterManagement3CommonSpecificationUpdate(info) {
+        var data = info.data;
+
+        data.gubun = "U";
+
+        _testMasterManagementChanges.push(data);
+    }
+
+    // 공통규격 삭제
+    function TestMasterManagement3CommonSpecificationDelete(info) {
+        var data = info.data;
+
+        data.gubun = "D";
+
+        _testMasterManagementChanges.push(data);
+    }
+
+    // 규격복사 조회
+    function TestMasterManagementExistingSpecificationSearch() {
+
+        var item_cd = $("#TestMasterManagementItemCd1").val();
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagementSelectExistingSpecification',
+            dataType: "json",
+            data: {
+                item_cd: item_cd
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("option", "dataSource", jsonData);
+                    $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("option", "focusedRowIndex", 0);
+
+                } catch (e) {
+                    $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("option", "dataSource", []);
+                    $("#TestMasterManagement3ExistingSpecificationGrid2").dxDataGrid("option", "dataSource", []);
+                    $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+
+    }
+
+    // 규격복사 그리드 포커스 변경
+    function TestMasterManagement3ExistingSpecificationFocusChanged() {
+
+        var grid = $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("instance");
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagementSelectExistingSpecificationDetail',
+            dataType: "json",
+            data: {
+                testmaster_id: grid.option("focusedRowKey")
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    $("#TestMasterManagement3ExistingSpecificationGrid2").dxDataGrid("option", "dataSource", jsonData);
+
+                } catch (e) {
+                    $("#TestMasterManagement3ExistingSpecificationGrid2").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 규격복사 복사
+    function TestMasterManagementExistingSpecificationCopy() {
+
+        if (_testMasterManagementCRUDStatus !== "U") {
+            alert("수정상태에서 작업할 수 있습니다.");
+            return;
+        }
+
+        var grid = $("#TestMasterManagement3ExistingSpecificationGrid1").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("복사할 시험규격을 선택하십시요.");
+            return;
+        }
+
+        var gridData = getGridRowByKey("TestMasterManagement3ExistingSpecificationGrid1", grid.option("focusedRowKey"));
+
+        var data = {
+            test_type: _testMasterManagementData.test_type,
+            item_cd: _testMasterManagementData.item_cd,
+            test_standard: _testMasterManagementData.test_standard,
+            process_cd: _testMasterManagementData.process_cd,
+            revision_no: $("#TestMasterManagement3SearchForm select[name=revision_no]").val(),
+            copy_test_type: gridData.test_type,
+            copy_item_cd: gridData.item_cd,
+            copy_test_standard: gridData.test_standard,
+            copy_process_cd: gridData.process_cd
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestMasterManagementExistingSpecificationCopy',
+            dataType: "json",
+            data: data,
+            success: function (result) {
+
+                alert(result.message);
+
+            }
+        })
+    }
+
+    // 외부규격복사 조회
+    function TestMasterManagementExternalSpecificationSearch() {
+
+        var item_cd = $("#TestMasterManagementItemCd2").val();
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagementSelectExternalSpecification',
+            dataType: "json",
+            data: {
+                item_cd: item_cd
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("option", "dataSource", jsonData);
+                    $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("option", "focusedRowIndex", 0);
+
+                } catch (e) {
+                    $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("option", "dataSource", []);
+                    $("#TestMasterManagement3ExternalSpecificationGrid2").dxDataGrid("option", "dataSource", []);
+                    $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+
+    }
+
+    // 외부규격복사 그리드 포커스 변경
+    function TestMasterManagementExternalSpecificationFocusChanged() {
+
+        var grid = $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("instance");
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestMasterManagementSelectExternalSpecificationDetail',
+            dataType: "json",
+            data: {
+                testmaster_id: grid.option("focusedRowKey")
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    $("#TestMasterManagement3ExternalSpecificationGrid2").dxDataGrid("option", "dataSource", jsonData);
+
+                } catch (e) {
+                    $("#TestMasterManagement3ExternalSpecificationGrid2").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 외부규격복사 복사
+    function TestMasterManagementExternalSpecificationCopy() {
+
+        if (_testMasterManagementCRUDStatus !== "U") {
+            alert("수정상태에서 작업할 수 있습니다.");
+            return;
+        }
+
+        var grid = $("#TestMasterManagement3ExternalSpecificationGrid1").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("복사할 시험규격을 선택하십시요.");
+            return;
+        }
+
+        var data = {
+            test_type: _testMasterManagementData.test_type,
+            item_cd: _testMasterManagementData.item_cd,
+            test_standard: _testMasterManagementData.test_standard,
+            process_cd: _testMasterManagementData.process_cd,
+            revision_no: $("#TestMasterManagement3SearchForm select[name=revision_no]").val(),
+            copy_testmaster_id: grid.option("focusedRowKey")
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestMasterManagementExternalSpecificationCopy',
+            dataType: "json",
+            data: data,
+            success: function (result) {
+
+                alert(result.message);
+
+            }
+        })
+
+    }
+
+    // 개정 사용 여부 체크
+    function TestMasterManagementUseYn(gubun) {
+
+        if (!$("#TestMasterManagement3SearchForm input[name=approve_yn]").prop("checked")) {
+            alert("승인된 후 사용할 수 있습니다.");
+            return;
+        }
+
+        var data = {
+            test_type: _testMasterManagementData.test_type,
+            item_cd: _testMasterManagementData.item_cd,
+            test_standard: _testMasterManagementData.test_standard,
+            process_cd: _testMasterManagementData.process_cd,
+            revision_no: $("#TestMasterManagement3SearchForm select[name=revision_no]").val(),
+            gubun: gubun
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestMasterManagementUseYn',
+            dataType: "json",
+            data: data,
+            success: function (result) {
+
+                alert(result.message);
+                TestMasterManagement3Search();
+
+            }
+        })
+    }
+
+    //#endregion
+
+    function TestMasterManagement3TestCriteriaEditibleNode(e) {
+
+        if (e.parentType === "dataRow") {
+            if (e.row.node.level <= 0 && e.row.node.hasChildren) {
+                e.editorOptions.visible = false;
+            }
+
+            if (e.dataField == "display_nm") {
+                e.editorOptions.disabled = true;
+            }
+            if (e.dataField == "testitem_cd") {
+                e.editorOptions.disabled = true;
+            }
+        }
+    }
+
+    function TestMasterManagementPrintTestMethod() {
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+        var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+
+        if (!data.current_revision_no) {
+            alertError("등록된 시험규격이 없습니다.");
+            return;
+        }
+
+        var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "LIMSMaster", RptFileName: "TestSpecificationMethodCR" },
+            objSp: {
+                SpName: "SP_TestMasterManagement3"
+                , GUBUN: "TSM_CR"
+                , reportParam: "test_type:" + _testMasterManagementData.test_type
+                    + ";item_cd:" + _testMasterManagementData.item_cd
+                    + ";test_standard:" + _testMasterManagementData.test_standard
+                    + ";process_cd:" + _testMasterManagementData.process_cd
+                    + ";testmaster_id:" + _testMasterManagementData.testmaster_id
+                    + ";revision_no:" + $("#TestMasterManagement3SearchForm select[name=revision_no]").val()
+                    + ";sign_set_cd:1410"
+            },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "TSMTable,SIGNTable" }
+        });
+
+        report.addParam({
+            objFile: { path: "LIMSMaster", RptFileName: "TestMethodCR" },
+            objSp: {
+                SpName: "SP_TestMasterManagement3"
+                , GUBUN: "SM2_CR"
+                , reportParam: "test_type:" + _testMasterManagementData.test_type
+                    + ";item_cd:" + _testMasterManagementData.item_cd
+                    + ";test_standard:" + _testMasterManagementData.test_standard
+                    + ";process_cd:" + _testMasterManagementData.process_cd
+                    + ";testmaster_id:" + _testMasterManagementData.testmaster_id
+                    + ";revision_no:" + $("#TestMasterManagement3SearchForm select[name=revision_no]").val()
+                    + ";sign_set_cd:1410"
+            },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "SSMTable3,SIGNTable" }
+        });
+
+        report.preview();
+        //report.print();
+    }
+
+    function TestMasterManagementPrintRevision() {
+
+        var grid = $("#TestMasterManagement3Grid").dxDataGrid("instance");
+        var data = getGridRowByKey('TestMasterManagement3Grid', grid.option("focusedRowKey"));
+
+        if (!data.current_revision_no) {
+            alertError("등록된 시험규격이 없습니다.");
+            return;
+        }
+
+        var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "LIMSMaster", RptFileName: "RevisionRecordCR" },
+            objSp: {
+                SpName: "SP_TestMasterManagement3"
+                , GUBUN: "SR_CR"
+                , reportParam: "test_type:" + _testMasterManagementData.test_type
+                    + ";item_cd:" + _testMasterManagementData.item_cd
+                    + ";test_standard:" + _testMasterManagementData.test_standard
+                    + ";process_cd:" + _testMasterManagementData.process_cd
+                    + ";testmaster_id:" + _testMasterManagementData.testmaster_id
+                    + ";revision_no:" + $("#TestMasterManagement3SearchForm select[name=revision_no]").val()
+            },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "" }
+        });
+
+        report.preview();
+        //report.print();
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="TestMasterManagement3Item2Popup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("TestMasterManagementSignPopup")
+            .Width(400)
+            .Height(200)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("ClearTestMasterManagementSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("TestMasterManagementSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="TestMasterManagementSignForm" class="mb-1">
+
+            <div class="input-wrapper mb-1">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+            </div>
+            <div class="input-wrapper">
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+        </form>
+        <div class="align-end-only">
+            <button class="btn btn-secondary" onclick="TestMasterManagementSignSubmit()">확인</button>
+        </div>
+    }
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("TestMasterManagementTestItemPopup")
+            .Width(400)
+            .Height(150)
+            .ShowTitle(true)
+            .Title("시험 항목 관리")
+            //.OnHidden("ClearTestMasterManagementSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("TestMasterManagementTestItemPopupTemplate"))
+    {
+        <form id="TestMasterManagementTestItemForm" class="mb-1">
+
+            <div class="input-wrapper mb-1">
+                <label class="col-3">항목 이름</label>
+                <input type="text" class="col-8 form-control" name="testitem_nm">
+            </div>
+        </form>
+        <div class="align-end-only">
+            <button class="btn btn-secondary" onclick="TestMasterManagementTestItemSubmit(true)">확인</button>
+            <button class="btn btn-secondary" onclick="TestMasterManagementTestItemSubmit(false)">취소</button>
+        </div>
+    }
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "NO", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="A" id="necessary_check1" name="necessary_check" checked="checked" onclick="TestMasterManagement3Search()" />
+                        </div>
+                        <span class="form-control-sm"><label for="necessary_check1">등록</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="B" id="necessary_check2" name="necessary_check" onclick="TestMasterManagement3Search()" />
+                        </div>
+                        <span class="form-control-sm"><label for="necessary_check2">전체</label></span>
+
+                        <select class="form-control" name="item_gb">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM001")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">개정순번</span>
+                        </div>
+                        <select class="form-control" name="revision_no" onchange="TestMasterManagement3RevisionChange()">
+                        </select>
+                    </div>
+
+                    <div class="col-1 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">승인여부</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="checkbox" value="Y" name="approve_yn" disabled="disabled" />
+                        </div>
+                    </div>
+
+                    <div class="col-1 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="checkbox" value="Y" name="current_revision_yn" disabled="disabled" />
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" type="button" onclick="TestMasterManagementUseYn('Y')">사용 확인</button>
+                    <button class="btn btn-secondary" type="button" onclick="TestMasterManagementUseYn('N')">해제</button>
+
+                    <button class="btn btn-secondary" type="button" onclick="TestMasterManagementPrintTestMethod()">시험기준 출력</button>
+                    <button class="btn btn-secondary" type="button" onclick="TestMasterManagementPrintRevision()">개정이력 출력</button>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-3 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TestMasterManagement3Grid")
+                    .KeyExpr("id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("registration").Caption("등록")
+                            .Width("45")
+                            .DataType(GridColumnDataType.Boolean)
+                            .TrueText("Y")
+                            .FalseText("N")
+                            .CalculateCellValue(@"function(rowData) { return (rowData.registration == ""Y"" || rowData.registration == true); }");
+                        c.Add().DataField("display_nm_item").Caption("품목");
+                        c.Add().DataField("process_nm").Caption("공정");
+                        c.Add().DataField("item_cd").Caption("코드");
+                    })
+                    .OnFocusedRowChanged("TestMasterManagement3FocusChanged")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-9 pl-0">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().TabPanel()
+                    .ID("TestMasterManagement3TabPanel")
+                    .Height("100%")
+                    .SelectedIndex(0)
+                    .Loop(false)
+                    .AnimationEnabled(false)
+                    .SwipeEnabled(false)
+                    //.OnTitleClick("TestMasterManagement3SetDetail")
+                    .OnSelectionChanged("TestMasterManagement3SetDetail")
+                    .Items(config =>
+                    {
+                        config.Add().Title("개정 내역").Template(new JS("$('#TestMasterManagement3TabContent1')"));
+                        config.Add().Title("시험 기준").Template(new JS("$('#TestMasterManagement3TabContent2')"));
+                        config.Add().Title("공통 규격").Template(new JS("$('#TestMasterManagement3TabContent3')"));
+                        config.Add().Title("규격 복사").Template(new JS("$('#TestMasterManagement3TabContent4')"));
+                        config.Add().Title("외부규격 복사").Template(new JS("$('#TestMasterManagement3TabContent5')"));
+                    })
+                )
+                @*개정내역*@
+                @using (Html.DevExtreme().NamedTemplate("TestMasterManagement3TabContent1"))
+                {
+                    <div>
+
+                        <form id="TestMasterManagement3WriteForm" class="required-star margin-top margin-bottom">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">규격</label>
+                                <div class="input-group col-2">
+                                    <select class="form-control required" name="test_standard_1">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="input-group col-2">
+                                    <select class="form-control" name="test_standard_2">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="input-group col-2">
+                                    <select class="form-control" name="test_standard_3">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="input-group col-2">
+                                    <select class="form-control" name="test_standard_4">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2"></label>
+                                <div class="input-group col-2">
+                                    <select class="form-control" name="test_standard_5">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">공정</label>
+                                <div class="input-group col-2">
+                                    <select class="form-control" name="process_cd">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공정", "D", "")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">개정일자</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control datepicker" name="revision_date" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">개정번호</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="revision_doc_no" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">개정사유</label>
+                                <div class="input-group col-6">
+                                    <input type="text" class="form-control" name="testmaster_remark" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">비고</label>
+                                <div class="input-group col-6">
+                                    <input type="text" class="form-control" name="testmaster_comment" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관조건/보관온도</label>
+                                <div class="input-group col-6">
+                                    <input type="text" class="form-control" readonly="readonly" name="item_keep_condition" />
+                                </div>
+                            </div>
+
+                            @*<div class="input-wrapper">
+                        <label class="col-2">시험일지 및 첨부파일</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" name="doc_cnt" />
+                        </div>
+                        <button class="btn btn-secondary col-2">파일 등록/확인</button>
+                    </div>*@
+
+                            <div class="input-wrapper">
+                                <label class="col-2">샘플 채취량(표준)</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control" name="sample_qty" />
+                                </div>
+                                <div class="input-group col-1">
+                                    <select class="form-control" name="sample_unit">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM012")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            @*<div class="input-wrapper">
+                        <label class="col-2">샘플 채취량(평균)</label>
+
+                    </div>*@
+
+                            @*<div class="input-wrapper">
+                        <label class="col-2">시험용 검체량(표준)</label>
+                        <div class="input-group col-2">
+                            <input type="number" class="form-control" />
+                        </div>
+                    </div>*@
+
+                            <div class="input-wrapper">
+                                <label class="col-2">시험용 검체(1회 시험량)</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control" name="sample_test_qty" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">미생물 검체(1회 시험량)</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control" name="sample_microbe_qty" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관용 검체량</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control" name="sample_deposit_qty" />
+                                </div>
+
+                                @*<label class="col-2">보관위치</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                        </div>*@
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">안정성 검체(전항목시)</label>
+                                <div class="input-group col-2">
+                                    <input type="number" class="form-control" name="sample_stability_qty" />
+                                </div>
+
+                                @*<label class="col-2">보관위치</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                        </div>*@
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">표준시험기간</label>
+                                <div class="input-group col-2">
+                                    <input type="text" class="form-control" name="test_term" />
+                                </div>
+
+                                <div class="align-end-only">
+                                    <button type="button" class="btn btn-secondary" id="TestMasterManagementAttatchDocBtn">등록</button>
+                                    <button type="button" class="btn btn-secondary" id="TestMasterManagementAttatchDocDownloadBtn">열기</button>
+                                    <button type="button" class="btn btn-secondary" id="TestMasterManagementAttatchDocDeleteBtn">삭제</button>
+                                </div>
+
+                                @*<label class="col-2">보관위치</label>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-2">
+                            <input type="text" class="form-control" />
+                        </div>*@
+                            </div>
+
+                        </form>
+
+                        <div class="row">
+
+                            <div class="col-6 pr-1">
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("TestMasterManagement3SignTable")
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .ShowRowLines(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .KeyExpr("sign_set_dt_id")
+                                    .OnCellClick("TestMasterManagementSign")
+                                    .Height(137)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Columns(columns =>
+                                    {
+                                    columns.Add()
+                                            .DataField("displayfield")
+                                            .Width("20%")
+                                            .Caption("구분");
+                                    columns.Add()
+                                            .DataField("sign_emp_nm")
+                                            .Width("20%")
+                                            .Caption("서명자");
+                                    columns.Add()
+                                            .DataField("sign_time")
+                                            .Caption("서명일자");
+                                    columns.Add()
+                                            .AllowFiltering(false)
+                                            .AllowSorting(false)
+                                            .DataField("sign_image")
+                                            .Name("sign_image")
+                                            .Caption("서명")
+                                            .Width("20%")
+                                            .CellTemplate(@<text>
+                                                    <div>
+                                                        <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                                    </div>
+                                                </text>);
+                                        })
+                                )
+                            </div>
+
+                            <div class="col-6 pl-1">
+
+                                @(Html.DevExtreme().FileUploader()
+                                    .Visible(false)
+                                    .ID("TestMasterManagement3FileUploader")
+                                    .Name("TestMasterManagementAttatchedFile")
+                                    .Multiple(false)
+                                    .Accept(".hwp,.doc,.docx,.dot,.pdf,.rtf")
+                                    .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                                    .UploadUrl(Url.Action("UploadChangeAttachedFile", "LIMSMaster"))
+                                    .UploadMode(FileUploadMode.Instantly)
+                                    .MaxFileSize(int.MaxValue)
+                                    .OnValueChanged("TestMasterManagement3UploadAttachedFile")
+                                    .OnUploaded("TestMasterManagementSelectDocList")
+                                )
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("TestMasterManagement3FileGrid")
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .ShowRowLines(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .KeyExpr("worksheet_file_id")
+                                    .Height(137)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Columns(columns =>
+                                    {
+                                        columns.Add()
+                                            .DataField("doc_file_name")
+                                            .Caption("파일명");
+                                    })
+                                )
+                            </div>
+
+                        </div>
+
+                        <div>
+                            @(Html.DevExtreme().DataGrid()
+                            .ID("TestMasterManagement3RevisionGrid")
+                            .KeyExpr("testmaster_id")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("275")
+                            .ShowBorders(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                            .OnToolbarPreparing("HideToolbarButton")
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            //.Editing(editing =>
+                            //{
+                            //    editing.Mode(GridEditMode.Batch);
+                            //    editing.AllowDeleting(true);
+                            //    editing.UseIcons(true);
+                            //})
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("revision_no").Caption("개정순번");
+                                c.Add().Lookup(lookup => lookup
+                                    .DataSource(d => d.WebApi()
+                                        .RouteName("Comm")
+                                        .LoadAction("GetCommon")
+                                        .LoadMethod("GET")
+                                        .LoadParams(new
+                                        {
+                                            pGubun = "공통코드",
+                                            pDiv = "D",
+                                            pStrWhere = "CM003",
+                                            pTableName = "gubun"
+                                        }).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    ).DataField("test_standard1")
+                                    .Caption("규격");
+                                c.Add().DataField("process_nm1").Caption("공정");
+                                c.Add().DataField("revision_date").Caption("적용일자");
+                                c.Add().DataField("revision_doc_no").Caption("개정번호");
+                                c.Add().DataField("testmaster_remark").Caption("개정사유");
+                                c.Add().DataField("testmaster_comment").Caption("비고");
+
+                                c.Add().DataField("current_revision_yn").Caption("현개정").Width("10%")
+                                    .DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.current_revision_yn == ""Y"" || rowData.current_revision_yn == true); }");
+                            })
+                            //.OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                            )
+                        </div>
+
+                    </div>
+                }
+
+                @*시험기준*@
+                @using (Html.DevExtreme().NamedTemplate("TestMasterManagement3TabContent2"))
+                {
+                    <div class="row ml-0 mr-0" style="height:inherit;">
+
+                        <div class="col-8 pr-0 pl-0" id="TestMasterManagement3TabContent2Div1">
+
+                            <div class="custom-control custom-switch pr-1 margin-10">
+                                <input type="checkbox" class="custom-control-input" id="TestMasterManagement3Toggle" onclick="TestMasterManagement3Toggle()" checked="checked">
+                                <label class="custom-control-label" for="TestMasterManagement3Toggle">시험 항목 조회</label>
+                            </div>
+
+                            <div>
+
+                                @(Html.DevExtreme().TreeList()
+                                    .ID("TestMasterManagement3TestCriteriaGrid")
+                                    .KeyExpr("teststandardmaster_id")
+                                    .ParentIdExpr("parent_id")
+                                    .RootValue("0")
+                                    .FocusedRowEnabled(true)
+                                    .DataSource(new JS("SetEmptyData"))
+                                    .OnToolbarPreparing("TestMasterManagement3TestCriteriaToolbar")
+                                    .OnEditorPreparing("TestMasterManagement3TestCriteriaEditibleNode")
+                                    .OnInitNewRow("TestMasterManagement3TestCriteriaNewRow")
+                                    .Scrolling(scrolling =>  scrolling.Mode(TreeListScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height("753")
+                                    .ShowBorders(true)
+                                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .OnRowInserted("TestMasterManagementTestCriteriaInsert")
+                                    .OnRowUpdated("TestMasterManagementTestCriteriaUpdate")
+                                    .OnRowRemoved("TestMasterManagementTestCriteriaDelete")
+                                    .ColumnAutoWidth(true)
+                                    .AllowColumnResizing(true)
+                                    .ColumnResizingMode(ColumnResizingMode.Widget)
+                                    .AllowColumnReordering(true)
+                                    .ColumnChooser(cc => cc.Enabled(true))
+                                    .WordWrapEnabled(true)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("display_nm").Caption("시험항목").Width("200").Fixed(true).AllowEditing(false);
+                                        //.CellTemplate(new JS("TestMasterManagement3TestCriteriaCellTemplate"));
+
+                                        c.Add().DataField("teststandard_nm").Caption("시험기준").Width("250");
+                                        //.CellTemplate(new JS("TestMasterManagement3TestCriteriaCellTemplate"));
+
+                                        c.Add().Lookup(lookup => lookup
+                                            .DataSource(d => d.WebApi()
+                                                .RouteName("Comm")
+                                                .LoadAction("GetCommon")
+                                                .LoadMethod("GET")
+                                                .LoadParams(new
+                                                {
+                                                    pGubun = "공통코드",
+                                                    pDiv = "D",
+                                                    pStrWhere = "QC005",
+                                                    pTableName = "gubun"
+                                                }).Key("keyfield"))
+                                            .ValueExpr("keyfield")
+                                            .DisplayExpr("displayfield")
+                                            ).DataField("teststandard_type")
+                                            .Caption("판정유형");
+
+                                        c.Add().DataField("teststandard_min").Caption("최소");
+
+                                        c.Add().DataField("teststandard_max").Caption("최대");
+
+                                        c.Add().Lookup(lookup => lookup
+                                            .DataSource(d => d.WebApi()
+                                                .RouteName("Comm")
+                                                .LoadAction("GetCommon")
+                                                .LoadMethod("GET")
+                                                .LoadParams(new
+                                                {
+                                                    pGubun = "공통코드",
+                                                    pDiv = "D",
+                                                    pStrWhere = "QC020",
+                                                    pTableName = "gubun"
+                                                }).Key("keyfield"))
+                                            .ValueExpr("keyfield")
+                                            .DisplayExpr("displayfield")
+                                            ).DataField("testresult_data_type")
+                                            .Caption("단위").Width(80);
+
+                                        c.Add().DataField("teststandard_validpoint").Caption("유효자리").Width(100);
+
+                                        c.Add().DataField("testitem_inputtime").Caption("공수(분)");
+
+                                        c.Add().DataField("testitem_totaltime").Caption("기간(분)");
+
+                                        c.Add().DataField("statutory_standard").Caption("시험기준(허가)");
+
+                                        c.Add().DataField("teststandard_min_self").Caption("최소(허가)");
+
+                                        c.Add().DataField("teststandard_max_self").Caption("최대(허가)");
+
+                                        c.Add().DataField("dual_data_yn").Caption("설명입력")
+                                            .DataType(GridColumnDataType.Boolean)
+                                            .CalculateCellValue(@"function(rowData) { return (rowData.dual_data_yn == ""Y"" || rowData.dual_data_yn == true); }");
+
+                                        c.Add().DataField("stability_test_yn").Caption("안정성 시헙항목")
+                                            .DataType(GridColumnDataType.Boolean)
+                                            .CalculateCellValue(@"function(rowData) { return (rowData.stability_test_yn == ""Y"" || rowData.stability_test_yn == true); }");
+
+
+                                        c.Add().DataField("fix_content_yn").Caption("고정함량")
+                                           .DataType(GridColumnDataType.Boolean)
+                                           .CalculateCellValue(@"function(rowData) { return (rowData.fix_content_yn == ""Y"" || rowData.fix_content_yn == true); }");
+
+                                        c.Add().DataField("fix_content_rate").Caption("함량(%)");
+
+                                        c.Add().DataField("sample_qty").Caption("샘플량");
+
+                                        //c.Add().DataField("registration").Caption("일상시험관리")
+                                        //   .DataType(GridColumnDataType.Boolean)
+                                        //   .CalculateCellValue(@"function(rowData) { return (rowData.registration == ""Y"" || rowData.registration == true); }");
+
+                                        c.Add().DataField("tester_nm").Caption("시험기기");
+
+                                        c.Add().DataField("dept_cd").Caption("시험파트");
+
+                                        c.Add().DataField("testitem_nm").Visible(false);
+
+                                        c.Add().DataField("addtype").Visible(false);
+
+                                        c.Add().DataField("testitem_cd").Caption("시험항목코드").Visible(false);
+
+
+                                    })
+                                //.OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                                )
+
+                            </div>
+
+                        </div>
+
+                        <div class="col-1" style="padding-top:100px;" id="TestMasterManagement3TabContent2Div2">
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('A')">추가</button>
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('B')">하위추가</button>
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('C')">삽입</button>
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('D')">삭제</button>
+
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('UP')">위로</button>
+                            <button class="btn btn-secondary width-inherit mb-2" onclick="TestMasterManagementEditCriteria('DOWN')">아래로</button>
+                        </div>
+
+                        <div class="col-3 pr-0 pl-0" id="TestMasterManagement3TabContent2Div3" style="border-left: 1px solid rgb(221, 221, 221);">
+
+                            <div class="divName">
+                                <p>시험 항목 조회</p>
+                            </div>
+
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("TestMasterManagement3TestCriteriaSearchGrid")
+                                    .KeyExpr("testitem_cd")
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height("760")
+                                    .ShowBorders(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .ColumnAutoWidth(true)
+                                    .AllowColumnResizing(true)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("testitem_cd").Caption("코드");
+                                        c.Add().DataField("testitem_nm").Caption("시험항목");
+                                        c.Add().DataField("testitem_charge_nm").Caption("담당자");
+                                        c.Add().DataField("testitem_type_nm").Caption("종류");
+                                    })
+                                //.OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                                )
+                            </div>
+
+                        </div>
+
+                    </div>
+                }
+
+                @*공통규격*@
+                @using (Html.DevExtreme().NamedTemplate("TestMasterManagement3TabContent3"))
+                {
+                    <div>
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestMasterManagement3CommonSpecificationGrid")
+                            .KeyExpr("common_standard_id")
+                            //.FocusedRowEnabled(true)
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("797px")
+                            .ShowBorders(true)
+                            .DataSource(new JS("SetEmptyData"))
+                            .OnToolbarPreparing("HideToolbarButton")
+                            .OnCellClick("TestMasterManagement3CommonSpecificationGridPopup")
+                            .OnRowInserted("TestMasterManagement3CommonSpecificationInsert")
+                            .OnRowUpdated("TestMasterManagement3CommonSpecificationUpdate")
+                            .OnRowRemoved("TestMasterManagement3CommonSpecificationDelete")
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Columns(c =>
+                            {
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드",
+                                         pDiv = "D",
+                                         pStrWhere = "QC004",
+                                         pTableName = "gubun"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("test_type")
+                                 .Caption("시험종류");
+
+                                c.Add().DataField("item_cd").Caption("코드").CellTemplate(new JS("TestMasterManagement3CellWithButton"));
+
+                                c.Add().DataField("item_nm").Caption("품목");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드",
+                                         pDiv = "D",
+                                         pStrWhere = "CM003",
+                                         pTableName = "gubun"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("test_standard")
+                                 .Caption("규격");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공정",
+                                         pDiv = "D",
+                                         pStrWhere = "",
+                                         pTableName = "process"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("process_cd")
+                                 .Caption("공정");
+
+                            })
+                        //.OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                        )
+
+                    </div>
+                }
+
+                @*규격복사*@
+                @using (Html.DevExtreme().NamedTemplate("TestMasterManagement3TabContent4"))
+                {
+                    <div>
+
+                        <div class="divName">
+                            <p>기존 규격 선택</p>
+                        </div>
+
+                        <div class="input-wrapper mainTop ml-1">
+
+                            <div class="input-group input-group-sm col-3">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">품목</span>
+                                </div>
+                                <input type="text" class="form-control" name="item_cd" id="TestMasterManagementItemCd1">
+                            </div>
+
+                            <button type="button" class="btn btn-secondary" onclick="TestMasterManagementExistingSpecificationSearch()">조회</button>
+                            <button type="button" class="btn btn-secondary" onclick="TestMasterManagementExistingSpecificationCopy()">복사하기</button>
+
+                        </div>
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestMasterManagement3ExistingSpecificationGrid1")
+                            .KeyExpr("testmaster_id")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("250")
+                            .ShowBorders(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("item_nm").Caption("품목");
+
+                                c.Add().DataField("test_type_nm").Caption("시험종류");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드",
+                                         pDiv = "D",
+                                         pStrWhere = "CM003",
+                                         pTableName = "gubun"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("test_standard")
+                                 .Caption("규격");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공정",
+                                         pDiv = "D",
+                                         pStrWhere = "",
+                                         pTableName = "process"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("process_cd")
+                                 .Caption("공정");
+
+                                c.Add().DataField("revision_no").Caption("개정번호");
+                            })
+                            .OnFocusedRowChanged("TestMasterManagement3ExistingSpecificationFocusChanged")
+                        )
+
+                        <div>
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("TestMasterManagement3ExistingSpecificationGrid2")
+                                .KeyExpr("teststandardmaster_id")
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height("480")
+                                .ShowBorders(true)
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("display_nm").Caption("시험항목");
+                                    c.Add().DataField("teststandard_nm").Caption("시험기준");
+                                    c.Add().DataField("teststandard_type_nm").Caption("판정유형");
+                                    c.Add().DataField("teststandard_min").Caption("최소");
+                                    c.Add().DataField("teststandard_max").Caption("최대");
+                                    c.Add().Lookup(lookup => lookup
+                                        .DataSource(d => d.WebApi()
+                                            .RouteName("Comm")
+                                            .LoadAction("GetCommon")
+                                            .LoadMethod("GET")
+                                            .LoadParams(new
+                                            {
+                                                pGubun = "공통코드",
+                                                pDiv = "D",
+                                                pStrWhere = "QC020",
+                                                pTableName = "gubun"
+                                            }).Key("keyfield"))
+                                        .ValueExpr("keyfield")
+                                        .DisplayExpr("displayfield")
+                                        ).DataField("testresult_data_type")
+                                        .Caption("입력유형");
+                                    c.Add().DataField("teststandard_validpoint").Caption("유효자리");
+
+                                    c.Add().DataField("dual_data_yn").Caption("설명입력")
+                                        .DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return (rowData.dual_data_yn == ""Y"" || rowData.dual_data_yn == true); }");
+
+                                    c.Add().DataField("contents_yn").Caption("함량정보")
+                                        .DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return (rowData.contents_yn == ""Y"" || rowData.contents_yn == true); }");
+                                })
+                            )
+
+                        </div>
+
+                    </div>
+                }
+
+                @*외부규격복사*@
+                @using (Html.DevExtreme().NamedTemplate("TestMasterManagement3TabContent5"))
+                {
+                    <div>
+
+                        <div class="divName">
+                            <p>기존 규격 선택</p>
+                        </div>
+
+                        <div class="input-wrapper mainTop ml-1">
+
+                            <div class="input-group input-group-sm col-3">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">품목</span>
+                                </div>
+                                <input type="text" class="form-control" name="item_cd" id="TestMasterManagementItemCd2">
+                            </div>
+
+                            <button type="button" class="btn btn-secondary" onclick="TestMasterManagementExternalSpecificationSearch()">조회</button>
+                            <button type="button" class="btn btn-secondary" onclick="TestMasterManagementExternalSpecificationCopy()">복사하기</button>
+
+                        </div>
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestMasterManagement3ExternalSpecificationGrid1")
+                            .KeyExpr("testmaster_id")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("250")
+                            .ShowBorders(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("item_nm").Caption("품목");
+
+                                c.Add().DataField("test_type_nm").Caption("시험종류");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드",
+                                         pDiv = "D",
+                                         pStrWhere = "CM003",
+                                         pTableName = "gubun"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("test_standard")
+                                 .Caption("규격");
+
+                                c.Add().Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadMethod("GET")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공정",
+                                         pDiv = "D",
+                                         pStrWhere = "",
+                                         pTableName = "process"
+                                     }).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                                 ).DataField("process_cd")
+                                 .Caption("공정");
+                            })
+                            .OnFocusedRowChanged("TestMasterManagementExternalSpecificationFocusChanged")
+                        )
+
+                        <div>
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("TestMasterManagement3ExternalSpecificationGrid2")
+                                .KeyExpr("teststandardmaster_id")
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height("480")
+                                .ShowBorders(true)
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("display_nm").Caption("시험항목");
+                                    c.Add().DataField("teststandard_nm").Caption("시험기준");
+                                    c.Add().DataField("teststandard_type_nm").Caption("판정유형");
+                                    c.Add().DataField("teststandard_min").Caption("최소");
+                                    c.Add().DataField("teststandard_max").Caption("최대");
+                                    c.Add().Lookup(lookup => lookup
+                                        .DataSource(d => d.WebApi()
+                                            .RouteName("Comm")
+                                            .LoadAction("GetCommon")
+                                            .LoadMethod("GET")
+                                            .LoadParams(new
+                                            {
+                                                pGubun = "공통코드",
+                                                pDiv = "D",
+                                                pStrWhere = "QC020",
+                                                pTableName = "gubun"
+                                            }).Key("keyfield"))
+                                        .ValueExpr("keyfield")
+                                        .DisplayExpr("displayfield")
+                                        ).DataField("testresult_data_type")
+                                        .Caption("입력유형");
+                                    c.Add().DataField("teststandard_validpoint").Caption("유효자리");
+
+                                    c.Add().DataField("dual_data_yn").Caption("설명입력")
+                                        .DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return (rowData.dual_data_yn == ""Y"" || rowData.dual_data_yn == true); }");
+
+                                    c.Add().DataField("contents_yn").Caption("함량정보")
+                                        .DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return (rowData.contents_yn == ""Y"" || rowData.contents_yn == true); }");
+                                })
+                            )
+
+                        </div>
+
+                    </div>
+                }
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

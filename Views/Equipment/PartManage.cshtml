@@ -1,0 +1,493 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.Equipment.PartManage.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeS_part_kind = (DataTable)ViewBag.s_part_kind;
+    var codePart_kind = (DataTable)ViewBag.part_kind;
+    var partPopupData = @Html.Raw(Json.Encode(ViewBag.partPopupData.Data));
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+    // 1. 화면 Load 영역
+    $(function () {
+        // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+'PartManage'+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+'PartManage'+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+'PartManage'+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+        $('select[name=s_part_kind]', $('#' + 'PartManageSearchForm')).val('@srch.S_part_kind');
+        $('input:radio[name=s_use_gb][value="@srch.S_use_gb"]', $('#'+'PartManageSearchForm')).prop('checked', true);
+        $('input:text[name=s_part][value="@srch.S_part"]', $('#'+'PartManageSearchForm')).val('@srch.S_part');
+
+        //1.3. help팝업설정
+        var PartManagePopupColumns = {
+            "part"    : [{ dataField: "part_cd", caption: "부품코드" }, { dataField: "part_nm", caption: "부품명" }]
+           ,"employee": [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+
+        };
+        createPopup('PartManage' + "Part", "부품 조회", @partPopupData, PartManagePopupColumns.part);
+        createPopup('PartManage' + "Emp", "사원 조회", @empPopupData, PartManagePopupColumns.employee);
+
+        //1.4 툴바 활성/비활성
+        PartManageEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=s_part_kind],input[name*=s_use_gb], select[name=s_part]', $('#'+'PartManageSearchForm')).change(function () {
+            PartManageSelect();
+        });
+        $('input[name=s_part]+div>button',$('#'+'PartManageSearchForm')).click(function (event) {
+            PartManageHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+        $('input[name*=_emp_cd]+div>button', $('#'+'PartManageWriteForm')).click(function (event) {
+            PartManageHelpPopUpSearch(event);
+        });
+
+
+        //1.5.3 공통객체
+        //datepicker
+        setDatePicker("#PartManage .datepicker");
+
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var PartManageHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function PartManageHelpPopUpSearch(e) {
+        PartManageHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (PartManageHelpPopUpCurInputName)
+        {
+            case "s_part":
+                popupId = 'PartManage'+"Part";
+                break;
+            case "part_response_emp_cd":
+                popupId = 'PartManage'+"Emp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function PartManagePartRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (PartManageHelpPopUpCurInputName == "s_part") {
+            $("input[name="+PartManageHelpPopUpCurInputName+"]",$('#'+'PartManageSearchForm')).val(data.part_cd);
+        }
+        $("#"+'PartManage'+"PartPopup").dxPopup("instance").hide();
+    }
+
+    // help popup (row DblClick : 팝업선택값  폼에 입력)
+    function PartManageEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = PartManageHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+        if (strIndex > -1) {
+            var inputPrefix = PartManageHelpPopUpCurInputName.substring(0, strIndex);
+            var inputSubfix = PartManageHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name='+inputPrefix+'_emp_cd]', $('#' + 'PartManageWriteForm')).val(data.emp_cd);
+            $('input[name='+inputPrefix+'_emp_nm]', $('#' + 'PartManageWriteForm')).val(data.emp_nm);
+        }
+        $("#" + 'PartManage' + "EmpPopup").dxPopup("instance").hide();
+    }
+
+    // 3. 툴바영역
+    //조회
+    function PartManageSearch() {
+        PartManageSelect();
+    }
+
+    //입력
+    function PartManageInput() {
+        PartManageEditCheck(true, 'I');
+        PartManageWriteFormClear();
+
+    }
+    //수정
+    function PartManageEdit() {
+       PartManageEditCheck(true, 'U');
+    }
+
+    //삭제
+    function PartManageDelete() {
+        PartManageEditCheck(true, 'D');
+        PartManageTrx('PartManageWriteForm', 'PartManageSearchForm');
+
+    }
+    //저장
+    function PartManageSave() {
+        if (UtilView.checkValidForm('PartManageWriteForm'))
+        {
+            PartManageTrx('PartManageWriteForm', 'PartManageSearchForm');
+        }
+    }
+    //취소
+    function PartManageUndo() {
+        PartManageEditCheck(false, 'N');
+        PartManageFocusChanged();
+    }
+
+    // 프린트
+    function PartManagePrint() {
+
+    }
+
+    // 엑셀다운로드
+    function PartManageExcel() {
+
+    }
+
+    // 즐겨찾기
+    function PartManageFavorite() {
+
+    }
+
+    // 트랜잭션처리
+    function PartManageTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+        //UtilView.dataGridTRX(formData, function(){PartManageSelect();});
+        UtilView.dataGridTRX(formData, () => PartManageSelect() );
+    }
+
+
+    // 수정중인지 체크
+    function PartManageEditCheck(nowEdit, status) {
+         // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "PartManageGrid"
+            , "@(pagePrefix)WriteForm"
+            , "part_cd;part_buy_amt;part_in_date;use_gb_cd"
+        );
+    }
+
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function PartManageSelect() {
+        PartManageWriteFormClear();
+        PartManageEditCheck(false, 'N');
+
+        // 메인Grid
+       // var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+        UtilView.dataGridSelect('PartManage' + 'Grid', 'PartManageSearchForm');
+    }
+
+    // 4.2 Row focus changed
+    function PartManageFocusChanged() {
+        PartManageWriteFormClear();
+
+        // datagrid 폼바인딩
+        var gridId = 'PartManage'+"Grid";
+        UtilView.setDataGridFormBind(gridId, 'PartManageWriteForm');
+
+        // 우측 gird바인딩
+        PartManageSelectSub(gridId, 'PartManage' + "SubGrid");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+    function PartManageWriteFormClear() {
+        $('#'+'PartManageWriteForm')[0].reset();
+        $("textarea",$('#'+'PartManageWriteForm')).text("");
+
+        //sub그리드 초기화
+        var gridIds = 'PartManage' + "SubGrid";
+        UtilView.setDataGridFromJson(gridIds, "");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid (사용설비현황)
+    function PartManageSelectSub(sGridId, tGridId) {
+        var sGrid = $('#' + sGridId).dxDataGrid("instance");
+        var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+        var data = { rowkey: gridData.part_cd };
+
+        //var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+        UtilView.dataGridSimpleSelect(tGridId, data, 'SelectSub');
+    }
+
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)PartPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+
+    
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">부품 코드 등록</h4>*@
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">부품종류</span>
+                        </div>
+                        <select class="form-control" name="s_part_kind" value="">
+                            @foreach (DataRow row in codeS_part_kind.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3" style="width:auto">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="s_use_gb" />
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb1">전체</label></span>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" name="s_use_gb" />
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb1">사용</label></span>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" name="s_use_gb" />
+                        </div>
+                        <span class="form-control-sm"><label for="rb_gb1">미사용</label></span>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">부품</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_part">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("PartManage" + "Grid")
+                        .KeyExpr("part_cd")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("900")
+                        .ShowBorders(true)
+                        //.Selection(s => s.Mode(SelectionMode.Single))
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .ShowColumnLines(true)
+                        .ColumnAutoWidth(true)
+                        .AllowColumnResizing(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("part_cd").Caption("부품코드");
+                            c.Add().DataField("part_nm").Caption("부품명");
+                            c.Add().DataField("part_kind").Caption("부품종류");
+                            c.Add().DataField("use_gb").Caption("사용여부");
+                            c.Add().DataField("part_buy_amt").Caption("단가(최근)");
+                            c.Add().DataField("part_stock_qty").Caption("재고수");
+                        })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("PartManage" + "FocusChanged")
+                    )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4">
+            <div class="box mb-0">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName">
+                        <p>부품관리</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">부품코드</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12 required" name="part_cd">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">부품명</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12" name="part_nm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">부품명(영문)</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12" name="part_enm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">부품종류</label>
+                        <div class="input-group col-4">
+                            <select class="form-control" name="part_kind_cd" value="">
+                                @foreach (DataRow row in codePart_kind.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">책임자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_response_emp_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_response_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-3">사용여부</label>
+                        <div class="input-group col-4">
+                            <input type="radio" class="radio" id="rb_gb1" name="use_gb_cd" value="1" />
+                            <label for="rb_gb1">사용</label>
+                            <label class="p-1"></label>
+                            <input type="radio" class="radio" id="rb_gb2" name="use_gb_cd" value="2" />
+                            <label for="rb_gb2">미사용</label>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">부품모양</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" cols="100" rows="5" name="part_shape"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">단가(최근)</label>
+                        <div class="input-group col-4">
+                            <input type="number" class="form-control" name="part_buy_amt">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">입고일자(최근)</label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-4 datepicker" name="part_in_date">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">재고수</label>
+                        <div class="input-group col-4">
+                            <input type="number" class="form-control" name="part_stock_qty">
+                        </div>
+                    </div>
+                    <div class="divName mb-0">
+                        <p>사용설비현황</p>
+                    </div>
+                    <div>
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("PartManage" + "SubGrid")
+                            .KeyExpr("equip_cd")
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                            .Height("900")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .ShowColumnLines(true)
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            //.OnCellPrepared("PartManageEditableColumn")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("equip_cd").Caption("부품코드");
+                                c.Add().DataField("equip_nm").Caption("부품명");
+                                //c.Add()
+                                //    .DataField("emp_chk")
+                                //    .Caption("발신")
+                                //    .DataType(GridColumnDataType.Boolean)
+                                //    .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                            })
+                        )
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+

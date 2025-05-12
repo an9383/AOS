@@ -1,0 +1,1657 @@
+﻿@model HACCP.Models.Education.EmployeeEdu
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "EmployeeEdu";
+    //string sData = ViewData["data"] as String;
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+
+}
+
+@{
+    var employeeEduData = @Html.Raw(Json.Encode(ViewBag.EmployeeEduData.Data));
+    var employeeData = @Html.Raw(Json.Encode(ViewBag.EmployeeData.Data));
+    var attEmployeeData = @Html.Raw(Json.Encode(ViewBag.attEmployeeData.Data));
+    var locationData = @Html.Raw(Json.Encode(ViewBag.LocationData.Data));
+    var groupData = @Html.Raw(Json.Encode(ViewBag.GroupData.Data));
+    var attGroupData = @Html.Raw(Json.Encode(ViewBag.attGroupData.Data));
+    var departmentData = @Html.Raw(Json.Encode(ViewBag.DepartmentData.Data));
+    var fileData = @Html.Raw(Json.Encode(ViewBag.fileData.Data));
+
+    var employeeEduGubun = @Html.Raw(Json.Encode(ViewBag.EduGubunData.Data));
+    var employeeEduMethod = @Html.Raw(Json.Encode(ViewBag.EduGradeData.Data));
+}
+
+<script id="EmployeeEduJs" type="text/javascript">
+
+    var EmployeeEdu_LoginUserCd = sessionStorage.getItem("loginCD");
+    var EmployeeEdu_LoginUserNm = sessionStorage.getItem("loginNM");
+    var EmployeeEdu_crudGubun = "";
+
+    $(function () {
+
+        var teacher = @employeeData;
+        var location = @locationData;
+        var department = @departmentData;
+
+
+        var employeeEdu_Data = @employeeEduData;
+        var employee_Data = @employeeData;
+        var attEmployee_Data = @attEmployeeData;
+        var location_Data = @locationData;
+        var group_Data = @groupData;
+        var attGroup_Data = @attGroupData;
+        var department_Data = @departmentData;
+        var file_Data = @fileData;
+
+
+        var emp_columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var loc_columns = [
+            { dataField: "workroom_cd", caption: "작업실코드" },
+            { dataField: "workroom_nm", caption: "작업실명" },
+            { dataField: "workroom_no", caption: "작업실주소" }
+        ];
+
+        var dept_columns = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("EmployeeEdu_Teacher", "강사조회", teacher, emp_columns, "emp_cd");
+        createPopup("EmployeeEdu_Location", "장소조회", location, loc_columns, "workroom_cd");
+        createPopup("EmployeeEdu_Dept", "부서조회", department, dept_columns, "dept_cd");
+
+        setDatePicker("#EmployeeEdu .datepicker");
+
+        if (employeeEdu_Data.length <= 0) {
+            $("#EmployeeEduGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#EmployeeEduGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@employeeEduData));
+            $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+            if (Grid.length > 0) {
+                var SelData = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+                EmployeeEdufillData(SelData);
+            }
+        }
+        if (employee_Data.length <= 0) {
+            $("#EmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#EmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#EmpDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@employeeData));
+            $("#EmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#EmpDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        if (attEmployee_Data.length <= 0) {
+            $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@attEmployeeData));
+            $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //2021.03.09 박가희 그룹 -> 부서로 변경 작업
+        //if (group_Data.length <= 0) {
+        //    $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+        //    $("#GroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        //}else {
+        //    $("#GroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@groupData));
+        //    $("#GroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+        //    $("#GroupDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        //}
+        if (department_Data.length <= 0) {
+            $("#DeptDataGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#DeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }else {
+            $("#DeptDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@departmentData));
+            $("#DeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#DeptDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //2021.03.09 박가희 그룹 -> 부서 변경 작업
+        @*if (attGroup_Data.length <= 0) {
+            $("#AttendableGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#AttendableGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@attGroupData));
+            $("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }*@
+        if (attGroup_Data.length <= 0) {
+            $("#AttendableDeptDataGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#AttendableDeptDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@attGroupData));
+            $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        if (file_Data.length <= 0) {
+            $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@fileData));
+            $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        EmployeeEduEditCheck(false);
+
+    });
+
+    function showEmp() {
+            $("#EmpDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@employeeData));
+            $("#EmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#EmpDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+    }
+    // 죄측 그리드 선택 변경시 실행
+    function EmployeeEduFocus_changed(e) {
+
+        //첫번째 탭으로 이동
+        //menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 1);
+        EmployeeEdufillData(e.row.data);
+        refresh_attend_all();
+    }
+
+    // 우측 폼에 데이터 채우기
+    function EmployeeEdufillData(Edudata) {
+        var i = 1;
+        $("#EmployeeEduForm")[0].reset();
+
+        $("#EmployeeEduForm input[name=edu_no]").val(Edudata.edu_no);
+        $("#EmployeeEduForm input[name=title]").val(Edudata.title);
+        $("#EmployeeEduForm input[name=lecturer_cd]").val(Edudata.lecturer_cd);
+        $("#EmployeeEduForm input[name=lecturer_nm]").val(Edudata.lecturer_nm);
+        $("#EmployeeEduForm input[name=edu_start_date]").val(Edudata.edu_start_date);
+        $("#EmployeeEduForm input[name=edu_start_time]").val(Edudata.edu_start_time);
+        $("#EmployeeEduForm input[name=edu_time]").val(Edudata.edu_time);
+        $("#EmployeeEduForm input[name=edu_end_time]").val(Edudata.edu_end_time);
+        $("#EmployeeEduForm input[name=edu_place_cd]").val(Edudata.edu_place_cd);
+        $("#EmployeeEduForm input[name=edu_place_nm]").val(Edudata.edu_place_nm);
+        $("#EmployeeEduForm input[name=contents]").val(Edudata.contents);
+        $("#EmployeeEduForm textarea[name=sort_contents]").val(Edudata.sort_contents);
+        $("#EmployeeEduForm input[name=dept_cd]").val(Edudata.dept_cd);
+        $("#EmployeeEduForm input[name=dept_nm]").val(Edudata.dept_nm);
+        $("#EmployeeEduForm input[name=institute]").val(Edudata.institute);
+        $("#EmployeeEduForm textarea[name=comments]").val(Edudata.comments);
+        $("#EmployeeEduForm input[name=edu_manage_no]").val(Edudata.edu_manage_no);
+        $("#EmployeeEduForm input[name=purpose]").val(Edudata.purpose);
+        $("#EmployeeEduForm input[name=write_emp_cd]").val(Edudata.write_emp_cd);
+        $("#EmployeeEduForm input[name=write_emp_nm]").val(Edudata.write_emp_nm);
+        $("#EmployeeEduForm select[name=effect_status]").val(Edudata.effect_status);
+
+        var edu_gb = JSON.parse(@employeeEduGubun);
+        var edu_mt = JSON.parse(@employeeEduMethod);
+
+        for (i = 1; i<edu_gb.length; i++) {
+            if (Edudata.edu_gb == edu_gb[i]["keyfield"]) {
+                var temp1 = "edu_gubun_"+edu_gb[i]["keyfield"];
+                $("#EmployeeEduForm input:radio[id='" + temp1 + "']:radio[value='" + edu_gb[i]["keyfield"] + "']").prop('checked', true);
+                break;
+            }
+        }
+
+        for (i = 1; i<edu_mt.length; i++) {
+            if (Edudata.edu_method == edu_mt[i]["keyfield"]) {
+                var temp1 = "edu_method_" +edu_mt[i]["keyfield"];
+                $("#EmployeeEduForm input:radio[id='" + temp1 + "']:radio[value='" + edu_mt[i]["keyfield"] + "']").prop('checked', true);
+                break;
+            }
+        }
+
+
+    }
+
+    // 수정중인지 체크
+    function EmployeeEduEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "@(pagePrefix)Grid"
+            , "@(pagePrefix)Form"
+            , "EmployeeEduSearchOptions"
+        );
+
+    }
+
+    function EmployeeEduSearch() {
+
+        var formData = new FormData();
+        formData.append("sdate", $("#search_sdate").val());
+        formData.append("edate", $("#search_edate").val());
+        if ($("#search_edu_gubun").val() == null) {
+            formData.append("edu_gb", "%");
+        }
+        else {
+            formData.append("edu_gb", $("#search_edu_gubun").val());
+        }
+        if ($("#search_edu_method").val() == null) {
+            formData.append("edu_method", "%");
+        }
+        else {
+            formData.append("edu_method", $("#search_edu_method").val());
+        }
+        formData.append("title", $("#search_title").val());
+
+        $("#EmployeeEduGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowKey", "");//추가해주지 않으면, 데이터가 없을 때 -> 데이터가 있을 때
+                                                                                 //포커스체인지 이벤트가 발생되어 연관 데이터가 조회된다.
+
+        $("#EmployeeEduForm")[0].reset();
+
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        //2021.03.09 박가희 그룹 -> 부서 변경 작업
+        //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+        //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        $("#AttendableDeptDataGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        //첫번째 탭으로 이동
+        //menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 1);
+
+        call_EmployeeEduSearch(formData); refresh_attend_all();
+    }
+    function call_EmployeeEduSearch(formData) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduSearch',
+            data: formData,
+            contentType: false,
+            processData: false,
+            async: true,
+            success: function (result) {
+
+                EmployeeEduEditCheck(false);
+
+                if (result) {
+                    var json = JSON.parse(result);
+
+                    $("#EmployeeEduGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#EmployeeEduGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    EmployeeEdufillData(json[0]);
+
+                    var grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+
+                    var data = grid.getVisibleRows();
+                    var total_cnt = grid.totalCount();
+
+                    console.log(data);
+
+                    for (var i = 0; i < total_cnt; i++) {
+
+                        if (data[i].data.effect_status == '1') {
+                            alert("같은 사원은 중복해서 입력할 수 없습니다.");
+                            var popup = $("#AlarmManageEmployeePopup").dxPopup("instance");
+                            popup.hide();
+                            return;
+                        }
+                    }
+                }
+
+            }
+        });
+    }
+    function refresh_attend_all() {
+        var grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        //2021.03.09 박가희 그룹 -> 부서 변경 작업
+        //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("dataSource", []);
+        //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#AttendableDeptDataGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        if (grid.totalCount() <= 0) return;
+        var data = getGridRowByKey('EmployeeEduGrid', grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/AttendEmployeeSearch',
+            data: {
+                edu_no: data.edu_no
+            },
+            async: true,
+            success: function (result) {
+
+                if (result) {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+                    refresh_attend_group();
+                }
+
+            }
+        });
+    }
+
+    function refresh_attend_employee() {
+        var grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('EmployeeEduGrid', grid.option("focusedRowKey"));
+
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/AttendEmployeeSearch',
+            data: {
+                edu_no: data.edu_no
+            },
+            async: true,
+            success: function (result) {
+
+                if (result) {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+
+                    $("#AttendableEmpDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#AttendableEmpDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+                }
+
+
+            }
+        });
+    }
+
+    function refresh_attend_group() {
+        var grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) return;
+
+        var data = getGridRowByKey('EmployeeEduGrid', grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/AttendGroupSearch',
+            data: {
+                edu_no: data.edu_no
+                //edu_no: edu_no
+            },
+            async: true,
+            success: function (result) {
+
+                if (result) {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+
+                    //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    //$("#AttendableGroupDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+                    $("#AttendableDeptDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#AttendableDeptDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+                    refresh_attatched_file(edu_no);
+                }
+            }
+        });
+    }
+
+    function refresh_attatched_file() {
+        var grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+        if (grid.totalCount() <= 0) return;
+
+        var data = getGridRowByKey('EmployeeEduGrid', grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/AttatchedFileSearch',
+            data: {
+                edu_no: data.edu_no
+            },
+            async: true,
+            success: function (result) {
+
+                if (result) {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+
+                    $("#EmployeeEduFileGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#EmployeeEduFileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+
+                }
+
+
+            }
+        });
+    }
+
+    function EmployeeEduInput() {
+        EmployeeEduEditCheck(true);
+        $("#EmployeeEduForm")[0].reset();
+
+        // 구분 값
+        EmployeeEdu_crudGubun = "I";
+
+        //자동채번은 저장하는 시점에 넣기로 변경함.
+        //GetEmployeeEdu_EdoNo();
+        $("#EmployeeEduForm input[name=edu_no]").val("교육번호는 저장시에 자동 생성됩니다.");
+        $("#EmployeeEduForm input[name=write_emp_cd]").val(EmployeeEdu_LoginUserCd);
+        $("#EmployeeEduForm input[name=write_emp_nm]").val(EmployeeEdu_LoginUserNm);
+
+    }
+
+    //자동채번 - 안쓰는 함수
+    function GetEmployeeEdu_EdoNo() {
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduGetInsertInfo',
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                $("#EmployeeEduForm input[name=edu_no]").val(result[0]);
+                $("#EmployeeEduForm input[name=write_emp_cd]").val(result[1]);
+                $("#EmployeeEduForm input[name=write_emp_nm]").val(result[2]);
+
+            }
+        });
+    }
+
+    function EmployeeEduEdit() {
+
+        // 버튼 상태값 체크 및 셋팅
+        EmployeeEduEditCheck(true);
+        // 구분 값
+        EmployeeEdu_crudGubun = "U";
+        //첫번째 탭으로 이동
+        menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 1);
+
+    }
+
+    function EmployeeEduSave() {
+
+        var edu_no = $("#EmployeeEduForm input[name=edu_no]").val();
+        var title= $("#EmployeeEduForm input[name=title]").val();
+        var lecturer_cd= $("#EmployeeEduForm input[name=lecturer_cd]").val();
+        var edu_start_date= $("#EmployeeEduForm input[name=edu_start_date]").val();
+        var edu_start_time= $("#EmployeeEduForm input[name=edu_start_time]").val();
+        var edu_place_cd= $("#EmployeeEduForm input[name=edu_place_cd]").val();
+        var write_emp_cd=$("#EmployeeEduForm input[name=write_emp_cd]").val();
+        var edu_gubun = $("#EmployeeEduForm input:radio[name=edu_gubun]:checked").val();
+
+        var edu_method = $("#EmployeeEduForm input:radio[name=edu_method]:checked").val();
+
+        if (edu_no == null || edu_no == "" ||
+            title == null || title == "" ||
+            lecturer_cd == null || lecturer_cd == "" ||
+            edu_start_date == null || edu_start_date == "" ||
+            edu_start_time == null || edu_start_time == "" ||
+            edu_place_cd == null || edu_place_cd == "" ||
+            write_emp_cd == null || write_emp_cd == "" ||
+            edu_gubun == null || edu_gubun == "" ||
+            edu_method == null || edu_method == ""
+            ) {
+            alert("필수 데이터를 입력 해 주세요.");
+            return;
+        }
+
+        var formData = new FormData();
+        EmployeeEduForm_GetData(formData);
+
+        EmployeeEduCRUD(formData);
+        EmployeeEduEditCheck(false);
+
+        //초기화
+        EmployeeEdu_crudGubun = "";
+
+    }
+
+    function EmployeeEduForm_GetData(formData) {
+
+        formData.append("edu_no", $("#EmployeeEduForm input[name=edu_no]").val());
+        formData.append("title", $("#EmployeeEduForm input[name=title]").val());
+        formData.append("lecturer_cd", $("#EmployeeEduForm input[name=lecturer_cd]").val());
+        formData.append("lecturer_nm", $("#EmployeeEduForm input[name=lecturer_nm]").val());
+        formData.append("edu_start_date", $("#EmployeeEduForm input[name=edu_start_date]").val());
+        formData.append("edu_start_time", $("#EmployeeEduForm input[name=edu_start_time]").val());
+        formData.append("edu_time", $("#EmployeeEduForm input[name=edu_time]").val());
+        formData.append("edu_end_time", $("#EmployeeEduForm input[name=edu_end_time]").val());
+        formData.append("edu_place_cd", $("#EmployeeEduForm input[name=edu_place_cd]").val());
+        formData.append("edu_place_nm", $("#EmployeeEduForm input[name=edu_place_nm]").val());
+        formData.append("dept_cd", $("#EmployeeEduForm input[name=dept_cd]").val());
+        formData.append("dept_nm", $("#EmployeeEduForm input[name=dept_nm]").val());
+        formData.append("contents", $("#EmployeeEduForm input[name=contents]").val());
+        formData.append("sort_contents", $("#EmployeeEduForm textarea[name=sort_contents]").val());
+        formData.append("institute", $("#EmployeeEduForm input[name=institute]").val());
+        formData.append("comments", $("#EmployeeEduForm textarea[name=comments]").val());
+        formData.append("edu_manage_no", $("#EmployeeEduForm input[name=edu_manage_no]").val());
+        formData.append("purpose", $("#EmployeeEduForm input[name=purpose]").val());
+        formData.append("write_emp_cd", $("#EmployeeEduForm input[name=write_emp_cd]").val());
+        formData.append("write_emp_nm", $("#EmployeeEduForm input[name=write_emp_nm]").val());
+        formData.append("effect_status", $("#EmployeeEduForm select[name=effect_status]").val());
+        formData.append("edu_gb", $("#EmployeeEduForm input[name=edu_gubun]:checked").val());
+        formData.append("edu_method", $("#EmployeeEduForm input[name=edu_method]:checked").val());
+
+        formData.append("gubun", EmployeeEdu_crudGubun);
+
+    }
+
+    function EmployeeEduCRUD(CRUDdata) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduCRUD',
+            data: CRUDdata,
+            contentType: false,
+            processData: false,
+            async: true,
+            success: function (result) {
+                alert(result);
+                EmployeeEduSearch();
+
+            }
+        });
+
+    }
+
+
+    function EmployeeEduUndo() {
+
+        // 버튼 상태값 체크 및 셋팅
+        EmployeeEduEditCheck(false);
+        // 구분 값
+        EmployeeEdu_crudGubun = "Undo";
+        EmployeeEduSearch();
+    }
+
+    function EmployeeEduDelete() {
+        EmployeeEduEditCheck(true);
+
+        // 삭제 여부 팝업
+        if (confirm("정말 삭제하시겠습니까??") === true) {
+
+            EmployeeEdu_crudGubun = "D";
+            var formData = new FormData();
+            EmployeeEduForm_GetData(formData);
+
+            EmployeeEduCRUD(formData);
+
+
+        } else {   //취소
+
+            EmployeeEduEditCheck(false);
+            EmployeeEduSearch();
+            return;
+
+        }
+    }
+
+    // 파일 첨부
+    function EmployeeEduFileAdd() {
+        $("#EmployeeEdu_Tap_3 #EE_fileData").click();
+    }
+
+    $("#EmployeeEdu_Tap_3 #EE_fileData").change(function () {
+        var formData = new FormData($("#EmployeeEdu #fileSubmitForm")[0]);
+
+        var edu_no = $("#EmployeeEduForm input[name=edu_no]").val();
+        formData.set("edu_no", edu_no);
+        formData.append("uploadfile", $("#EmployeeEdu_Tap_3 #EE_fileData")[0].files[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/FileAdd',
+            data: formData,
+            processData: false,
+            contentType:false,
+            success: function (result) {
+                alert(result);
+
+                $("#EmployeeEdu_Tap_3 #EE_fileData").val("");
+                refresh_attatched_file();
+            }
+        });
+    });
+
+
+    // 파일 삭제
+    function EmployeeEduFileDelete() {
+        // 첨부파일 그리드
+        var fileGrid = $("#EmployeeEduFileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("삭제할 문서가 없습니다.");
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("EmployeeEduFileGrid", fileGrid.option("focusedRowKey"));
+        var edu_no = $("#EmployeeEduForm input[name=edu_no]").val();
+
+        if (confirm("삭제하시겠습니까?")) {
+            $.ajax({
+                type: 'POST',
+                url: '/Education/FileDelete',
+                data: {
+                    edu_no: edu_no,
+                    file_id: fileData.doc_file_id
+                },
+                success: function (result) {
+                    alert(result);
+
+                    refresh_attatched_file();
+                }
+            });
+        }
+    }
+
+    // 파일열기
+    function EmployeeEduFileOpen() {
+        var fileGrid = $("#EmployeeEduFileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("첨부된 문서가 없습니다.");
+            return;
+        }
+
+        var fileData = getGridRowByKey("EmployeeEduFileGrid", fileGrid.option("focusedRowKey"));
+        document.location.assign('/Education/FileOpen?file_id=' + fileData.doc_file_id);
+
+        //$.ajax({
+        //    type: 'POST',
+        //    url: '/Education/FileOpen',
+        //    data: {
+        //        file_id: fileData.doc_file_id
+        //    },
+        //    success: function (result) {
+
+        //    }
+        //});
+    }
+
+
+    function calc_time() {
+
+        // 먼저 기존에 들어가 있을 수 있는 콜론(:)기호를 제거한다.
+        var replaceTime1 = document.getElementById("edu_start_time").value.replace(":", "");
+        var replaceTime2 = document.getElementById("edu_end_time").value.replace(":", "");
+
+        if (replaceTime2 != "") {
+
+            // 시간을 추출
+            var hours1 = replaceTime1.substring(0, 2) * 1;//숫자형변환 후 계산
+            // 분을 추출
+            var minute1 = replaceTime1.substring(2, 4) * 1; //숫자형변환
+
+            // 시간을 추출
+            var hours2 = replaceTime2.substring(0, 2) * 1;
+            // 분을 추출
+            var minute2 = replaceTime2.substring(2, 4) * 1; //숫자형변환
+
+            //계산
+            var duration = (((hours2 - hours1)*60) + (minute2 - minute1));
+
+            if (duration > 0)
+                document.getElementById("edu_time").value = duration;
+            else {
+                alert("시간을 정확히 입력 해 주세요.\n점심12:00~12:59은 오후입니다.");
+            }
+        }
+    }
+
+    //강사 검색
+    function EmployeeEdu_FindTeacher() {
+        //팝업띄우고
+        var popup = $("#EmployeeEdu_TeacherPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function EmployeeEdu_TeacherRowDblClick(selectedItems) {
+
+        $("#EmployeeEduForm input[name=lecturer_cd]").val(selectedItems.values[0]);
+        $("#EmployeeEduForm input[name=lecturer_nm]").val(selectedItems.values[1]);
+        $("#EmployeeEduForm input[name=lecturer_dept]").val(selectedItems.values[3]);
+
+        var popup = $("#EmployeeEdu_TeacherPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //장소 검색
+    function EmployeeEdu_FindLocation() {
+        //팝업띄우고
+        var popup = $("#EmployeeEdu_LocationPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function EmployeeEdu_LocationRowDblClick(selectedItems) {
+
+        $("#EmployeeEduForm input[name=edu_place_cd]").val(selectedItems.values[0]);
+        $("#EmployeeEduForm input[name=edu_place_nm]").val(selectedItems.values[1]);
+
+        var popup = $("#EmployeeEdu_LocationPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //실시부서 검색
+    function EmployeeEdu_FindGroup() {
+        //팝업띄우고
+        var popup = $("#EmployeeEdu_DeptPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function EmployeeEdu_DeptRowDblClick(selectedItems) {
+
+        $("#EmployeeEduForm input[name=dept_cd]").val(selectedItems.values[0]);
+        $("#EmployeeEduForm input[name=dept_nm]").val(selectedItems.values[1]);
+
+        var popup = $("#EmployeeEdu_DeptPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //작성자 검색
+    function EmployeeEdu_FindWriter() {
+        //팝업띄우고
+        var popup = $("#EmployeeEdu_WriterPopup").dxPopup("instance");
+
+        popup.show();
+
+        $("#EmployeeEdu_WriterPopup").dxDataGrid("instance").option("focusedRowIndex", 0);
+    }
+
+
+    function EmployeeEdu_WriterRowDblClick(selectedItems) {
+
+        $("#EmployeeEduForm input[name=write_emp_cd]").val(selectedItems.values[0]);
+        $("#EmployeeEduForm input[name=write_emp_nm]").val(selectedItems.values[1]);
+
+
+        var popup = $("#EmployeeEdu_WriterPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    function addEmployee() {
+        //var focusCell = $("#EmpDataGrid").dxDataGrid("instance").getCellElement(0, 0);
+        //$("#EmpDataGrid").dxDataGrid("instance").focus(focusCell);
+
+        var empGrid = $("#EmpDataGrid").dxDataGrid("instance");
+        var empData = getGridRowByKey("EmpDataGrid", empGrid.option("focusedRowKey"));
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+
+        if (Data.effect_status == '3') {
+            alert("평가완료 된 교육은 대상자를 추가할 수 없습니다.");
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduAddEmployee',
+            data: {
+                edu_no: Data.edu_no,
+                emp_cd: empData.emp_cd
+            },
+            success: function (result) {
+                if (result) {
+                    alert(result);
+                    refresh_attend_employee();
+                }
+            }
+        });
+    }
+
+    function removeEmployee() {
+
+        var empGrid = $("#AttendableEmpDataGrid").dxDataGrid("instance");
+        var empData = getGridRowByKey("AttendableEmpDataGrid", empGrid.option("focusedRowKey"));
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+
+        if (Data.effect_status == '3') {
+            alert("평가완료 된 교육은 대상자를 삭제할 수 없습니다.");
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduDeleteEmployee',
+            data: {
+                edu_no: Data.edu_no,
+                emp_cd: empData.emp_cd
+            },
+            success: function (result) {
+                alert(result);
+                refresh_attend_employee();
+            }
+        });
+    }
+    function addGroup() {
+
+        //2021.03.09 박가희 그룹 -> 부서 변경 작업
+        //var groupGrid = $("#GroupDataGrid").dxDataGrid("instance");
+        //var groupData = getGridRowByKey("GroupDataGrid", groupGrid.option("focusedRowKey"));
+
+        var deptGrid = $("#DeptDataGrid").dxDataGrid("instance");
+        var deptData = getGridRowByKey("DeptDataGrid", deptGrid.option("focusedRowKey"));
+
+        if (deptGrid.totalCount() <= 0) return;
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+
+        if (Data.effect_status == '3') {
+            alert("평가완료 된 교육은 그룹을 추가할 수 없습니다.");
+            return;
+        }
+
+        //$.ajax({
+        //    type: 'POST',
+        //    url: '/Education/EmployeeEduAddGroup',
+        //    data: {
+        //        edu_no: Data.edu_no,
+        //        emp_group_cd: groupData.emp_group_cd
+        //    },
+        //    success: function (result) {
+        //        if (result) {
+        //            alert(result);
+        //            refresh_attend_all();
+        //        }
+        //    }
+        //});
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduAddGroup',
+            data: {
+                edu_no: Data.edu_no,
+                dept_cd: deptData.dept_cd
+            },
+            async:false,
+            success: function (result) {
+                console.log(result);
+                if (result) {
+                    console.log("addGroup :" + result);
+
+                    alert(result);
+                    refresh_attend_all();
+                }
+            }
+        });
+    }
+    function removeGroup() {
+
+        //2021.03.09 박가희 그룸 -> 부서 변경 작업
+        //var groupGrid = $("#AttendableGroupDataGrid").dxDataGrid("instance");
+        //var groupData = getGridRowByKey("AttendableGroupDataGrid", groupGrid.option("focusedRowKey"));
+
+        var deptGrid = $("#AttendableDeptDataGrid").dxDataGrid("instance");
+        var deptData = getGridRowByKey("AttendableDeptDataGrid", deptGrid.option("focusedRowKey"));
+
+        if (deptGrid.totalCount() <= 0) return;
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+
+        if (Data.effect_status == '3') {
+            alert("평가완료 된 교육은 그룹을 삭제할 수 없습니다.");
+            return;
+        }
+
+        //$.ajax({
+        //    type: 'POST',
+        //    url: '/Education/EmployeeEduDeleteGroup',
+        //    data: {
+        //        edu_no: Data.edu_no,
+        //        emp_group_cd: groupData.emp_group_cd
+        //    },
+        //    success: function (result) {
+        //        if (result) {
+        //            if (result) {
+        //                alert(result);
+        //                refresh_attend_all();
+        //            }
+        //        }
+        //    }
+        //});
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduDeleteGroup',
+            data: {
+                edu_no: Data.edu_no,
+                dept_cd: deptData.dept_cd
+            },
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    console.log("removeGroup :" + result);
+
+                    if (result) {
+                        alert(result);
+                        refresh_attend_all();
+                    }
+                }
+            }
+        });
+    }
+
+
+    function PushNotice() {
+
+        if (EmployeeEdu_crudGubun == "I" || EmployeeEdu_crudGubun == "U" || EmployeeEdu_crudGubun == "D") {
+            alert("입력/수정 중에는 공지사항을 등록할 수 없습니다.");
+            return;
+        }
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        if (Grid.totalCount() <= 0) {
+            alert("교육 목록이 없습니다.");
+            return;
+        }
+
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+        if (Data == null || Data == undefined) {
+            alert("선택된 교육 목록이 없습니다.");
+            return;
+        }
+
+        if (confirm("공지사항을 등록 하시겠습니까?") === true) {
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/GetNewsCd',
+                success: function (result) {
+
+                    PushNotice_2(result);
+                }
+            });
+        }
+    }
+
+    function PushNotice_2(news_cd) {
+
+        var formData = new FormData();
+
+        var today = new Date();
+        var dd = today.getDate();
+        var mm = today.getMonth() + 1; //January is 0!
+        var yyyy = today.getFullYear();
+
+        if (dd < 10) {
+            dd = '0' + dd
+        }
+
+        if (mm < 10) {
+            mm = '0' + mm
+        }
+
+        today = yyyy + '-' + mm + '-' + dd;
+        var news_start_date = today; //게시하는 날 부터
+        var news_end_date = $("#EmployeeEduForm input[name=edu_start_date]").val(); //교육 시작 날짜까지
+
+        //news_gb: 1. 사업장 2.부서 3.사원 //edu_gb : 1.전사원 교육 2.부서별 교육 3.그외 교육
+        var news_gb = $("#EmployeeEduForm input[name=edu_gubun]:checked").val();
+
+        switch (news_gb) {
+
+            case '1':
+                var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+                var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+                target_cd = Data.sys_plant_cd;
+                targetType = 'plant_cd';
+
+                break;
+
+            case '2':
+                target_cd = $("#EmployeeEduForm input[name=dept_cd]").val();
+                targetType = 'dept_cd';
+
+                break;
+
+            case '3':
+                target_cd = $("#EmployeeEduForm input[name=write_emp_cd]").val();
+                targetType = 'emp_cd';
+
+                break;
+        }
+
+        formData.append("news_cd", news_cd);
+        formData.append("news_title", $("#EmployeeEduForm input[name=title]").val());
+        formData.append("news_content", $("#EmployeeEduForm input[name=contents]").val());
+
+        formData.append("news_gb", news_gb);
+        formData.append("news_seq_id", "");
+        formData.append("target_cd", target_cd);
+        formData.append("targetType", targetType);
+        formData.append("news_start_date", news_start_date);
+        formData.append("news_end_date", news_end_date);
+        formData.append("gubun", "I");
+
+        InputNews(formData);
+
+    }
+
+    function InputNews(formData) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/NewsCRUD',
+            contentType: false,
+            processData: false,
+            data: formData,
+            success: function (result) {
+                alert("공지사항이 등록 되었습니다.");
+
+                try {
+                    var json = JSON.parse(result);
+
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                } catch (e) {
+
+                }
+
+            }
+        });
+    }
+
+    //#region 미리보기 (리포트)
+    function EmployeeEduPrint() {
+
+        var ee_report = new ReportHelper($(event.target));
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        if (Grid.totalCount() <= 0) {
+            alert("교육 목록이 없습니다.");
+            return;
+        }
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+        var Param = "sdate:" + Data.edu_start_date + ";edate:" + Data.edu_start_date + ";edu_gb:" + Data.edu_gb + ";edu_method:" + Data.edu_method + ";dept_cd:" + Data.dept_cd;
+
+        ee_report.addParam({
+            objFile: { path: "Education", RptFileName: "EducationPlan" },
+            objSp: { SpName: "SP_EmployeeEdu_AOS", gubun: "EducationPlanReport", reportParam: Param },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+        //ee_report.testObj();
+        ee_report.run();
+    }
+
+
+    //연간계획표 리포트
+    function YearPlan() {
+
+        var ee_report = new ReportHelper();
+
+        var Grid = $("#EmployeeEduGrid").dxDataGrid("instance");
+        if (Grid.totalCount() <= 0) {
+            alert("교육 목록이 없습니다.");
+            return;
+        }
+        var Data = getGridRowByKey("EmployeeEduGrid", Grid.option("focusedRowKey"));
+
+        var Param = "sdate:" + Data.edu_start_date + ";edate:" + Data.edu_start_date +";edu_gb:" + Data.edu_gb + ";edu_method:" + Data.edu_method + ";dept_cd:" + Data.dept_cd;
+
+        ee_report.addParam({
+            objFile: { path: "Education", RptFileName: "EmployeeEduYearPlan" },
+            objSp: { SpName: "SP_EmployeeEdu_AOS", gubun: "SR_Year", reportParam: Param },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+        //ee_report.testObj();
+        ee_report.preview();
+    }
+
+    //#endregion
+
+</script>
+
+<div id="EmployeeEdu">
+
+    <div id="EmployeeEdu_TeacherPopup"></div>
+    <div id="EmployeeEdu_LocationPopup"></div>
+    <div id="EmployeeEdu_DeptPopup"></div>
+    <div id="EmployeeEdu_WriterPopup"></div>
+
+    <form id="fileSubmitForm" enctype="multipart/form-data" style="display: none;">
+    </form>
+
+    <div class="mainTop row m-0 p-0">
+        <div class="col-7 p-0" id="EmployeeEduSearchOptions">
+            <form id="EmployeeEduSearchForm">
+                <div class="input-wrapper col-12" style="padding:0px">
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="search_sdate" id="search_sdate" value="@DateTime.Today.ToShortDateString()" />
+                        <Label class="p-1">~</Label>
+                        <input type="text" class="form-control datepicker" name="search_edate" id="search_edate" value="@DateTime.Today.AddMonths(1).ToShortDateString()" />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육과정</span>
+                        </div>
+                        <input type="text" class="form-control" name="search_title" id="search_title" />
+                    </div>
+                    <div class="input-group col-2">
+                        <button type="button" class="btn btn-secondary" onclick="YearPlan()">연간계획표</button>
+                    </div>
+                </div>
+                <div class="input-wrapper col-12" style="padding:0px">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육구분</span>
+                        </div>
+                        <select class="form-control" name="search_edu_gubun" id="search_edu_gubun">
+                            @foreach (DataRow row in ((DataTable)ViewBag.EduGubun).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육방법</span>
+                        </div>
+                        <select class="form-control" name="search_edu_method" id="search_edu_method">
+                            @foreach (DataRow row in ((DataTable)ViewBag.EduGrade).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="col-5 CRUD-btn p-0">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Print;Preview");}
+        </div>
+    </div>
+
+    <div class="row m-0 p-0">
+        <div class="col-7" style="padding:0px">
+            <div class="box mb-0  mr-1 pr-0" style="height:auto">
+                <div class="divName">
+                    <p>교육 목록</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeeEduGrid")
+                    .Height("802")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .KeyExpr("edu_no")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("edu_no").Caption("교육번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("title").Caption("교육과정").Width("30%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lecturer_nm").Caption("강사명").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_start_date").Caption("시작일자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_start_time").Caption("시작시간").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_end_time").Caption("종료시간").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("EmployeeEduFocus_changed")
+                    )
+            </div>
+        </div>
+
+        <div class="col-5 p-0">
+            <div class="box" style="height:829px">
+                <ul class="nav nav-tabs col-12" id="EmployeeEdu_Tap">
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link active" onclick="menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 1)">교육 정보</a>
+                    </li>
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link" onclick="menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 2); showEmp();">교육 대상자</a>
+                    </li>
+                    <li class="nav-item col-4" style="padding:0px" align="center">
+                        <a class="nav-link" onclick="menutab('EmployeeEdu_Tap', 'EmployeeEdu_Tap', 3)">참고 파일</a>
+                    </li>
+                </ul>
+
+                <div id="EmployeeEdu_Tap">
+                    <div id="EmployeeEdu_Tap_1" class="box mb-0" style="height:805px">
+
+                        <button type="button" class="btn btn-secondary col-4" style="margin:15px" onclick="PushNotice()">공지 내보내기</button>
+                        <form id="EmployeeEduForm" name="EmployeeEduForm" enctype="multipart/form-data">
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육번호</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class=" form-control col-12" name="edu_no" id="edu_no" readonly />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육과정<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-12 form-control required" name="title" id="title" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육구분<star>*</star></label>
+                                <div class="input-group col-8 display-inline">
+                                    @for (int i = 1; i < ((DataTable)ViewBag.EduGubun).Rows.Count; i++)
+                                    {
+                                        <div class="input-group-prepend">
+                                            <input class="input-group-append required" type="radio" name="edu_gubun" id='edu_gubun_@ViewBag.EduGubun.Rows[i]["keyfield"]' value="@ViewBag.EduGubun.Rows[i]["keyfield"]" required />
+                                        </div>
+                                        <span class="form-control-sm"> <label for="edu_gubun1" style="font-size:12px;" id="edu_gubun1_nm">@ViewBag.EduGubun.Rows[i]["displayfield"]</label> </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육방법<star>*</star></label>
+                                <div class="input-group col-8 display-inline">
+                                    @for (int i = 1; i < ((DataTable)ViewBag.EduGrade).Rows.Count; i++)
+                                    {
+                                        <div class="input-group-prepend">
+                                            <input class="input-group-append required" type="radio" name="edu_method" id="edu_method_@ViewBag.EduGrade.Rows[i]["keyfield"]" value="@ViewBag.EduGrade.Rows[i]["keyfield"]" required />
+                                        </div>
+                                        <span class="form-control-sm"> <label for="edu_method_@ViewBag.EduGrade.Rows[i]["keyfield"]" style="font-size:12px;">@ViewBag.EduGrade.Rows[i]["displayfield"]</label> </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">강사<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-5 form-control required" name="lecturer_cd" id="lecturer_cd" />
+                                    <div class="input-group-append">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEdu_FindTeacher()">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" class="col-7 form-control required" name="lecturer_nm" id="lecturer_nm" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육일자<star>*</star></label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12 datepicker required" name="edu_start_date" id="edu_start_date" />
+                                </div>
+
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육시간<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="time" class="form-control col-4 required" name="edu_start_time" id="edu_start_time" onchange="calc_time()" />
+                                    <label class="p-1">~</label>
+                                    <input type="time" class="form-control col-4 required" name="edu_end_time" id="edu_end_time" onchange="calc_time()" />&nbsp
+                                    <input type="text" class="form-control col-2" name="edu_time" id="edu_time" readonly />
+                                    <label class="p-1">분(min)</label>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육장소<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-5 form-control required" name="edu_place_cd" id="edu_place_cd" />
+                                    <div class="input-group-append">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEdu_FindLocation()">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" class="col-7 form-control required" name="edu_place_nm" id="edu_place_nm" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육내용</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-12 form-control" name="contents" id="contents" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">내용요약</label>
+                                <div class="input-group col-8">
+                                    <textarea type="text" rows="3" class="col-12" name="sort_contents" id="sort_contents" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">실시부서</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-5 form-control" name="dept_cd" id="dept_cd" />
+                                    <div class="input-group-append">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEdu_FindGroup()">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" class="col-7 form-control" name="dept_nm" id="dept_nm" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육기관</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-12 form-control" name="institute" id="institute" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">특이사항</label>
+                                <div class="input-group col-8">
+                                    <textarea type="text" rows="3" class="col-12" name="comments" id="comments" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">관리번호</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="col-12 form-control" name="edu_manage_no" id="edu_manage_no" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육목적</label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-12 form-control" name="purpose" id="purpose" />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">작성자<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="col-5 form-control" name="write_emp_cd" id="write_emp_cd" readonly />
+                                    @*<div class="input-group-append">
+                                            <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEdu_FindWriter()">
+                                        <i class="fa fa-search"></i></button>
+                                        </div>*@
+                                    <input type="text" class="col-7 form-control" name="write_emp_nm" id="write_emp_nm" readonly />
+                                </div>
+                            </div>
+                            <div class="input-wrapper">
+                                <label class="col-3" align="center">교육상태<star>*</star></label>
+                                <div class="input-group col-4">
+                                    <select class="col-12 form-control" name="effect_status" id="effect_status">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.EduState).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div id="EmployeeEdu_Tap_2" class="box mb-0 display-none" style="height:805px">
+                        <div class="row m-0 p-0">
+                            <div class="col-5 p-0" >
+                                <div class="divName">
+                                    <p>사원 목록</p>
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("EmpDataGrid")
+                                        .ShowBorders(true)
+                                        .ShowColumnLines(true)
+                                        .FocusedRowEnabled(true)
+                                        .Height("366")
+                                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .HoverStateEnabled(true)
+                                        .Selection(s => s.Mode(SelectionMode.Single))
+                                        .ColumnAutoWidth(true)
+                                        .KeyExpr("emp_cd")
+                                        .Columns(c =>
+                                        {
+                                            @*c.Add().DataField("dept_nm").Caption("부서명").GroupIndex(0);*@
+                                            c.Add()
+                                                .DataField("emp_cd")
+                                                .Caption("사원코드").Alignment(HorizontalAlignment.Center).Visible(false);
+                                            c.Add()
+                                                .DataField("emp_nm")
+                                                .Caption("사원명").Alignment(HorizontalAlignment.Center).Width("35%");
+                                            c.Add()
+                                                .DataField("dept_nm")
+                                                .Caption("부서명").Alignment(HorizontalAlignment.Center).Width("65%");
+                                        })
+                                    )
+                                </div>
+                            </div>
+                            <div align="center" class="col-2" style="width:50px;height:403px; margin:0px; padding:0px;">
+                                <div style="height:150px"></div>
+                                <button class="btn btn-danger removeBtn" type="button" onclick="addEmployee()">
+                                    @(Html.DevExtreme().Button()
+                                    .Icon("arrowright")
+                                    .ID("EmployeeEduAddEmp")
+                                    )
+                                </button>
+                                <button class="btn btn-primary addBtn" type="button" onclick="removeEmployee()">
+                                    @(Html.DevExtreme().Button()
+                                    .Icon("arrowleft")
+                                    .ID("EmployeeEduRemoveEmp")
+                                )
+                                </button>
+                            </div>
+
+                            <div class="col-5 p-0" style="padding-left:0px">
+                                <div class="divName">
+                                    <p>참여자 목록</p>
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("AttendableEmpDataGrid")
+                                        .ShowBorders(true)
+                                        .ShowColumnLines(true)
+                                        .FocusedRowEnabled(true)
+                                        .FocusedRowIndex(0)
+                                        .ColumnAutoWidth(true)
+                                        .Height("366")
+                                        .Selection(s => s.Mode(SelectionMode.Single))
+                                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .HoverStateEnabled(true)
+                                        .KeyExpr("emp_cd")
+                                        .Columns(c =>
+                                        {
+                                            @*c.Add().DataField("dept_nm").Caption("부서명").GroupIndex(0);*@
+                                            c.Add()
+                                                .DataField("emp_cd")
+                                                .Caption("사원코드").Alignment(HorizontalAlignment.Center).Width("50%");
+                                            c.Add()
+                                                .DataField("emp_nm")
+                                                .Caption("사원명").Alignment(HorizontalAlignment.Center).Width("50%");
+                                        })
+                                    )
+
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="row m-0 p-0" style="height:394px">
+                            <div class="col-5 p-0">
+                                <div class="divName">
+                                    <p>부서 목록</p>
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                    //.ID("GroupDataGrid")
+                                    .ID("DeptDataGrid")
+                                    .ShowBorders(true)
+                                    .ShowColumnLines(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    .Height("363")
+                                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .HoverStateEnabled(true)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .KeyExpr("dept_cd")
+                                    .Columns(columns =>
+                                    {
+                                        //columns.Add()
+                                        //    .DataField("emp_group_cd")
+                                        //    .Caption("그룹코드").Alignment(HorizontalAlignment.Center);
+                                        //columns.Add()
+                                        //    .DataField("emp_group_nm")
+                                        //    .Caption("그룹명").Alignment(HorizontalAlignment.Center);
+
+                                        columns.Add()
+                                            .DataField("dept_cd")
+                                            .Caption("부서코드").Alignment(HorizontalAlignment.Center);
+                                        columns.Add()
+                                            .DataField("dept_nm")
+                                            .Caption("부서명").Alignment(HorizontalAlignment.Center);
+                                    })
+                                )
+                                </div>
+                            </div>
+
+                            <div align="center" class="col-2" style="height: 392px; margin: 0px; padding: 0px;">
+                                <div style="height:150px"></div>
+                                <button class="btn btn-danger removeBtn" type="button" onclick="addGroup()">
+                                    @(Html.DevExtreme().Button()
+                                            .Icon("arrowright")
+                                            .ID("EmployeeEduAddGroup")
+                                     )
+                                </button>
+                                <button class="btn btn-primary addBtn" type="button" onclick="removeGroup()">
+                                    @(Html.DevExtreme().Button()
+                                        .Icon("arrowleft")
+                                            .ID("EmployeeEduRemoveGroup")
+                                    )
+                                </button>
+                            </div>
+
+                            <div class="col-5 p-0" >
+                                <div class="divName">
+                                    <p>참여부서 목록</p>
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        //.ID("AttendableGroupDataGrid")
+                                        .ID("AttendableDeptDataGrid")
+                                        .ShowBorders(true)
+                                        .ShowColumnLines(true)
+                                        .FocusedRowEnabled(true)
+                                        .FocusedRowIndex(0)
+                                        .Height("363")
+                                        .Selection(s => s.Mode(SelectionMode.Single))
+                                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .HoverStateEnabled(true)
+                                        .KeyExpr("dept_cd")
+                                        .Columns(columns =>
+                                        {
+                                            //columns.Add()
+                                            //   .DataField("emp_group_cd")
+                                            //    .Caption("그룹코드").Alignment(HorizontalAlignment.Center);
+                                            //columns.Add()
+                                            //    .DataField("emp_group_nm")
+                                            //    .Caption("그룹명").Alignment(HorizontalAlignment.Center);
+
+                                            columns.Add()
+                                                .DataField("dept_cd")
+                                                .Caption("그룹코드").Alignment(HorizontalAlignment.Center);
+                                            columns.Add()
+                                                .DataField("dept_nm")
+                                                .Caption("그룹명").Alignment(HorizontalAlignment.Center);
+                                        })
+                                )
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="EmployeeEdu_Tap_3" class="box mb-0 display-none" style="height:auto;padding:0px">
+
+                        <div align="right" id="btnDiv" style="margin: 8px;">
+                            <button type="button" id="file_Insert" class="btn btn-secondary" onclick="EmployeeEduFileAdd()">첨부</button>
+                            <button type="button" id="file_Open" class="btn btn-secondary" onclick="EmployeeEduFileOpen()">파일열기</button>
+                            <button type="button" id="file_Delete" class="btn btn-secondary" onclick="EmployeeEduFileDelete()">삭제</button>
+                            <input type="file" id="EE_fileData" style="display: none" />
+                        </div>
+                        <div>
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("EmployeeEduFileGrid")
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height("764")
+                                .HoverStateEnabled(true)
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("doc_name").Caption("파일이름").Width("60%");
+                                    c.Add().DataField("emp_nm").Caption("첨부자").Width("40%");
+                                    c.Add().DataField("doc_file_id").Visible(false);
+                                })
+                                .KeyExpr("doc_name")
+                                .OnRowDblClick("EmployeeEduFileOpen")
+                                )
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

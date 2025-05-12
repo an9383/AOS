@@ -1,0 +1,1329 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@*시험의뢰*@
+
+<script id="@(pagePrefix)Js">
+
+    var _testRequestEIsEditing = false;
+    var _testRequestESignCnt = 0;
+    var _testRequestESignGubun = "";
+    var _testRequestESignData = "";
+
+    $(function () {
+
+        var TestRequestPopupColumns = {
+            "testItem": [{ dataField: "item_cd", caption: "품목코드" }
+                , { dataField: "item_nm", caption: "품목명" }
+                , { dataField: "process_nm", caption: "공정" }
+                , { dataField: "test_type_nm", caption: "시험종류" }
+                , { dataField: "test_standard_nm", caption: "규격" }
+                , { dataField: "item_form_nm", caption: "제형" }]
+        };
+
+        // 시험종류 셀렉트 박스 값에 따라 의뢰품목 팝업 그리드 데이터 변경
+        $('input[name=item_cd]+div>button', $('#' + "TestRequestEWriteForm")).click(function (event) {
+            createPopup("TestRequestItem", "시험품목 조회", [], TestRequestPopupColumns.testItem, "item_cd", function (selectedItems) {
+                $("input[name=item_cd]", $('#' + "TestRequestEWriteForm")).val(selectedItems.item_cd);
+                $("input[name=item_nm]", $('#' + "TestRequestEWriteForm")).val(selectedItems.item_nm);
+                $("select[name=process_cd]", $('#' + "TestRequestEWriteForm")).val(selectedItems.process_cd);
+            }, $('input[name=item_cd]', $('#' + "TestRequestEWriteForm")).val());
+
+            $("#TestRequestItemPopup").dxPopup({
+                onShown: function (e) {
+
+                    var test_type = $("#TestRequestEWriteForm select[name=test_type]").val();
+
+                    $.ajax({
+                        type: 'GET',
+                        url: '/TestReq/TestRequestSelectTestItemPopup',
+                        data: {
+                            test_type: test_type
+                        },
+                        dataType: "json",
+                        async: false,
+                        success: function (result) {
+
+                            try {
+                                var jsonData = JSON.parse(result);
+                                $("#TestRequestItem_gridContainer").dxDataGrid("option", "dataSource", jsonData);
+                            }
+                            catch (e) {
+                                $("#TestRequestItem_gridContainer").dxDataGrid("option", "dataSource", []);
+                            }
+
+                        }
+                    })
+                }
+            });
+
+            $("#TestRequestItemPopup").dxPopup("instance").show();
+
+        });
+
+        $('input[name=cust_cd]+div>button', $("#TestRequestEWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.vender_buy', '구입업체 조회', 'vender_cd', $("#TestRequestEWriteForm input[name=cust_cd]").val(),
+                function (selectedItems) {
+                    $("#TestRequestEWriteForm input[name=cust_cd]").val(selectedItems.vender_cd);
+                    $("#TestRequestEWriteForm input[name=cust_nm]").val(selectedItems.vender_nm);
+                }
+            );
+        });
+
+        $('input[name=material_maker_cd]+div>button', $("#TestRequestEWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.item_maker', '원자재공급처 조회', 'vender_cd', $("#TestRequestEWriteForm input[name=material_maker_cd]").val(),
+                function (selectedItems) {
+                    $("#TestRequestEWriteForm input[name=material_maker_cd]").val(selectedItems.vender_cd);
+                    $("#TestRequestEWriteForm input[name=material_maker_nm]").val(selectedItems.vender_nm);
+                }
+            );
+        });
+
+        menutab('TestRequestTab', 'TestRequestTabContent', 1);
+
+        setDatePicker("#TestRequestE .datepicker");
+
+        TestItemmethodEditCheck(false, 'N');
+
+        $($("#TestRequestEUploadFileBtn")).click(function (event) {
+            TestRequestEUploadFileBtn(event);
+        });
+
+        $($("#TestRequestEDownloadFileBtn")).click(function (event) {
+            TestRequestEDownloadFileBtn(event);
+        });
+
+        $($("#TestRequestEDeleteFileBtn")).click(function (event) {
+            TestRequestEDeleteFileBtn(event);
+        });
+
+        $($("#TestRequestEUpdateTestStandardBtn")).click(function (event) {
+            TestRequestEUpdateTestStandard(event);
+        });
+
+        $("#TestRequestESearchForm input[name=de_Sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+        $("#TestRequestESearchForm input[name=de_Edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        TestRequestESearch();
+
+    });
+
+    // 수정중인지 체크
+    function TestItemmethodEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "TestRequestEToolbar"
+            , "TestRequestEGrid"
+            , "TestRequestEWriteForm"
+            , ""
+        );
+
+        _testRequestEIsEditing = nowEdit;
+
+        $("#TestRequestEWriteForm input[name=gubun]").val(status);
+    }
+
+    // 시험의뢰 그리드 포커스 변경
+    function TestRequestFocusChanged() {
+
+        UtilView.setDataGridFormBind("TestRequestEGrid", "TestRequestEWriteForm");
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        if (gridData.gmo_yn === "Y") {
+            $("#TestRequestEWriteForm input[name=gmo_yn][value='Y']").prop("checked", true);
+        } else {
+            $("#TestRequestEWriteForm input[name=gmo_yn][value='N']").prop("checked", true);
+        }
+
+        _testRequestESignCnt = 0;
+
+        $.ajax({
+            type: 'GET',
+            url: '/TestReq/TestRequestSelectDetail',
+            dataType: "json",
+            data: {
+                testcontrol_id: gridData.testcontrol_id,
+                test_type: gridData.test_type,
+                process_kind: '1'
+            },
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result[0]);
+                    $("#TestRequestSignTable").dxDataGrid("option", "dataSource", jsonData);
+
+                    for (var i = 0; i < jsonData.length; i++) {
+                        _testRequestESignCnt += parseInt(jsonData[i].sign_yn);
+                    }
+
+                }
+                catch (e) {
+                    $("#TestRequestSignTable").dxDataGrid("option", "dataSource", []);
+                }
+
+                try {
+                    var jsonData = JSON.parse(result[1]);
+                    $("#TestRequestFileGrid").dxDataGrid("option", "dataSource", jsonData);
+                }
+                catch (e) {
+                    $("#TestRequestFileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 시험의뢰 그리드 로우 하이라이트
+    function TestRequestHighlightRow(e) {
+
+        if (e.rowType === "data" && e.data.hb_ck === "Y") {             // 허벌라이프 전용원료
+            e.rowElement[0].style.backgroundColor = 'greenyellow';
+        }
+        else if (e.rowType === "data" && e.data.test_status === "14") { // 미생물시험완료
+            e.rowElement[0].style.backgroundColor = 'orangered';
+        }
+    }
+
+    // 시험의뢰 그리드 셀 하이라이트
+    function TestRequestHighlightCell(cellInfo) {
+
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === 'test_type_nm') {
+
+            if (cellInfo.data.test_type === '1') {          // 원료시험
+                cellInfo.cellElement[0].style.backgroundColor = 'lightcyan';
+            } else if (cellInfo.data.test_type === '2') {   // 자재
+                cellInfo.cellElement[0].style.backgroundColor = 'khaki';
+            } else if (cellInfo.data.test_type === '3') {   // 반제품
+                cellInfo.cellElement[0].style.backgroundColor = 'palegreen';
+            } else if (cellInfo.data.test_type === '4') {   // 용출시험
+                cellInfo.cellElement[0].style.backgroundColor = 'lightsalmon';
+            } else if (cellInfo.data.test_type === '5') {   // 재포장
+                cellInfo.cellElement[0].style.backgroundColor = 'lightgoldenrodyellow';
+            } else if (cellInfo.data.test_type === '6') {   // 포장
+                cellInfo.cellElement[0].style.backgroundColor = 'navajowhite';
+            } else if (cellInfo.data.test_type === '7') {   // 출하
+                cellInfo.cellElement[0].style.backgroundColor = 'gray';
+            } else if (cellInfo.data.test_type === '8') {   // 정제수
+                cellInfo.cellElement[0].style.backgroundColor = 'darkcyan';
+            } else if (cellInfo.data.test_type === '9') {   // 청정도
+                cellInfo.cellElement[0].style.backgroundColor = 'skyblue';
+            }
+        }
+        else if (cellInfo.rowType == "data" && cellInfo.column.dataField === 'test_status_nm') {
+
+            if (cellInfo.data.test_status === '0') {            // ___
+                //cellInfo.cellElement[0].style.backgroundColor = 'lightblue';
+            } else if (cellInfo.data.test_status === '1') {     // 의뢰
+                cellInfo.cellElement[0].style.backgroundColor = 'silver';
+            } else if (cellInfo.data.test_status === '2') {     // 접수
+                cellInfo.cellElement[0].style.backgroundColor = 'khaki';
+            } else if (cellInfo.data.test_status === '3') {     // 채취지시
+                cellInfo.cellElement[0].style.backgroundColor = 'navajowhite';
+            } else if (cellInfo.data.test_status === '4') {     // 채취중
+                cellInfo.cellElement[0].style.backgroundColor = 'gray';
+            } else if (cellInfo.data.test_status === '5') {     // 검체채취
+                cellInfo.cellElement[0].style.backgroundColor = 'paleturquoise';
+            } else if (cellInfo.data.test_status === '6') {     // 시험중
+                cellInfo.cellElement[0].style.backgroundColor = 'thistle';
+            } else if (cellInfo.data.test_status === '7') {     // 시험완료
+                cellInfo.cellElement[0].style.backgroundColor = 'cornflowerblue';
+            } else if (cellInfo.data.test_status === '8') {     // 확인
+                cellInfo.cellElement[0].style.backgroundColor = 'palegreen';
+            } else if (cellInfo.data.test_status === '9') {     // 승인
+
+                if (cellInfo.data.test_result_yn === 'Y') {             // 적합 판정
+                    cellInfo.cellElement[0].style.backgroundColor = 'limegreen';
+                } else if (cellInfo.data.test_result_yn === 'N') {      // 부적합 판정
+                    cellInfo.cellElement[0].style.backgroundColor = 'lightcoral';
+                } else if (cellInfo.data.test_result_yn === 'C') {      // 조건부 적합
+                    cellInfo.cellElement[0].style.backgroundColor = 'greenyellow';
+                }
+
+            } else if (cellInfo.data.test_status === '10') {    // 통보
+                cellInfo.cellElement[0].style.backgroundColor = 'tan';
+            } else if (cellInfo.data.test_status === '11') {    // 출하
+                cellInfo.cellElement[0].style.backgroundColor = 'lightslategray';
+            } else if (cellInfo.data.test_status === '12') {    // 일정
+                cellInfo.cellElement[0].style.backgroundColor = 'pink';
+            } else if (cellInfo.data.test_status === '13') {    // 의뢰취소
+                cellInfo.cellElement[0].style.backgroundColor = 'silver';
+                cellInfo.cellElement[0].style.fontColor = 'crimson';
+            } else if (cellInfo.data.test_status === '14') {    // 미생물시험완료
+                cellInfo.cellElement[0].style.backgroundColor = 'goldenrod';
+            }
+        }
+    }
+
+    // 규격적용
+    function TestRequestEUpdateTestStandard(e) {
+
+        if (_testRequestEIsEditing) {
+            return;
+        }
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/TestReq/TestRequestEUpdateTestStandard',
+            data: {
+                testcontrol_id: gridData.testcontrol_id
+            },
+            success: function (result) {
+
+                alert(result.message);
+
+            }
+        });
+    }
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function TestRequestESearch() {
+
+        var form = $('#TestRequestESearchForm');
+
+        $.ajax({
+            type: 'GET',
+            url: '/TestReq/TestRequestESelect',
+            data: form.serialize(),
+            processData: true,
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+            success: function (result) {
+
+                try {
+
+                    var jsonData = JSON.parse(result);
+
+                    var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+
+                    grid.option("dataSource", jsonData);
+
+                    if (!grid.option("focusedRowKey")) {
+                        grid.option("focusedRowIndex", 0);
+                    } else {
+                        TestRequestFocusChanged();
+                    }
+
+                    TestItemmethodEditCheck(false, 'N');
+
+                } catch (e) {
+
+                    $("#TestRequestEGrid").dxDataGrid("option", "dataSource", []);
+
+                }
+            }
+        })
+        //UtilView.dataGridSelect('TestRequestEGrid', 'TestRequestESearchForm');
+    }
+
+    // 입력
+    function TestRequestEInput() {
+
+        $("#TestRequestEWriteForm")[0].reset();
+        $("#TestRequestEWriteForm .datepicker").datepicker("update", "");
+        $("#TestRequestSignTable").dxDataGrid("option", "dataSource", []);
+        $("#TestRequestFileGrid").dxDataGrid("option", "dataSource", []);
+
+        TestItemmethodEditCheck(true, 'I');
+
+        $("#TestRequestEWriteForm input[name=gmo_yn][value='N']").prop("checked", true);
+    }
+
+    // 수정
+    function TestRequestEEdit() {
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정할 사항이 없습니다.");
+            return;
+        }
+
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        var test_status = gridData.test_status;
+
+        if (test_status == "0" || test_status == "1") {
+
+            if (_testRequestESignCnt > 0) {
+                alert("이미 서명된 시험의뢰는 수정할 수 없습니다.");
+                return;
+            }
+        }
+        else if (test_status != "0" || test_status != "1") {
+            alert("시험이 진행중이므로 수정할 수 없습니다.");
+            return;
+        }
+
+        TestItemmethodEditCheck(true, 'U');
+    }
+
+    // 삭제
+    function TestRequestEDelete() {
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        var test_type = gridData.test_type;
+
+        if (_testRequestESignCnt < 1) {
+
+            // 원료(1)나 자재(2)일 경우
+            if (test_type === "1" || test_type === "2") {
+
+                if (!confirm("원자재 입고의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 반제품
+            else if (test_type === "3" && gridData.test_result_yn === "C") {
+
+                if (confirm("<조건부적합> 판정을 취소하시겠습니까?")) {
+
+                    $.ajax({
+                        type: 'GET',
+                        url: '/TestReq/TestRequestDeleteTestResult',
+                        dataType: "json",
+                        data: {
+                            testcontrol_id: gridData.testcontrol_id,
+                            testrequest_no: gridData.testrequest_no,
+                            process_cd: gridData.process_cd
+                        },
+                        async: false,
+                        success: function (result) {
+
+                        }
+                    })
+
+                } else {
+                    return;
+                }
+            }
+            else if (test_type === "3") {
+                if (!confirm("반제품의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 완제품
+            else if (test_type === "6") {
+                if (!confirm("완제품의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 제조용수
+            else if (test_type === "10") {
+                if (!confirm("제조용수의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 1차 포장
+            else if (test_type === "20") {
+                if (!confirm("1차 포장 제품의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 외주완제품
+            else if (test_type === "42") {
+                if (!confirm("외주완제품의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            // 안정성 장기(7), 가속(8), 가혹(9)
+            else if (test_type === "7" || test_type === "8" || test_type === "9" || test_type === "40") {
+                if (!confirm("안정성시험의 시험의뢰도 함께 삭제 됩니다. 시험의뢰 내용을 삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+        }
+        else {
+
+            var test_status = gridData.test_status;
+
+            // 시험의뢰취소("13")일때는 삭제가능. -> 시험의뢰 취소(13)은 시험 접수 프로그램에서 할 수 있다.
+            if (test_status === "13") {
+                if (!confirm("삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+
+            else if (test_status !== "1" && test_status !== "0") {
+                alert("다음 단계가 진행되어 작업할 수 없습니다.");
+                return;
+            }
+
+            else {
+                if (!confirm("삭제하시겠습니까?")) {
+                    return;
+                }
+            }
+        }
+
+        TestItemmethodEditCheck(true, 'D');
+
+        TestRequestESave();
+    }
+
+    // 저장
+    function TestRequestESave() {
+
+        var start_qty = $("#TestRequestEWriteForm input[name=start_qty]").val();
+
+        if (start_qty < 0) {
+            alert("의뢰량이 마이너스입니다.");
+            return;
+        }
+
+        var form = $('#TestRequestEWriteForm')[0];
+        var formData = new FormData(form);
+
+        if (!UtilView.checkValidForm("TestRequestEWriteForm")) {
+            return;
+        }
+
+        UtilView.dataGridTRX(formData, () => TestRequestESearch());
+
+        //TestItemmethodEditCheck(false, 'N');
+    }
+
+    // 취소
+    function TestRequestEUndo() {
+        TestItemmethodEditCheck(false, 'N');
+        TestRequestFocusChanged();
+    }
+
+    // 출력, 미리보기
+    function TestRequestEPrint() {
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        if (gridData.test_status === "0")   // 상태 값이 의뢰 이전 단계인 '--'(0) 인 경우
+        {
+            alert("시험 의뢰가 진행되지 않았습니다.\n시험 의뢰서를 미리보기/출력 할 수 없습니다");
+            return;
+        }
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "TestReq", RptFileName: "rptTest_Request" },
+            objSp: { SpName: "SP_TestInformReport", gubun: "S", reportParam: "testcontrol_id:" + gridData.testcontrol_id },
+            objEtcInfo: { subParam: "" }
+        });
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+    // 엑셀 추출
+    function TestRequestEExcel() {
+        gridExportToExcel("TestRequestEGrid", "시험의뢰_" + '@DateTime.Now.ToShortDateString()');
+    }
+
+    //#endregion
+
+
+    //#region 전자서명 관련
+
+    // 서명 그리드 셀 클릭
+    function TestRequestESign(e) {
+
+        if ($("#TestRequestEWriteForm input[name=gubun]").val() != "N") {
+            return;
+        }
+
+        var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+        var test_status = parseInt(gridData.test_status);
+
+        if (test_status > 2) {
+            alert("이미 시험이 진행중입니다.");
+            return;
+        }
+
+        _testRequestESignData = e.data;
+
+        if (e.columnIndex == 3) {
+
+            _testRequestESignGubun = "U";
+
+            if (e.data.prev_sign_yn == "0") {
+                alert("먼저 앞 단계 승인이 필요합니다.");
+                return;
+            }
+
+            if (e.data.sign_yn == "1") {
+
+                if (e.data.next_sign_yn == "1") {
+                    alert("이미 다음 단계가 승인 되어 있습니다.\n먼저 다음 단계 승인을 삭제(취소)해주세요. ");
+                    return;
+                }
+
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                    _testRequestESignGubun = "D";
+                } else {
+                    return;
+                }
+
+            }
+
+            var popup = $("#TestRequestESignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#TestRequestESignPopupTemplate"));
+            popup.show();
+
+        }
+    }
+
+    // 전자서명 입력
+    function TestRequestESignSubmit() {
+
+        var data = new FormData($('#TestRequestESignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    alert("잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                var jsonData = JSON.parse(result)[0];
+
+                var isOK = false;
+
+                var grid = $("#TestRequestEGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("TestRequestEGrid", grid.option("focusedRowKey"));
+
+                 // 안정성 시험처럼 시험의뢰는 하지만 전자서명은 필수가 아닌 경우를 확인한다.
+                if (_testRequestESignData.necessary_yn !== "Y") {
+
+                    // 필수가 아니면 시험관리 로직처럼 삭제 될 수 있도록 의뢰(1) 상태에서 '---'(0) 상태로 변경한다.
+                    if (confirm("시험의뢰 상태가 변경 됩니다. 변경 하시겠습니까?")) {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/TestReq/TestRequestEStatusChange',
+                            data: {
+                                testcontrol_id: gridData.testcontrol_id
+                            },
+                            async: false,
+                            success: function (result) {
+
+                            }
+                        });
+                    }
+                }
+                else {
+
+                    //로그인 사용자와 동일한지 여부 체크
+                    if (jsonData.emp_cd !== sessionStorage.getItem("loginCD")) {
+                        alert("로그인 사용자와 서명자가 일치하지 않습니다.");
+                        return;
+                    }
+
+                    var representative_yn = 'N';
+
+                    if (!_testRequestESignData.responsible_emp_cd) {
+                        isOK = true;
+                    }
+                    //서명 책임자와 서명자가 일치하지 않으면 대리자 권한을 체크한다.
+                    else if (_testRequestESignData.responsible_emp_cd !== jsonData.emp_cd) {
+
+                        $.ajax({
+                            type: 'GET',
+                            url: '/TestReq/TestRequestESignDelegateCheck',
+                            data: {
+                                emp_cd: jsonData.emp_cd,
+                                testcontrol_id: gridData.testcontrol_id,
+                                process_kind: '1',
+                                test_type: gridData.test_type,
+                                sign_set_dt_id: _testRequestESignData.sign_set_dt_id,
+                                program_cd: "TestRequestE"
+                            },
+                            async: false,
+                            success: function (result) {
+
+                                if (result.length > 0) {
+                                    representative_yn = 'Y';
+                                    isOK = true;
+                                } else {
+                                    isOK = false;
+                                }
+                            }
+                        });
+
+                    } else {
+                        isOK = true;
+                    }
+
+                    if (!isOK) {
+                        alert("권한이 없는 사용자입니다.");
+                        return;
+                    }
+
+                    var paramData = {
+                        gubun: _testRequestESignGubun,
+                        emp_cd: jsonData.emp_cd,
+                        testcontrol_id: gridData.testcontrol_id,
+                        process_kind: '1',
+                        test_type: gridData.test_type,
+                        sign_set_dt_id: _testRequestESignData.sign_set_dt_id,
+                        validation_type: "2",
+                        representative_yn: representative_yn,
+                        program_cd: "TestRequestE"
+                    };
+
+                    setTimeout(function () {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/TestReq/TestRequestESignTRX',
+                            data: paramData,
+                            success: function (result) {
+
+                                TestRequestESearch();
+                            }
+                        });
+
+                        _testRequestESignGubun = "";
+
+                        var popup = $("#TestRequestESignPopup").dxPopup("instance");
+                        popup.hide();
+                    }, 1000);
+
+                }
+            }
+        });
+    }
+
+    // 전자서명 인풋 초기화
+    function ClearTestRequestESignInput() {
+        $('#TestRequestESignForm')[0].reset();
+    }
+
+    //#endregion
+
+
+    //#region 파일 관련
+
+    // 파일목록만 조회
+    function TestRequestESelectFileList() {
+
+        var testcontrol_id = $("#TestRequestEWriteForm input[name=testcontrol_id]").val();
+
+        $.ajax({
+            type: 'GET',
+            url: '/TestReq/TestRequestESelectFileList',
+            data: {
+                testcontrol_id: testcontrol_id
+            },
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+                    $("#TestRequestFileGrid").dxDataGrid("option", "dataSource", json);
+                } catch (e) {
+                    $("#TestRequestFileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 파일 업로드 버튼
+    function TestRequestEUploadFileBtn(event) {
+
+        if ($("#TestRequestEWriteForm input[name=gubun]").val() === "I") {
+            alert("입력중에는 파일 첨부가 불가능합니다.");
+            return;
+        }
+
+        var fileUploader = $('#TestRequestEFileUploader').dxFileUploader('instance');
+        fileUploader._isCustomClickEvent = true;
+        fileUploader._$fileInput.click();
+    }
+
+    // 파일 업로드
+    function TestRequestEUploadFile(e) {
+
+        var name = e.component.option("name");
+
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "testcontrol_id", $("#TestRequestEWriteForm input[name=testcontrol_id]").val());
+        url = updateQueryStringParameter(url, "name", name);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 파일 다운로드
+    function TestRequestEDownloadFileBtn(e) {
+
+        var grid = $("#TestRequestFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestFileGrid", grid.option("focusedRowKey"));
+
+        var fileId = gridData.file_id;
+
+        if (fileId != "") {
+
+            document.location.assign('/TestReq/TestRequestEDownloadFile?testcontrol_id=' + $("#TestRequestEWriteForm input[name=testcontrol_id]").val() + '&file_id=' + fileId);
+        }
+    }
+
+    // 파일 삭제
+    function TestRequestEDeleteFileBtn() {
+
+        if (!confirm("선택한 문서를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        var grid = $("#TestRequestFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestRequestFileGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/TestReq/TestRequestEDeleteFile',
+            data: {
+                testcontrol_id: $("#TestRequestEWriteForm input[name=testcontrol_id]").val(),
+                file_id: gridData.file_id
+            },
+            success: function (result) {
+
+                alert("삭제하였습니다.");
+
+                TestRequestESelectFileList();
+            }
+        });
+    }
+
+    //#endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="TestRequestItemPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("TestRequestESignPopup")
+            .Width(400)
+            .Height(200)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("ClearTestRequestESignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("TestRequestESignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="TestRequestESignForm" class="mb-1">
+
+            <div class="input-wrapper mb-1">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+            </div>
+            <div class="input-wrapper">
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+        </form>
+        <div class="align-end-only">
+            <button class="btn btn-secondary" onclick="TestRequestESignSubmit()">확인</button>
+        </div>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" id="@(pagePrefix)selectdate1" name="selectdate" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate1">의뢰일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" id="@(pagePrefix)selectdate2" name="selectdate" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate2">접수일자</label></span>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="test_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC007")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary" id="TestRequestEUpdateTestStandardBtn">규격적용</button>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="de_Sdate" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="de_Edate" autocomplete="off">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제형</span>
+                        </div>
+                        <select class="form-control" name="item_form_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC011")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검색어</span>
+                        </div>
+                        <select class="form-control" name="search_gubun">
+                            <option value="0">의뢰품목</option>
+                            <option value="1">의뢰번호</option>
+                            <option value="2">제조(관리)번호</option>
+                        </select>
+                        <input type="text" class="form-control input-sm text-center" name="search_number">
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-9 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TestRequestEGrid")
+                    .KeyExpr("testcontrol_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("outer_interface").Caption("I");
+                        c.Add().DataField("testrequest_no").Caption("의뢰번호");
+                        c.Add().DataField("test_type_nm").Caption("종류");
+                        c.Add().DataField("test_standard_nm_1").Caption("규격");
+                        c.Add().DataField("item_cd").Caption("코드");
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("start_no").Caption("제조번호");
+                        c.Add().DataField("process_nm").Caption("구분");
+                        c.Add().DataField("request_date").Caption("의뢰일자");
+                        c.Add().DataField("test_status_nm").Caption("상태");
+                    })
+                    .OnFocusedRowChanged("TestRequestFocusChanged")
+                    .OnRowPrepared("TestRequestHighlightRow")
+                    .OnCellPrepared("TestRequestHighlightCell")
+                    .OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-3 pl-0">
+
+            <div class="box mb-0 flex-box-div">
+
+                <div class="divName mb-1">
+                    <p>시험의뢰 정보</p>
+                </div>
+
+                <form id="TestRequestEWriteForm" class="mb-1">
+
+                    <input name="gubun" hidden="hidden" />
+                    <input name="testcontrol_id" hidden="hidden" />
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="testrequest_no" readonly="readonly" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">시험종류</label>
+                        <div class="input-group col-4">
+                            <select class="form-control required" name="test_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC004")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰품목</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required searchPopupInput" name="item_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="item_nm" readonly="readonly"/>
+                        </div>
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="item_enm" readonly="readonly"/>
+                        </div>
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-4">규격</label>
+                        <div class="input-group col-7">
+                            <select class="form-control required" name="test_standard">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM003")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">공정</label>
+                        <div class="input-group col-4">
+                            <select class="form-control" name="process_cd">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공정", "D", "")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker required" name="request_date" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰량/단위</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control col-6 required" name="start_qty" />
+                            <select class="form-control col-6 required" name="start_qty_unit">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "CM012")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">통보요청일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker" name="result_hope_date" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조일자/유통기한</label>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control col-6 datepicker" name="start_date" />
+                            <input type="text" class="form-control col-6 datepicker" name="valid_period" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조(관리)번호</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="start_no" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">공급처</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-4 searchPopupInput" name="cust_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="cust_nm">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조원</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-4 searchPopupInput" name="material_maker_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="form-control" name="material_maker_nm">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">입고번호</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-6" name="enter_no" readonly="readonly">
+                            <input type="text" class="form-control col-6" name="enter_seq" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">입고일/포장수</label>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control col-6 datepicker" name="enter_date" />
+                            <input type="number" class="form-control col-6" name="pack_cnt" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">GMO여부</label>
+                        <div class="input-group col-3">
+                            <div class="radioDiv col-12">
+                                <label><input type="radio" name="gmo_yn" value="Y" />GMO </label>
+                                <label><input type="radio" name="gmo_yn" value="N" />NONGMO </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장재질</label>
+                        <div class="input-group col-7">
+                            <select class="form-control" name="pack_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM058")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰목적</label>
+                        <div class="input-group col-7">
+                            <select class="form-control" name="request_purpose">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QT002")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">비고</label>
+                        <div class="input-group col-7">
+                            <textarea class="form-control" name="request_remark"></textarea>
+                        </div>
+                    </div>
+
+                </form>
+
+                <ul class="nav nav-tabs" id="TestRequestTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('TestRequestTab', 'TestRequestTabContent', 1);">전자서명 정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('TestRequestTab', 'TestRequestTabContent', 2);">첨부파일</a>
+                    </li>
+                </ul>
+
+                <div id="TestRequestTabContent" class="flex-grow-1">
+
+                    <div id="TestRequestTabContent_1" class="height-inherit">
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestRequestSignTable")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("sign_set_dt_id")
+                            .OnCellClick("TestRequestESign")
+                            .Height(217)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(columns =>
+                            {
+                                columns.Add()
+                                    .DataField("displayfield")
+                                    .Width("15%")
+                                    .Caption("구분");
+                                columns.Add()
+                                    .DataField("sign_emp_nm")
+                                    .Width("20%")
+                                    .Caption("서명자");
+                                columns.Add()
+                                    .DataField("sign_time")
+                                    .Caption("서명일자");
+                                columns.Add()
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .DataField("sign_image")
+                                    .Name("sign_image")
+                                    .Caption("서명")
+                                    .Width("25%")
+                                    .CellTemplate(@<text>
+                                        <div>
+                                            <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                        </div>
+                                    </text>);
+                            })
+                        )
+
+                    </div>
+
+                    <div id="TestRequestTabContent_2" class="height-inherit">
+
+                        <div class="align-end-only mr-1">
+                            <button class="btn btn-secondary" id="TestRequestEUploadFileBtn">등록</button>
+                            <button class="btn btn-secondary" id="TestRequestEDownloadFileBtn">다운로드</button>
+                            <button class="btn btn-secondary" id="TestRequestEDeleteFileBtn">삭제</button>
+                        </div>
+
+                        @(Html.DevExtreme().FileUploader()
+                            .Visible(false)
+                            .ID("TestRequestEFileUploader")
+                            .Name("TestRequestEAttatchedFile")
+                            .Multiple(false)
+                            .Accept(".hwp, .doc, .docx, .dot, .pdf, .rtf")
+                            .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                            .UploadUrl(Url.Action("TestRequestEUploadFile", "TestReq"))
+                            .UploadMode(FileUploadMode.Instantly)
+                            .MaxFileSize(int.MaxValue)
+                            .OnValueChanged("TestRequestEUploadFile")
+                            .OnUploaded("TestRequestESelectFileList")
+                        )
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("TestRequestFileGrid")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("file_id")
+                            .Height(194)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(columns =>
+                            {
+                                columns.Add()
+                                    .DataField("doc_file_name")
+                                    .Caption("파일명");
+                            })
+                        )
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

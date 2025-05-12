@@ -1,0 +1,1217 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{ 
+    var CustPopupData = @Html.Raw(Json.Encode(ViewBag.CustPopupData.Data));
+    var EmpPopupData = @Html.Raw(Json.Encode(ViewBag.EmpPopupData.Data));
+    var ItemPopupData_M = @Html.Raw(Json.Encode(ViewBag.ItemPopupData_M.Data));
+    var ItemPopupData_P = @Html.Raw(Json.Encode(ViewBag.ItemPopupData_P.Data));
+    var PlanningOrderManage_SignSetData = @Html.Raw(Json.Encode(ViewBag.PlanningOrderManage_SignSetData.Data));
+}
+
+<style>
+    #PlanningOrderManage .gainsboro {background-color: gainsboro; color: black;}    /* 서명상태 : -- */
+    #PlanningOrderManage .beige {background-color: beige; color: black;}            /* 서명상태 : 의뢰 */
+    #PlanningOrderManage .yellow {background-color: yellow; color: black;}          /* 서명상태 : 검토 */
+    #PlanningOrderManage .greenyellow {background-color: greenyellow; color: black;}/* 서명상태 : 승인 */
+
+    #PlanningOrderManage .oldlace {background-color: oldlace; color: black;}         /* 진행상태 : 생산의뢰 */
+    #PlanningOrderManage .moccasin {background-color: moccasin; color: black;}       /* 진행상태 : 계산완료 */
+    #PlanningOrderManage .orange {background-color: orange; color: black;}           /* 진행상태 : 계획등록 */
+    #PlanningOrderManage .gold {background-color: gold; color: black;}               /* 진행상태 : 제조지시 */
+    #PlanningOrderManage .tan {background-color: tan; color: black;}                 /* 진행상태 : 포장지시 */
+
+    .sign_set_cd_tooltip {
+        visibility: hidden;
+        width: 50px;
+        background-color: dodgerblue;
+        color: black;
+        text-align: center;
+        padding: 5px 0;
+        border-radius: 6px;
+        /* Position the tooltip text - see examples below! */
+        position: absolute;
+        z-index: 1;
+        font-size:10px;
+        font-weight:normal;
+        margin-left : 10px;
+    }
+
+    .sign_set_nm:hover+.sign_set_cd_tooltip {
+        visibility: visible;
+    }
+
+</style>
+
+@*제조의뢰 현황*@
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var PlanningOrderManage_dbState = "";
+
+    var searchChk_cust = "";
+    var searchChk_packingItem = "";
+    var PlanningOrderManage_sign_set_cd = JSON.parse(@PlanningOrderManage_SignSetData)[0].sign_set_cd;
+    var PlanningOrderManage_SignSetData = null;
+
+    _saveSignCallbackFunc = "StatusBySaveSign";
+    _cancelSignCallbackFunc = "StatusByCancelSign";
+
+    //h:제조, c :포장
+    $(function () {
+        setDatePicker("#PlanningOrderManage .datepicker");
+
+        //거래처 팝업
+        var CustPopupData = @CustPopupData;
+
+        var columns = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+        createPopup("PlanningOrderManage_Cust", "제품 거래처 조회", CustPopupData, columns, "vender_cd");
+
+        //사원 팝업(기존에 마케팅 부서만 조회했는데, 전직원으로 변경)
+        var EmpPopupData = @EmpPopupData;
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" }
+        ];
+        createPopup("PlanningOrderManage_Emp", "사원 조회", EmpPopupData, columns, "emp_cd");
+
+        //제조품목 팝업
+        var ItemPopupData_M = @ItemPopupData_M;
+
+        var columns = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+        createPopup("PlanningOrderManage_Item_M", "품목 조회", ItemPopupData_M, columns, "item_cd");
+
+        //포장품목 팝업
+        var ItemPopupData_P = @ItemPopupData_P;
+
+        var columns = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+        createPopup("PlanningOrderManage_Item_P", "품목 조회", ItemPopupData_P, columns, "item_cd");
+
+
+        // 수정중인지 체크
+        PlanningOrderManage_EditCheck(false);
+        // 그리드 데이터 조회
+        PlanningOrderManageSearch();
+
+        // 서명그리드 상단 서명의미 표시
+        PlanningOrderManage_SignSetData = JSON.parse(@PlanningOrderManage_SignSetData)[0];
+        CommonSign_SetSignSetData(PlanningOrderManage_SignSetData, PagePrefix);
+
+    });
+    // 수정중인지 체크
+    function PlanningOrderManage_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#PlanningOrderManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageSearch").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageInput").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageDelete").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#PlanningOrderManageForm :disabled").attr('disabled', false);
+            $("#PlanningOrderManageGrid").dxDataGrid("option", "disabled", true);
+            $("#PlanningOrderManageSignGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            $("#PlanningOrderManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#PlanningOrderManageSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageInput").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#PlanningOrderManageExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#PlanningOrderManageForm :enabled").attr('disabled', true);
+            $("#PlanningOrderManageGrid").dxDataGrid("option", "disabled", false);
+            $("#PlanningOrderManageSignGrid").dxDataGrid("option", "disabled", false);
+
+            PlanningOrderManage_dbState = "";
+
+        }
+    }
+
+    //거래처 팝업
+    function PlanningOrderManage_SearchCust(t) {
+        searchChk_cust = t;
+
+        var popup = $("#PlanningOrderManage_CustPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //사원 팝업
+    function PlanningOrderManage_SearchEmp() {
+        var popup = $("#PlanningOrderManage_EmpPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //포장품목 찾기
+    function PlanningOrderManage_SearchPackingItem(t) {
+        searchChk_packingItem = t;
+
+        var popup = $("#PlanningOrderManage_Item_PPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //제조품목 찾기
+    function PlanningOrderManage_SearchItem() {
+        var popup = $("#PlanningOrderManage_Item_MPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //거래처 팝업 - 선택
+    function PlanningOrderManage_CustRowDblClick(e) {
+        var data = e.data;
+
+        if (searchChk_cust == "1") {
+            //상단 검색영역 데이터로 설정
+            $("#PlanningOrderManageSearchForm input[name=cust_cd]").val(data.vender_cd);
+            $("#PlanningOrderManageSearchForm input[name=cust_nm]").val(data.vender_nm);
+        }
+
+        if (searchChk_cust == "2") {
+            //입력폼 데이터로 설정
+            $("#PlanningOrderManageForm input[name=cust_cd]").val(data.vender_cd);
+            $("#PlanningOrderManageForm input[name=cust_nm]").val(data.vender_nm);
+        }
+
+        searchChk_cust = "";
+
+        var popup = $("#PlanningOrderManage_CustPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //사원 팝업 - 선택
+    function PlanningOrderManage_EmpRowDblClick(e) {
+        var data = e.data;
+
+        $("#PlanningOrderManageForm input[name=sales_emp_cd]").val(data.emp_cd);
+        $("#PlanningOrderManageForm input[name=sales_emp_nm]").val(data.emp_nm);
+
+        var popup = $("#PlanningOrderManage_EmpPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //포장품목 팝업 - 선택
+    function PlanningOrderManage_Item_PRowDblClick(e) {
+        var data = e.data;
+
+        if (searchChk_packingItem == "1") {
+            //상단 검색영역 데이터로 설정
+            $("#PlanningOrderManageSearchForm input[name=order_request_item_cd]").val(data.item_cd);
+            $("#PlanningOrderManageSearchForm input[name=order_request_item_nm]").val(data.item_nm);
+        }
+
+        if (searchChk_packingItem == "2") {
+            //입력폼 데이터로 설정
+            $("#PlanningOrderManageForm input[name=order_request_c_item_cd]").val(data.item_cd);
+            $("#PlanningOrderManageForm input[name=order_request_c_item_nm]").val(data.item_nm);
+
+            PlanningOrderManage_Setting_h_item(data.item_cd);
+            PlanningOrderManage_Setting_bom_no();
+
+        }
+        searchChk_packingItem = "";
+
+        var popup = $("#PlanningOrderManage_Item_PPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //제조품목 팝업 - 선택
+    function PlanningOrderManage_Item_MRowDblClick(e) {
+        var data = e.data;
+
+        $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val(data.item_cd);
+        $("#PlanningOrderManageForm input[name=order_request_h_item_nm]").val(data.item_nm);
+
+        PlanningOrderManage_GetItemPackunit(data.item_cd);
+
+        var popup = $("#PlanningOrderManage_Item_MPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+
+    //조회, 입력, 수정, 삭제, 저장, 취소, 엑셀
+
+
+    //조회
+    function PlanningOrderManageSearch() {
+
+        var formData = new FormData($("#PlanningOrderManageSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/AdvancedPlanning/PlanningOrderManageSearch',
+            data: formData,
+            async: false,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#PlanningOrderManageGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#PlanningOrderManageGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PlanningOrderManageSignGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "PlanningOrderManageGrid");
+
+    }
+
+    //입력
+    function PlanningOrderManageInput() {
+
+        PlanningOrderManage_EditCheck(true);
+
+        //입력폼 초기화
+        $("#PlanningOrderManageForm")[0].reset();
+        //서명그리드 초기화
+        $("#PlanningOrderManageSignGrid" ).dxDataGrid("instance").option("dataSource", []);
+
+        PlanningOrderManage_dbState = "I";
+
+        $("#PlanningOrderManageForm input[name=order_request_date]").datepicker({ dateFormat: "yy-mm-dd" }).datepicker("setDate", new Date());
+        $("#PlanningOrderManageForm input[name=require_date]").datepicker({ dateFormat: "yy-mm-dd" }).datepicker("setDate", new Date());
+    }
+
+    //수정
+    function PlanningOrderManageEdit() {
+
+        if ($("#PlanningOrderManageGrid").dxDataGrid("instance").getDataSource().totalCount() == 0) {
+            alert("수정할 데이터가 없습니다.");
+            return;
+        }
+
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        if (!UtilView.isEmpty(gridData) && gridData.sign_status != "0") {
+            alert("전자서명 취소 후 수정할 수 있습니다.");
+            return;
+        }
+        PlanningOrderManage_dbState = "U";
+
+        PlanningOrderManage_EditCheck(true);
+       // $("#PlanningOrderManageForm input[name=order_request_no]").focus();
+
+    }
+
+    //삭제
+    function PlanningOrderManageDelete() {
+
+        if ($("#PlanningOrderManageGrid").dxDataGrid("instance").getDataSource().totalCount() == 0) {
+            alert("삭제할 데이터가 없습니다.");
+            return;
+        }
+
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        if (!UtilView.isEmpty(gridData) && gridData.sign_status != "0") {
+            alert("전자서명 취소를 먼저 진행해주세요"); return;
+        }
+
+        if (confirm("제조의뢰 정보를 삭제하시겠습니까?")) {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/PlanningOrderManageDelete',
+                data: {
+                    order_request_no: gridData.order_request_no
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        var message = json.message;
+                        if (message == "N") {
+                            alert("생산계획이 등록된 데이터는 삭제할수 없습니다.")
+                        } else {
+                            alert("삭제되었습니다.");
+                            CommonSign_DeleteSignListData(PlanningOrderManage_sign_set_cd, gridData.order_request_no);
+                        }
+
+                    }
+                }
+            })
+
+        }
+
+        PlanningOrderManageSearch();
+
+    }
+
+    //저장
+    function PlanningOrderManageSave() {
+        if (!UtilView.checkValidForm("PlanningOrderManageForm")) return;
+
+        var m_bom_no = $("#PlanningOrderManageForm input[name=m_bom_no]").val();
+        var p_bom_no = $("#PlanningOrderManageForm input[name=p_bom_no]").val();
+
+        if ((m_bom_no == null || m_bom_no == "") || (p_bom_no == null || p_bom_no == "")) {
+            if (!confirm("BOM 정보가 등록되지 않았습니다. 계속 진행하시겠습니까?"))
+                return;
+        }
+
+        if (confirm("제조의뢰 정보를 저장하시겠습니까?")) {
+
+            var formData = new FormData($("#PlanningOrderManageForm")[0]);
+
+            if (PlanningOrderManage_dbState == "I") formData.set("row_status", "I2");
+            if (PlanningOrderManage_dbState == "U") formData.set("row_status", "U2");
+
+            if ($("#PlanningOrderManageForm input:checkbox[name='add_delivery_ck']").prop("checked")) {
+                formData.set("add_delivery_ck", "Y");
+            } else {
+                formData.set("add_delivery_ck", "N");
+            }
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                contentType: false,
+                processData: false,
+                url: '/AdvancedPlanning/PlanningOrderManageSave',
+                data: formData,
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        var message = json.message;
+
+                        if (message == "N") {
+                            alert("생산 계획이 등록된 데이터는 수정할수 없습니다.")
+                        } else {
+
+                            if (PlanningOrderManage_dbState == "I") CommonSign_InsertSignList(PlanningOrderManage_sign_set_cd, message); //서명 초기화 데이터 저장
+
+                            alert("저장하였습니다.");
+                        }
+
+                    }
+                }
+            })
+        }
+
+        PlanningOrderManage_EditCheck(false);
+        PlanningOrderManageSearch();
+
+    }
+
+    //취소
+    function PlanningOrderManageUndo() {
+        PlanningOrderManage_EditCheck(false);
+        PlanningOrderManageSearch();
+    }
+
+    //엑셀
+    function PlanningOrderManageExcel() {
+        gridExportToExcel("PlanningOrderManageGrid", "PlanningOrderManageData");
+    }
+
+    //우측 폼 데이터 매핑
+    function PlanningOrderManage_SetDetail() {
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        if (!UtilView.isEmpty(gridData) && gridData != null) {
+            var data = gridData;
+
+            $("#PlanningOrderManageForm input[name=order_request_no]").val(data.order_request_no);//생산의뢰번호
+            $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val(data.order_request_h_item_cd);//제조품목코드
+            $("#PlanningOrderManageForm input[name=order_request_h_item_nm]").val(data.order_request_h_item_nm);//제조품목명
+            $("#PlanningOrderManageForm input[name=order_request_c_item_cd]").val(data.order_request_c_item_cd);//포장품목코드
+            $("#PlanningOrderManageForm input[name=order_request_c_item_nm]").val(data.order_request_c_item_nm);//포장품목명
+            $("#PlanningOrderManageForm input[name=order_request_date]").val(data.order_request_date);//생산의뢰일자
+            $("#PlanningOrderManageForm input[name=sales_emp_cd]").val(data.sales_emp_cd);//영업담당사원코드
+            $("#PlanningOrderManageForm input[name=sales_emp_nm]").val(data.sales_emp_nm);//영업담당사원이름
+            $("#PlanningOrderManageForm input[name=cust_cd]").val(data.cust_cd);//거래처코드
+            $("#PlanningOrderManageForm input[name=cust_nm]").val(data.cust_nm);//거래처명
+            $("#PlanningOrderManageForm input[name=c_qty]").val(data.c_qty);//의뢰수량
+
+            //$("#PlanningOrderManageForm input[name=order_request_qty]").val(data.order_request_qty);//제조환산수량?
+            //$("#PlanningOrderManageForm input[name=order_request_h_qty]").val(data.order_request_h_qty);//포장환산수량?
+
+            $("#PlanningOrderManageForm input[name=loss_h_qty]").val(data.order_request_h_qty);//제조환산수량?
+            $("#PlanningOrderManageForm input[name=order_request_qty]").val(data.order_request_qty);//포장환산수량?
+
+            $("#PlanningOrderManageForm input[name=order_request_price]").val(data.order_request_price);//단가
+            $("#PlanningOrderManageForm input[name=order_request_amt]").val(data.order_request_amt);//금액
+            $("#PlanningOrderManageForm input[name=require_date]").val(data.require_date);//요구납기일자
+            $("#PlanningOrderManageForm input[name=remark]").val(data.remark);//비고
+            $("#PlanningOrderManageForm input[name=item_unit]").val(data.item_packunit);//제조환산수량 단위
+            $("#PlanningOrderManageForm input[name=m_loss]").val(data.m_loss);//제조 loss 비율
+            $("#PlanningOrderManageForm input[name=p_loss]").val(data.p_loss);//포장 loss 비율
+            $("#PlanningOrderManageForm input[name=m_bom_no]").val(data.m_bom_no);//제조 BOM 번호
+            $("#PlanningOrderManageForm input[name=p_bom_no]").val(data.p_bom_no);//포장 BOM 번호
+
+            if (data.add_delivery_ck == "Y") //추가납품가능여부
+                $("#PlanningOrderManageForm input:checkbox[name='add_delivery_ck']").prop("checked", true);
+            else
+                $("#PlanningOrderManageForm input:checkbox[name='add_delivery_ck']").prop("checked", false);
+
+            CommonSign_GetSignListData(PlanningOrderManage_sign_set_cd, data.order_request_no, "PlanningOrderManageSignGrid");
+
+        } else {
+            $("#PlanningOrderManageForm")[0].reset();
+            $("#PlanningOrderManageForm input:checkbox[name='add_delivery_ck']").prop("checked", false);
+
+        }
+    }
+
+    //그리드 이벤트
+    //셀 배경색상 설정
+    function PlanningOrderManage_CellPrepared(e) {
+        //서명상태 컬럼
+        if (e.rowType == "data" && e.column.dataField === "sign_status_nm") {
+
+            if (e.data.sign_status_nm == "--") {
+                e.cellElement.addClass('gainsboro');
+            } else if (e.data.sign_status_nm == "의뢰") {
+                e.cellElement.addClass('beige');
+            } else if (e.data.sign_status_nm == "검토") {
+                e.cellElement.addClass('yellow');
+            } else if (e.data.sign_status_nm == "승인") {
+                e.cellElement.addClass('greenyellow');
+            }
+        }
+
+        //진행상태 컬럼
+        if (e.rowType == "data" && e.column.dataField === "ck_yn") {
+
+            if (e.data.ck_yn == "생산의뢰") {
+                e.cellElement.addClass('oldlace');
+            } else if (e.data.ck_yn == "계산완료") {
+                e.cellElement.addClass('moccasin');
+            } else if (e.data.ck_yn == "계획등록") {
+                e.cellElement.addClass('orange');
+            } else if (e.data.ck_yn == "제조지시") {
+                e.cellElement.addClass('gold');
+            } else if (e.data.ck_yn == "포장지시") {
+                e.cellElement.addClass('tan');
+            }
+        }
+    }
+
+    //포커스 변경 이벤트
+    function PlanningOrderManageGrid_FocusedRowChanged(e) {
+        PlanningOrderManage_SetDetail();
+    }
+
+    // 제조환산수량 단위 설정
+    function PlanningOrderManage_GetItemPackunit(item_cd) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/GetItemPackunit',
+            data: {
+                //item_cd: $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val() //제조품목
+                item_cd: item_cd //제조품목
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    var message = json.message;
+                    //console.log("제조환산수량 단위 : " + message);
+                    if (message != "" && message.length > 0) {
+                        $("#PlanningOrderManageForm input[name=item_unit]").val(message);
+                    }
+
+                }
+            }
+        })
+    }
+
+    //처방전 번호 설정
+    function PlanningOrderManage_Setting_bom_no() {
+        var order_request_c_item_cd = $("#PlanningOrderManageForm input[name=order_request_c_item_cd]").val();
+        var order_request_h_item_cd = $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val();
+
+        if (order_request_c_item_cd != "" && order_request_c_item_cd != null && order_request_h_item_cd != "" && order_request_h_item_cd != null) {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/Setting_bom_no',
+                data: {
+                    order_request_h_item_cd: order_request_h_item_cd,//제조
+                    order_request_c_item_cd: order_request_c_item_cd //포장
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        var message = json.message;
+
+                        if (message != "" && message.length > 0) {
+
+                            if (message == ",") {
+                                $("#PlanningOrderManageForm input[name=m_bom_no]").val();
+                                $("#PlanningOrderManageForm input[name=p_bom_no]").val();
+                            } else {
+                                var bom_no_arr = message.split(",");
+
+                                if (bom_no_arr.length > 0) {
+                                    $("#PlanningOrderManageForm input[name=m_bom_no]").val(bom_no_arr[0]); //제조 bom 번호
+                                    $("#PlanningOrderManageForm input[name=p_bom_no]").val(bom_no_arr[1]); //포장 bom 번호
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    //제조품목 설정(포장품목 선택시, 그에 해당하는 포장품목이 있으면 자동설정)
+    function PlanningOrderManage_Setting_h_item(item_cd) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/Setting_h_item',
+            data: {
+                //item_cd: order_request_c_item_cd, //포장
+                item_cd: item_cd, //포장
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+                    //var message = json.message;
+
+                    if (json != "" && json.length > 0) {
+                        $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val(json[0].item_make_cd); //제조품목코드
+                        $("#PlanningOrderManageForm input[name=order_request_h_item_nm]").val(json[0].item_nm); //제조품목명
+
+                        PlanningOrderManage_GetItemPackunit(json[0].item_make_cd);
+                    } else {
+                        $("#PlanningOrderManageForm input[name=order_request_h_item_cd]").val(); //제조품목코드
+                        $("#PlanningOrderManageForm input[name=order_request_h_item_nm]").val(); //제조품목명
+                    }
+
+
+                }
+            }
+        })
+
+
+    }
+
+    //계산 관련 로직
+    //Loss율 계산
+    function PlanningOrderManage_CalculationLoss() {
+
+        PlanningOrderManage_Setting_loss_c_qty(); //포장환산수량 계산
+        PlanningOrderManage_Setting_loss_h_qty(); //제조환한수량 계산
+
+        PlanningOrderManage_CalculatingSum();     //금액계산
+    }
+
+    //금액 계산하여 설정
+    function PlanningOrderManage_CalculatingSum() {
+        var c_qty = $("#PlanningOrderManageForm input[name=c_qty]").val(); //의뢰수량
+
+        if (c_qty != null && c_qty != "" && parseFloat(c_qty) > 0) {
+
+            var order_request_price = $("#PlanningOrderManageForm input[name=order_request_price]").val(); //단가
+            var order_request_amt = parseFloat(order_request_price) * parseFloat(c_qty);
+
+            $("#PlanningOrderManageForm input[name=order_request_amt]").val(order_request_amt);//금액
+        } else {
+            $("#PlanningOrderManageForm input[name=order_request_amt]").val(0);//금액
+        }
+
+
+    }
+
+    //Loss율반영하여 포장환산수량 계산
+    function PlanningOrderManage_Setting_loss_c_qty() {
+
+        var formData = new FormData($("#PlanningOrderManageForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/AdvancedPlanning/Setting_loss_c_qty',
+            data: formData,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    var message = json.message;
+
+                    if (message != "" && message.length > 0) {
+                        var qty = parseFloat(message);
+
+                        $("#PlanningOrderManageForm input[name=order_request_qty]").val(qty); //포장환산수량
+                    } else {
+                        $("#PlanningOrderManageForm input[name=order_request_qty]").val(0);   //포장환산수량
+
+                    }
+
+                }
+            }
+        })
+
+    }
+
+    //Loss율 반영하여 제조환산수량 계산
+    function PlanningOrderManage_Setting_loss_h_qty() {
+        var formData = new FormData($("#PlanningOrderManageForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/AdvancedPlanning/Setting_loss_h_qty',
+            data: formData,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    var message = json.message;
+
+                    if (message != "" && message.length > 0) {
+                        var qty = parseFloat(message);
+
+                        $("#PlanningOrderManageForm input[name=loss_h_qty]").val(qty);       //제조환산수량
+                    } else {
+                        $("#PlanningOrderManageForm input[name=loss_h_qty]").val(0);              //제조환산수량
+                    }
+
+                }
+            }
+        })
+    }
+
+
+
+    //전자서명 이벤트 - 공통화 테스트
+
+    //전자서명 그리드 셀 클릭 이벤트 -  개별적으로 진행..?(로직 복잡할때는 개별처리, 아니면 _SignCommon.js의 CommonSignGrid_SignClick으로 처리)
+    function PlanningOrderManageSign(e) {
+
+        if (e.columnIndex != 3) return;
+
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        var sign = $("#PlanningOrderManageSignGrid").dxDataGrid("instance");
+        var signData = getGridRowByKey('PlanningOrderManageSignGrid', sign.option("focusedRowKey"));
+
+        //전자서명 저장 또는 취소할 수 있는 조건이 되는지 확인
+        if (!UtilView.isEmpty(gridData) && !UtilView.isEmpty(signData)) {
+
+            //서명시간 있을때 -> 취소
+            if (signData.sign_time != null && signData.sign_time != "") {
+
+                var sign_status = gridData.sign_status;
+                var ck_yn = gridData.ck_yn;
+
+
+                if (ck_yn != "생산의뢰") {
+                    alert("[생산의뢰] 상태의 데이터만 전자서명을 취소할 수 있습니다."); return;
+                }
+
+
+                if (sign_status != "0") {
+                    if (!confirm("전자서명을 취소하시겠습니까?")) return;
+
+                    if (ck_yn != "생산의뢰") {
+                        alert("서명이 이미 진행되었습니다."); return;
+                    }
+
+                    //다음단계의 서명이 되어있으면 취소하지 못함
+                    if (signData.next_sign_yn == "Y") {
+                        alert("다음단계 서명이 이미 진행되었습니다."); return;
+                    }
+
+                }
+
+            }
+
+            //서명이 없을때 -> 저장
+            else {
+                if (PlanningOrderManage_dbState != "") {
+                    alert("관련 정보 저장 후에 서명이 가능합니다."); return;
+                }
+
+                //다음단계의 서명이 되어있으면 취소하지 못함
+                if (signData.sign_set_dt_seq > 1 && signData.prev_sign_yn == "N") {
+                    alert("전단계 서명을 먼저 진행해주세요."); return;
+                }
+
+                var m_bom_no = $("#PlanningOrderManageForm input[name=m_bom_no]").val();
+                var p_bom_no = $("#PlanningOrderManageForm input[name=p_bom_no]").val();
+
+                if ((m_bom_no == null || m_bom_no == "") || (p_bom_no == null || p_bom_no == "")) {
+                    if (!confirm("BOM 정보가 등록되지 않았습니다. 계속 진행하시겠습니까?"))
+                        return;
+                }
+
+            }
+
+            _targetMenuId = (e.element[0].id).split("SignGrid")[0];
+            _targetSignSetCd = signData.sign_set_cd;
+
+            //전자서명 로직
+            var popup = $("#CommonSignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#CommonSignPopupTemplate"));
+            popup.show();
+
+        } else {
+            alert("관련 데이터가 없습니다."); return;
+        }
+    }
+
+
+    //서명저장에 따른 생산의뢰상태 update
+    function StatusBySaveSign() {
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        var sign = $("#PlanningOrderManageSignGrid").dxDataGrid("instance");
+        var signData = getGridRowByKey('PlanningOrderManageSignGrid', sign.option("focusedRowKey"));
+
+        if (!UtilView.isEmpty(gridData) && !UtilView.isEmpty(signData)) {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/StatusBySaveSign',
+                data: {
+                    order_request_no: gridData.order_request_no,
+                    sign_set_dt_id: signData.sign_set_dt_id
+                },
+                success: function (result) {
+                    PlanningOrderManageSearch();
+                }
+            })
+        }
+    }
+
+    //서명취소에 따른 생산의뢰상태 update
+    function StatusByCancelSign() {
+        var grid = $("#PlanningOrderManageGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('PlanningOrderManageGrid', grid.option("focusedRowKey"));
+
+        var sign = $("#PlanningOrderManageSignGrid").dxDataGrid("instance");
+        var signData = getGridRowByKey('PlanningOrderManageSignGrid', sign.option("focusedRowKey"));
+
+        if (!UtilView.isEmpty(gridData) && !UtilView.isEmpty(signData)) {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/StatusByCancelSign',
+                data: {
+                    order_request_no: gridData.order_request_no,
+                    sign_history_id: signData.sign_history_id
+                },
+                success: function (result) {
+                    PlanningOrderManageSearch();
+                }
+            })
+        }
+
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="PlanningOrderManage_CustPopup"></div>
+    <div id="PlanningOrderManage_EmpPopup"></div>
+    <div id="PlanningOrderManage_Item_MPopup"></div>
+    <div id="PlanningOrderManage_Item_PPopup"></div>
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조의뢰일</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Now.AddDays(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Now.ToShortDateString()">
+                    </div>
+
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="order_request_item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="PlanningOrderManage_SearchPackingItem('1')">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="order_request_item_nm">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">거래처</span>
+                        </div>
+                        <input type="text" class="form-control" name="cust_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="PlanningOrderManage_SearchCust('1')">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="cust_nm">
+                    </div>
+
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PlanningOrderManageGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("order_request_no")
+                    .Height(850)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("PlanningOrderManage_CellPrepared")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("sign_status_nm").Caption("서명상태");
+                        c.Add().DataField("ck_yn").Caption("진행상태");
+                        c.Add().DataField("order_request_no").Caption("생산의뢰번호");
+                        c.Add().DataField("order_request_c_item_cd").Caption("품목코드");
+                        c.Add().DataField("order_request_c_item_nm").Caption("품목명");
+                        c.Add().DataField("order_request_date").Caption("제조의뢰일자");
+                        c.Add().DataField("cust_nm").Caption("거래처명");
+                        c.Add().DataField("require_date").Caption("요구납기일자");
+                        c.Add().DataField("sales_emp_nm").Caption("영업사원명");
+                        c.Add().DataField("c_qty").Format("#,##0").Caption("수량");
+
+                        c.Add().DataField("m_bom_no_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.m_bom_no_ck == ""Y"" || rowData.m_bom_no_ck == true); }")
+                        .Caption("제조");
+
+                        c.Add().DataField("p_bom_no_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.p_bom_no_ck == ""Y"" || rowData.p_bom_no_ck == true); }")
+                        .Caption("포장");
+
+                        c.Add().DataField("add_delivery_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.add_delivery_ck == ""Y"" || rowData.add_delivery_ck == true); }")
+                        .Caption("추가납품가능여부");
+
+                       // c.Add().DataField("ware_status").Caption("제품상태"); //쿼리에서 조회되지 않는 항목임
+                        c.Add().DataField("sign_status").Caption("서명상태").Visible(false);
+                    })
+                    .OnFocusedRowChanged("PlanningOrderManageGrid_FocusedRowChanged")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box mb-0">
+                <form id="PlanningOrderManageForm">
+                    <div class="divName margin-bottom">
+                        <p>생산의뢰 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">생산의뢰번호</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="order_request_no" readonly="readonly" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">생산의뢰일자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12 required datepicker" name="order_request_date" value="" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">거래처</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control required" name="cust_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="PlanningOrderManage_CustCdBtn" onclick="PlanningOrderManage_SearchCust('2')">찾기</button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 거래처명-->
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="cust_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">영업담당</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="sales_emp_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="PlanningOrderManage_EmpBtn" onclick="PlanningOrderManage_SearchEmp()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="sales_emp_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">요구납기일자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12 required datepicker" name="require_date" value="" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장품목코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="order_request_c_item_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="PlanningOrderManage_PackingItemBtn" onclick="PlanningOrderManage_SearchPackingItem('2')">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="p_bom_no" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="order_request_c_item_nm" readonly /> <!-- 포장품목 이름-->
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰수량</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="c_qty">
+                        </div>
+                        <label class="col-1">EA</label>
+
+                        @*<div class="input-group col-1">
+                                <input type="text" class="form-control" name="item_packunit" />
+                            </div>*@
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조품목코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="order_request_h_item_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="PlanningOrderManage_ItemBtn" onclick="PlanningOrderManage_SearchItem()">찾기</button>
+                            </div>
+                        </div>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="m_bom_no" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="order_request_h_item_nm" readonly /> <!-- 제조품목 이름-->
+                        </div>
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장 Loss</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="p_loss">
+                        </div>
+                        <label class="col-1">%</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조 Loss</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="m_loss">
+                        </div>
+                        <label class="col-1">%</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <button class="btn btn-secondary col-4" type="button" onclick="PlanningOrderManage_CalculationLoss()">Loss, 금액 계산</button>
+                    </div>
+
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장환산수량</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="order_request_qty">
+                        </div>
+                        <label class="col-1">EA</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조환산수량</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="loss_h_qty"> <!-- order_request_h_qty-->
+                        </div>
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" name="item_unit" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">단가</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="order_request_price">
+                        </div>
+                        <label class="col-1">&#8361;</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">금액</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="order_request_amt">
+                        </div>
+                        <label class="col-1">&#8361;</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">추가납품가능여부</label>
+                        <div class="input-group col-2">
+                            <input type="checkbox" name="add_delivery_ck" value="false" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">비고</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="remark" />
+                        </div>
+                    </div>
+
+                </form>
+
+
+                <div class="divName margin-bottom">
+                    <p class="sign_set_nm" id="">
+                        전자 서명 정보
+                    </p>
+
+                    <span class="sign_set_cd_tooltip"></span>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                        .ID("PlanningOrderManageSignGrid")
+                        .KeyExpr("sign_set_dt_id")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .HoverStateEnabled(true)
+                        .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .FocusedRowEnabled(true)
+                        .AllowColumnResizing(true)
+                        //.Height(200)
+                        .OnCellClick("PlanningOrderManageSign")
+                        .Columns(columns =>
+                        {
+                        columns.Add().DataField("sign_set_nm").Visible(false);              //서명의미
+                        columns.Add().DataField("sign_set_dt_seq").Visible(false);          //서명라인 seq
+                        columns.Add().DataField("sign_emp_cd").Visible(false);              //서명자 코드
+                        columns.Add().DataField("necessary_yn").Visible(false);             //필수서명가능여부
+                        columns.Add().DataField("representative_yn").Visible(false);        //대리자서명가능여부
+                        columns.Add().DataField("sign_representative_yn").Visible(false);    //대리자로 서명했는지 여부
+                        columns.Add().DataField("sign_yn").Visible(false);                  //서명여부
+                        columns.Add().DataField("prev_sign_yn").Visible(false);             //전단계 서명자 서명여부
+                        columns.Add().DataField("next_sign_yn").Visible(false);             //다음단계 서명자 서명여부
+                        columns.Add().DataField("sign_history_id").DataType(GridColumnDataType.Number).Visible(false);          //개별서명에 대한 고유 id  
+                        columns.Add().DataField("index_key").Visible(false);                //서명의미에 대한 고유 id
+                        columns.Add().DataField("sign_set_cd").Visible(false);              //서명코드
+
+                        columns.Add().DataField("sign_set_dt_nm").Width("30%").Caption("구분");
+                        columns.Add().DataField("sign_emp_nm").Width("20%").Caption("서명자");
+                        columns.Add().DataField("sign_time").Width("25%").Caption("서명일자");
+                        columns.Add().DataField("sign_image").Width("25%").Caption("서명")
+                            .AllowFiltering(false)
+                            .AllowSorting(false)
+                            .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                        })
+                        //.OnFocusedRowChanged("CommonSignGrid_FocusedRowChanged")
+
+                    )
+            </div>
+        </div>
+
+
+    </div>
+
+</div>

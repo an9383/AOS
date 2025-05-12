@@ -1,0 +1,1039 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var ItemPopupData_P = @Html.Raw(Json.Encode(ViewBag.ItemPopupData_P.Data));
+}
+
+<style>
+    #APS_Workorder_Request .gainsboro {
+        background-color: gainsboro;
+        color: black;
+    }
+    /* 서명상태 : -- */
+    #APS_Workorder_Request .beige {
+        background-color: beige;
+        color: black;
+    }
+    /* 서명상태 : 의뢰 */
+    #APS_Workorder_Request .yellow {
+        background-color: yellow;
+        color: black;
+    }
+    /* 서명상태 : 검토 */
+    #APS_Workorder_Request .greenyellow {
+        background-color: greenyellow;
+        color: black;
+    }
+    /* 서명상태 : 승인 */
+
+    #APS_Workorder_Request .oldlace {
+        background-color: oldlace;
+        color: black;
+    }
+    /* 진행상태 : 생산의뢰 */
+    #APS_Workorder_Request .moccasin {
+        background-color: moccasin;
+        color: black;
+    }
+    /* 진행상태 : 계산완료 */
+    #APS_Workorder_Request .orange {
+        background-color: orange;
+        color: black;
+    }
+    /* 진행상태 : 계획등록 */
+    #APS_Workorder_Request .gold {
+        background-color: gold;
+        color: black;
+    }
+    /* 진행상태 : 제조지시 */
+    #APS_Workorder_Request .tan {
+        background-color: tan;
+        color: black;
+    }
+    /* 진행상태 : 포장지시 */
+
+
+
+    /*  하단그리드 제조,포장 구분*/
+    /* 제조 */
+    #APS_Workorder_Request .lavendar {
+        background-color: lavender;
+        color: black;
+    }
+
+    /* 포장 */
+    #APS_Workorder_Request .whitesmoke {
+        background-color: whitesmoke;
+        color: black;
+    }
+
+    #APS_Workorder_Request .red {
+        background-color: red;
+        color: black;
+    }
+    
+</style>
+
+@* 원부자재 발주 요망서 *@
+<script id="@(pagePrefix)Js">
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var APS_Workorder_Request_FocusedRowData = null;
+    var APS_Workorder_RequestDetail_FocusedRowData = null;
+
+    var APS_Workorder_Request_dbState = "";
+    var APS_Workorder_Request_tempArray = new Array();
+
+    $(function () {
+        setDatePicker("#APS_Workorder_Request .datepicker");
+
+        //포장품목 팝업
+        var ItemPopupData_P = @ItemPopupData_P;
+
+        var columns = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+        createPopup("APS_Workorder_Request_Item_P", "품목 조회", ItemPopupData_P, columns, "item_cd");
+
+
+        // 수정중인지 체크
+        APS_Workorder_Request_EditCheck(false);
+        // 그리드 데이터 조회
+        APS_Workorder_RequestSearch();
+
+    })
+
+    // 수정중인지 체크
+    function APS_Workorder_Request_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#APS_Workorder_RequestSave").dxButton().parent().parent().removeClass("display-none");
+            $("#APS_Workorder_RequestUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#APS_Workorder_RequestSearch").dxButton().parent().parent().addClass("display-none");
+            //$("#APS_Workorder_RequestInput").dxButton().parent().parent().addClass("display-none");
+            $("#APS_Workorder_RequestEdit").dxButton().parent().parent().addClass("display-none");
+            //$("#APS_Workorder_RequestDelete").dxButton().parent().parent().addClass("display-none");
+            $("#APS_Workorder_RequestExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#APS_Workorder_RequestGrid").dxDataGrid("option", "disabled", true);
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: true,
+                allowDeleting: false,
+                mode: 'batch'
+            }
+
+            $("#APS_Workorder_RequestDetailGrid").dxDataGrid("option", "editing", editing);
+
+
+        }
+        if (!nowEdit) {
+            $("#APS_Workorder_RequestSave").dxButton().parent().parent().addClass("display-none");
+            $("#APS_Workorder_RequestUndo").dxButton().parent().parent().addClass("display-none");
+            $("#APS_Workorder_RequestSearch").dxButton().parent().parent().removeClass("display-none");
+            //$("#APS_Workorder_RequestInput").dxButton().parent().parent().removeClass("display-none");
+            $("#APS_Workorder_RequestEdit").dxButton().parent().parent().removeClass("display-none");
+            //$("#APS_Workorder_RequestDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#APS_Workorder_RequestExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#APS_Workorder_RequestGrid").dxDataGrid("option", "disabled", false);
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false,
+                mode: 'batch'
+            }
+
+            $("#APS_Workorder_RequestDetailGrid").dxDataGrid("option", "editing", editing);
+
+            APS_Workorder_Request_dbState = "";
+
+        }
+    }
+
+    //포장품목 찾기
+    function APS_Workorder_Request_SearchPackingItem() {
+        var popup = $("#APS_Workorder_Request_Item_PPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //포장품목 팝업 - 선택
+    function APS_Workorder_Request_Item_PRowDblClick(e) {
+        var data = e.data;
+
+        $("#APS_Workorder_RequestSearchForm input[name=item_cd]").val(data.item_cd);
+        $("#APS_Workorder_RequestSearchForm input[name=item_nm]").val(data.item_nm);
+
+        var popup = $("#APS_Workorder_Request_Item_PPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //조회, 엑셀, 미리보기
+
+    //조회
+    function APS_Workorder_RequestSearch() {
+        var formData = new FormData($("#APS_Workorder_RequestSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/APS_Workorder_RequestSearch',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#APS_Workorder_RequestGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#APS_Workorder_RequestGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    APS_Workorder_Request_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "APS_Workorder_RequestGrid");
+    }
+
+    //수정
+    function APS_Workorder_RequestEdit() {
+
+        if (APS_Workorder_Request_FocusedRowData != null && APS_Workorder_Request_FocusedRowData.ck_yn == "생산의뢰") {
+            alert("생산의뢰 상태에서는 수정할 수 없습니다."); return;
+        }
+
+        APS_Workorder_Request_dbState = "edit";
+
+        APS_Workorder_Request_EditCheck(true);
+    }
+
+    //저장
+    async function APS_Workorder_RequestSave() {
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        await $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance").saveEditData();
+
+        if (APS_Workorder_Request_tempArray.length > 0) {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/APS_Workorder_RequestDetailSave',
+                data: {
+                    paramData: JSON.stringify(APS_Workorder_Request_tempArray)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.message != "" || json.message != null) {
+                        alert(json.message);
+                    } else {
+                        alert("저장 실패하였습니다");
+                    }
+
+                    APS_Workorder_Request_tempArray = new Array();
+                    APS_Workorder_Request_EditCheck(false);
+
+                    APS_Workorder_RequestDetailSearch();
+
+                }
+            })
+
+
+        }
+     
+
+    }
+
+    //취소
+    function APS_Workorder_RequestUndo() {
+
+        APS_Workorder_Request_EditCheck(false);
+
+    }
+
+    //원자재 상세 조회
+    function APS_Workorder_RequestDetailSearch() {
+        var data = APS_Workorder_Request_FocusedRowData;
+
+        var formData = new FormData();
+
+        for (var key in data) {
+            formData.append(key, data[key]);
+        }
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/APS_Workorder_RequestDetailSearch',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    APS_Workorder_RequestDetail_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "APS_Workorder_RequestDetailGrid", true);
+
+
+    }
+
+    //엑셀
+    function APS_Workorder_RequestExcel() {
+        gridExportToExcel("APS_Workorder_RequestGrid", "APS_Workorder_RequestData");
+    }
+
+    //미리보기
+    function APS_Workorder_RequestPrint() {
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        if (APS_Workorder_Request_FocusedRowData == null) return;
+
+        var order_request_no = APS_Workorder_Request_FocusedRowData.order_request_no;
+        var order_request_c_item_cd = APS_Workorder_Request_FocusedRowData.order_request_c_item_cd;
+        var order_request_h_item_cd = APS_Workorder_Request_FocusedRowData.order_request_h_item_cd;
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "AdvancedPlanning", RptFileName: "APS_Work_Order_request" },
+            objSp: { SpName: "SP_APS_Workorder_Request", gubun: "APS_Work_Order_request", reportParam: "order_request_no:" + order_request_no + ";order_request_c_item_cd:" + order_request_c_item_cd + ";order_request_h_item_cd:" + order_request_h_item_cd},
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "DT,DT_M,DT_P" },
+            objSub: { subRptName: "APS_Work_Order_request_M,APS_Work_Order_request_P" }
+        });
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+    //버튼 클릭
+    //원자재시험현황
+    function APS_Workorder_RequestTestStatus() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+
+        if (APS_Workorder_RequestDetail_FocusedRowData == null) return;
+        var data = APS_Workorder_RequestDetail_FocusedRowData;
+
+        var requestData = {
+            search_number: data.req_order_child_cd
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/ProductionManage/TestProgressStatus',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+            var popup = $("#APS_Workorder_RequestTestStatusPopup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    //원자재재고현황
+    function APS_Workorder_RequestStockStatus() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+        if (APS_Workorder_RequestDetail_FocusedRowData == null) return;
+        var data = APS_Workorder_RequestDetail_FocusedRowData;
+
+        var urlInfo = {};
+
+        if (data.mp_ck == "M") 
+         urlInfo = {
+            tabName: "원료재고현황",
+            tabId: "StockStatus2_M",
+            url: "/RowMatWh/StockStatus2_M"
+        };
+
+        else if (data.mp_ck == "P")
+        urlInfo = {
+            tabName: "자재재고현황",
+            tabId: "StockStatus2_P",
+            url: "/RowMatWh/StockStatus2_P"
+        };
+
+        var param = {
+            item_cd_S: data.req_order_child_cd
+        };
+
+        urlInfo.param = param;
+
+        openOtherPage(urlInfo);
+    }
+
+    //소요량 자동계산
+    function APS_Workorder_RequestAutoCalc() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+        if (!confirm("소요량을 자동계산 하시겠습니까?")) return;
+
+        var DetailGrid = $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance");
+
+        if (APS_Workorder_RequestDetail_FocusedRowData != null && DetailGrid.getDataSource().totalCount() == 0) {
+            alert("소요량 정보가 없습니다."); return;
+        }
+
+        var detailData;
+        DetailGrid.getDataSource().store().load().done(function (data) {
+            detailData = data;
+        });
+
+        var check = false;
+        var chk = 0;
+
+        for (var i = 0; i < detailData.length; i++) {
+            if (detailData[i].mp_ck == "M") {
+                check = false;
+                break;
+            } else {
+                check = true;
+            }
+        }
+
+        if (check) {
+            alert("등록된 제조 BOM 정보가 없습니다. 소요량 계산을 할 수 없습니다"); return;
+        }
+
+        for (var i = 0; i < detailData.length; i++) {
+            if (detailData[i].mp_ck == "P") {
+                check = false;
+                break;
+            } else {
+                check = true;
+            }
+        }
+
+        if (check) {
+            if (!confirm("포장 BOM 정보가 등록되지 않았습니다. 계속 진행하시겠습니까?")) return;
+        }
+
+        for (var i = 0; i < detailData.length; i++) {
+            var data = detailData[i];
+
+            if (data.req_order_status == "00") { //상태가 00
+                var formData = new FormData();
+
+                for (var key in data) {
+                    formData.append(key, data[key]);
+                }
+                formData.append("order_request_no", APS_Workorder_Request_FocusedRowData.order_request_no);
+
+                $.ajax({
+                    type: 'POST',
+                    async:false,
+                    url: '/AdvancedPlanning/AutoCalc',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (result) {
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+                            //console.log(json.message);
+                            if (json.message == "") chk = chk + 1;
+
+                        } else {
+
+                        }
+                    }
+                })
+            }
+
+        }
+
+        if (chk > 0) {
+            alert("소요량 계산이 정상적으로 실행되지 않았습니다."); 
+        }
+
+        APS_Workorder_RequestSearch();
+    }
+
+    //계산 취소
+    function APS_Workorder_RequestCancelAutoCalc() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+        if (APS_Workorder_Request_FocusedRowData != null && APS_Workorder_Request_FocusedRowData.ck_yn != "계산완료") {
+            alert("계산완료인 상태에서만 취소가 가능합니다."); return;
+        }
+
+        if (!confirm("소요량 계산 취소를 하시겠습니까?")) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/CancelAutoCalc',
+            data: {
+                order_request_no: APS_Workorder_Request_FocusedRowData.order_request_no
+            },
+            success: function (result) {
+
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.message != "") {
+                        alert(json.message); //소요량 자동 계산이 취소되었습니다.
+
+                        APS_Workorder_RequestSearch();
+                    } else {
+                        return;
+                    }
+
+                } 
+            }
+        })
+
+        
+    }
+
+    //소요량 저장
+    function APS_Workorder_RequestReleaseConfirmation() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+
+        var DetailGrid = $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance");
+
+        var detailData;
+        DetailGrid.getDataSource().store().load().done(function (data) {
+            detailData = data;
+        });
+
+        if (APS_Workorder_Request_FocusedRowData != null && APS_Workorder_Request_FocusedRowData.ck_yn != "계산완료" &&
+            APS_Workorder_Request_FocusedRowData.ck_yn != "계산완료(제조)") {
+
+            if (APS_Workorder_RequestDetail_FocusedRowData != null && DetailGrid.getDataSource().totalCount() > 0) {
+
+                for (var i = 0; i < detailData.length; i++) {
+
+                    if (detailData[i].req_order_status == "00") { // --
+                        alert("계산이 완료되지 않은 데이터가 있습니다."); return;
+                    }
+                }
+            }
+        }
+
+
+        if (APS_Workorder_RequestDetail_FocusedRowData != null && DetailGrid.getDataSource().totalCount() > 0) {
+
+            for (var i = 0; i < detailData.length; i++) {
+                var data = detailData[i];
+
+                if (data.req_order_status == "01") {// 계산완료
+
+                    var formData = new FormData();
+
+                    for (var key in data) {
+                        formData.append(key, data[key]);
+                    }
+                    formData.append("order_request_no", APS_Workorder_Request_FocusedRowData.order_request_no);
+
+                    $.ajax({
+                        type: 'POST',
+                        async: false,
+                        url: '/AdvancedPlanning/ReleaseConfirmation',
+                        data: formData,
+                        contentType: false,
+                        processData: false,
+                        success: function (result) {
+
+                            if (result.length > 0) {
+                                var json = JSON.parse(result);
+
+                                if (json.message != "") {
+                                    alert("소요량이 정상적으로 저장되지 않았습니다.");
+                                    APS_Workorder_RequestSearch();
+                                    return;
+                                }
+
+                            } 
+                        }
+                    })
+
+                }
+            }//for
+
+            InsertPlanProductionItem();
+
+        }//if
+
+    }
+
+    //소요량 저장 취소
+    function APS_Workorder_RequestCancelReleaseConfirmation() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+
+        var Grid = $("#APS_Workorder_RequestGrid").dxDataGrid("instance");
+        var DetailGrid = $("#APS_Workorder_RequestDetailGrid").dxDataGrid("instance");
+
+        if (APS_Workorder_Request_FocusedRowData != null && Grid.getDataSource().totalCount() == 0 ) {
+            alert("생산계획 정보가 없습니다."); return;
+        }
+
+        if (APS_Workorder_RequestDetail_FocusedRowData != null && DetailGrid.getDataSource().totalCount() == 0) {
+            alert("소요량 정보가 없습니다."); return;
+        }
+
+        if (APS_Workorder_Request_FocusedRowData.ck_yn != "계획등록" &&
+            APS_Workorder_Request_FocusedRowData.ck_yn != "계획등록(제조)") {
+            alert("소요량 계산 취소는 소요량 계산이 완료된 것만 가능합니다."); return;
+        }
+
+        if (!confirm("소요량 저장 취소를 하시겠습니까?")) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/CancelReleaseConfirmation',         
+            data: {
+                order_request_no: APS_Workorder_Request_FocusedRowData.order_request_no
+            },
+            success: function (result) {
+
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.message != "") {
+                        alert(json.message); //칭량작업이 완료된 원료는 확정취소를 할 수 없습니다!
+                        //return;
+                    }
+
+                }
+            }
+        })
+
+        APS_Workorder_RequestSearch();
+
+    }
+
+    //생산계획 등록
+    function InsertPlanProductionItem() {
+        if (APS_Workorder_Request_FocusedRowData == null) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/InsertPlanProductionItem',
+            data: {
+                order_request_no: APS_Workorder_Request_FocusedRowData.order_request_no
+            },
+            success: function (result) {
+
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.message == "M") {
+                        InsertPlanProductionItem_M();
+                    }
+                    else if (json.message == "ALL") {
+                        InsertPlanProductionItem_M();
+                        InsertPlanProductionItem_P();
+                    }
+                    else if (json.message == "P") {
+                        InsertPlanProductionItem_P();
+                    } else {
+                        alert(json.message); // 생산 계획이 이미 등록되었습니다
+                    }
+                }
+            }
+        })
+
+        APS_Workorder_RequestSearch();
+
+    }
+
+    //제조 생산계획 등록
+    function InsertPlanProductionItem_M() {
+        var data = APS_Workorder_Request_FocusedRowData;
+
+        var formData = new FormData();
+
+        for (var key in data) {
+            formData.append(key, data[key]);
+        }
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/InsertPlanProductionItem_M',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.message.length > 0) alert(json.message);
+                } 
+            }
+        })
+    }
+
+    //포장 생산계획 등록
+    function InsertPlanProductionItem_P() {
+        var data = APS_Workorder_Request_FocusedRowData;
+
+        var formData = new FormData();
+
+        for (var key in data) {
+            formData.append(key, data[key]);
+        }
+
+        $.ajax({
+            type: 'POST',
+            async:false,
+            url: '/AdvancedPlanning/InsertPlanProductionItem_P',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (json.message.length > 0) alert(json.message);
+                }
+            }
+        })
+    }
+
+
+    //결품 확인
+    function APS_Workorder_RequestUpdateShortage() {
+        if (APS_Workorder_Request_dbState == "edit") return;
+
+        //var Grid = $("#APS_Workorder_RequestGrid").dxDataGrid("instance");
+        var gridData = $("#APS_Workorder_RequestGrid").dxDataGrid("instance").option("dataSource");
+
+        if (!UtilView.isEmpty(gridData)) {
+          
+            for (var i = 0; i < gridData.length; i++) {
+                var data = gridData[i];
+
+                var formData = new FormData();
+
+                for (var key in data) {
+                    formData.append(key, data[key]);
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    url: '/AdvancedPlanning/UpdateShortage',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (result) {
+
+                        alert("원부자재 결품 수가 갱신되었습니다.");
+
+                        APS_Workorder_RequestSearch();
+                    }
+                })
+            }
+
+        }
+    }
+
+    //그리드 이벤트
+    function APS_Workorder_Request_CellPrepared(e) {
+        //진행상태 컬럼
+        if (e.rowType == "data" && e.column.dataField === "ck_yn") {
+
+            if (e.data.ck_yn == "생산의뢰") {
+                e.cellElement.addClass('oldlace');
+            } else if (e.data.ck_yn == "계산완료") {
+                e.cellElement.addClass('moccasin');
+            } else if (e.data.ck_yn == "계획등록") {
+                e.cellElement.addClass('orange');
+            } else if (e.data.ck_yn == "제조지시") {
+                e.cellElement.addClass('gold');
+            } else if (e.data.ck_yn == "포장지시") {
+                e.cellElement.addClass('tan');
+            }
+        }
+       
+    }
+
+    //제조, 포장에 따라 로우 배경색상 변경
+    function APS_Workorder_Request_DetailRowPrepared(e) {
+        if (e.rowType == "data" ) {
+            if (e.data.mp_ck == "M") {              //제조
+                e.rowElement.addClass('lavendar');
+            } else if (e.data.mp_ck == "P") {       //포장
+                e.rowElement.addClass('whitesmoke');
+            }
+        }
+    }
+
+
+    function APS_Workorder_Request_DetailCellPrepared(e) {
+        //과부족량 컬럼 (마이너스일때, 빨간배경)
+        if (e.rowType == "data" && e.column.dataField === "shortage") {
+            if (parseFloat(e.data.shortage) < 0) {
+                e.cellElement.addClass('red');
+            }
+        }
+    }
+
+    //발주량 포맷지정(복사 붙여넣기시 값 인식 제대로 되지않는 이슈로 인해)
+    function APS_Workorder_Request_DetailEditorPreparing(e) {
+        //발주량 ',' 인식 지정.
+        if (e.parentType == 'dataRow' && e.dataField == 'order_stock') {
+            e.editorOptions.format = "#,##0.#";
+        }
+    }
+
+    function APS_Workorder_RequestGrid_FocusedRowChanged(e) {
+        if (!e.row || !e.row.data) {
+            APS_Workorder_Request_FocusedRowData = null;
+        } else {
+            APS_Workorder_Request_FocusedRowData = e.row.data;
+            APS_Workorder_RequestDetailSearch();
+        }
+    }
+
+    function APS_Workorder_RequestDetailGrid_FocusedRowChanged(e) {
+        if (!e.row || !e.row.data) {
+            APS_Workorder_RequestDetail_FocusedRowData = null;
+        } else {
+            APS_Workorder_RequestDetail_FocusedRowData = e.row.data;
+        }
+    }
+
+    function APS_Workorder_RequestDetail_OnRowUpdated(e) {
+        var data = e.data;
+        data.order_request_no = APS_Workorder_Request_FocusedRowData.order_request_no;
+
+        APS_Workorder_Request_tempArray.push(data);
+    }
+
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="APS_Workorder_Request_Item_PPopup"></div>
+
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("APS_Workorder_RequestTestStatusPopup")
+            .Width(1600)
+            .Height(900)
+            .ShowTitle(true)
+            .Title("시험진행 단계")
+            .Visible(false)
+            .DragEnabled(false)
+            .ContentTemplate(new TemplateName("popup-template"))
+        )
+    </div>
+
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="Sdate" value="@DateTime.Now.AddDays(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Edate" value="@DateTime.Now.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="APS_Workorder_Request_SearchPackingItem()">찾기</button>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조지시 포함 Data</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <input type="checkbox" class="input-group-append text-center" name="OrderStatus" value="false" />
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestUpdateShortage()">결품 확인</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel;Preview;");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>생산의뢰 정보</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("APS_Workorder_RequestGrid")
+                    .KeyExpr("order_request_no")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .Height(350)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("APS_Workorder_Request_CellPrepared")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_request_no").Caption("생산의뢰번호");
+                        c.Add().DataField("order_request_date").Caption("생산의뢰일자");
+
+                        c.Add().DataField("m_bom_no_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.m_bom_no_ck == ""Y"" || rowData.m_bom_no_ck == true); }")
+                        .Caption("제조");
+
+                        c.Add().DataField("p_bom_no_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.p_bom_no_ck == ""Y"" || rowData.p_bom_no_ck == true); }")
+                        .Caption("포장");
+
+                        c.Add().DataField("order_request_c_item_cd").Caption("완제품코드");
+                        c.Add().DataField("order_request_c_item_nm").Caption("완제품명");
+                        c.Add().DataField("order_request_qty").Format("#,##0.#").Caption("생산의뢰수량");
+                        c.Add().DataField("order_request_h_item_cd").Caption("반제품코드");
+                        c.Add().DataField("order_request_h_item_nm").Caption("반제품명");
+                        c.Add().DataField("order_request_h_qty").Format("#,##0.#").Caption("환산수량");
+                        c.Add().DataField("cust_nm").Caption("거래처");
+                        c.Add().DataField("m_shortage_cnt").Format("#,##0").Caption("현재 원료결품");
+                        c.Add().DataField("p_shortage_cnt").Format("#,##0").Caption("현재 자재결품");
+                        c.Add().DataField("ck_yn").Caption("진행상태");
+                    })
+                    .OnFocusedRowChanged("APS_Workorder_RequestGrid_FocusedRowChanged")
+                )
+
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>생산의뢰 기준</p>
+                </div>
+
+                <div class="input-wrapper" style="text-align: end;">
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestTestStatus()">원자재시험현황</button>
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestStockStatus()">원자재재고현황</button>
+
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestAutoCalc()">소요량 자동계산</button>
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestCancelAutoCalc()">계산 취소</button>
+
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestReleaseConfirmation()">소요량 저장</button>
+                    <button class="btn btn-sm btn-secondary" onclick="APS_Workorder_RequestCancelReleaseConfirmation()">소요량 저장 취소</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("APS_Workorder_RequestDetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("req_order_child_cd")
+                    .Height(470)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("APS_Workorder_Request_DetailCellPrepared")
+                    .OnRowPrepared("APS_Workorder_Request_DetailRowPrepared")
+                    .OnEditorPreparing("APS_Workorder_Request_DetailEditorPreparing")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("process_cd").Caption("공정").AllowEditing(false);
+                        c.Add().DataField("req_order_child_cd").Caption("원료코드").AllowEditing(false);
+                        c.Add().DataField("req_order_child_nm").Caption("원부자재명").AllowEditing(false);
+                        c.Add().DataField("req_order_child_packunit").Caption("단위").AllowEditing(false);
+                        c.Add().DataField("req_order_batch_qty").Format("#,##0.#").Caption("소요량").AllowEditing(false);
+                        c.Add().DataField("receipt_reserve_qty").Format("#,##0.#").Caption("출고예약량").AllowEditing(false);
+                        c.Add().DataField("receipt_remain_qty").Format("#,##0.#").Caption("현재고").AllowEditing(false);
+                        c.Add().DataField("wait_stock").Format("#,##0.#").Caption("입고예정량").AllowEditing(false);
+                        c.Add().DataField("default_stock").Format("#,##0.#").Caption("미납수량").AllowEditing(false);
+                        c.Add().DataField("shortage2").Format("#,##0.#").Caption("가용재고").AllowEditing(false);
+                        c.Add().DataField("shortage").Format("#,##0.#").Caption("과부족량").AllowEditing(false);
+                        c.Add().DataField("order_stock").DataType(GridColumnDataType.Number).Format("#,##0.#").Caption("발주량");
+                        c.Add().DataField("req_order_status_nm").Caption("구분").AllowEditing(false);
+                    })
+                    .OnFocusedRowChanged("APS_Workorder_RequestDetailGrid_FocusedRowChanged")
+                    .OnRowUpdated("APS_Workorder_RequestDetail_OnRowUpdated")
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

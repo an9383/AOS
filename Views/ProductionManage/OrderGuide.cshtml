@@ -1,0 +1,1533 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "OrderGuide";
+
+    var OrderGuideAuth = @Html.Raw(Json.Encode(ViewBag.OrderGuideAuth.Data));
+    var orderGuideWorkorderData = @Html.Raw(Json.Encode(ViewBag.orderGuideWorkorderData.Data));
+    var orderGuideSignData = @Html.Raw(Json.Encode(ViewBag.orderGuideSignData.Data));
+    var orderGuideItemProcessData = @Html.Raw(Json.Encode(ViewBag.orderGuideItemProcessData.Data));
+    var orderGuideBomData = @Html.Raw(Json.Encode(ViewBag.orderGuideBomData.Data));
+    var orderGuideReleaseData = @Html.Raw(Json.Encode(ViewBag.orderGuideReleaseData.Data));
+
+}
+
+@*제조기록서 승인*@
+
+    <script id="OrderGuideJs">
+
+        var _oderGuideOrderNo = "";
+        var _oderGuideOrderStatus = "";
+        var _oderGuideSignGubun = "";
+        var _orderGuideSignCnt = 0;
+        var _orderGuideSignData;
+
+        $(function () {
+            ItemGudie_ContentResize();
+
+            setDatePicker("#OrderGuide .datepicker");
+
+            if ((@orderGuideWorkorderData).length <= 0) {
+
+                OrderGuideEditing(false);
+
+                return;
+
+            } else {
+
+                orderGuideFillForm(JSON.parse(@orderGuideWorkorderData)[0]);
+
+                OrderGuideEditing(false);
+
+                $("#OrderGuideSignGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@orderGuideSignData));
+
+                if ((@orderGuideBomData).length > 0) {
+                    $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource", JSON.parse(@orderGuideBomData));
+                }
+
+                //구분값 readonly
+                $("#OrderGuideSearchForm select[name=order_status]").readonly(true);
+
+                if ((@orderGuideReleaseData).length > 0) {
+                    $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource", JSON.parse(@orderGuideReleaseData));
+                }
+
+                if ((@orderGuideItemProcessData).length > 0) {
+                    $("#OrderGuideItemProcessTreeList1").dxTreeList("instance").option("dataSource", JSON.parse(@orderGuideItemProcessData));
+                    $("#OrderGuideItemProcessTreeList2").dxTreeList("instance").option("dataSource", JSON.parse(@orderGuideItemProcessData));
+                }
+
+
+                if ((@orderGuideReleaseData).length <= 0) {
+
+                    return;
+                }
+            }
+        });
+
+        // 수정중인지 체크
+        function OrderGuideEditing(isEditing) {
+
+            // 수정중일때
+            if (isEditing) {
+
+                $("#OrderGuideSearch").dxButton().parent().parent().addClass("display-none");//조회 숨김
+                $("#OrderGuideEdit").dxButton().parent().parent().addClass("display-none");//수정 숨김
+
+                $("#OrderGuideSave").dxButton().parent().parent().removeClass("display-none");//저장 보이기
+                $("#OrderGuideUndo").dxButton().parent().parent().removeClass("display-none");//취소 보이기
+
+                $("#OrderGuideForm .datepicker").prop('readonly', false);
+                $("#OrderGuideForm input[name=order_qty]").prop('readonly', false);
+
+                $('#OrderGuideForm .datepicker').datepicker({
+                    format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                    startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+                    endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+                    autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+                    calendarWeeks: false, //캘린더 옆에 몇 주차인지 보여주는 옵션 기본값 false 보여주려면 true
+                    clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+                    disableTouchKeyboard: false,	//모바일에서 플러그인 작동 여부 기본값 false 가 작동 true가 작동 안함.
+                    immediateUpdates: false,	//사용자가 보는 화면으로 바로바로 날짜를 변경할지 여부 기본값 :false
+                    multidate: false, //여러 날짜 선택할 수 있게 하는 옵션 기본값 :false
+                    multidateSeparator: ",", //여러 날짜를 선택했을 때 사이에 나타나는 글짜 2019-05-01,2019-06-01
+                    templates: {
+                        leftArrow: '&laquo;',
+                        rightArrow: '&raquo;'
+                    }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                    showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+                    todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                    toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                    weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                    language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+
+                });
+
+                var editing = {
+                    allowUpdating: true,
+                    mode: 'batch'
+                }
+
+                $("#OrderGuideItemProcessTreeList1").dxTreeList("option", "editing", editing);
+
+            } else {
+                $("#OrderGuideSearch").dxButton().parent().parent().removeClass("display-none");//조회 보이기
+                $("#OrderGuideEdit").dxButton().parent().parent().removeClass("display-none");//수정 보이기
+
+                $("#OrderGuideSave").dxButton().parent().parent().addClass("display-none");//저장 숨기기
+                $("#OrderGuideUndo").dxButton().parent().parent().addClass("display-none");//취소 숨기기
+
+                $("#OrderGuideForm .datepicker").prop('readonly', true);
+                $("#OrderGuideForm input[name=order_qty]").prop('readonly', true);
+
+                $('#OrderGuideForm .datepicker').datepicker('destroy');
+                $('#OrderGuideForm .datepicker').attr('readonly', true);
+
+                var editing = {
+                    allowUpdating: false
+                }
+
+                $("#OrderGuideItemProcessTreeList1").dxTreeList("option", "editing", editing);
+
+            }
+
+        }
+
+        // 우측 상단 제조지시 폼 데이터 입력
+        function orderGuideFillForm(data) {
+
+            _oderGuideOrderStatus = data.order_status;
+            _oderGuideOrderNo = data.order_no;
+
+            $("#OrderGuideForm input[name=item_cd]").val(data.item_cd);
+            $("#OrderGuideForm input[name=item_nm]").val(data.item_nm);
+            $("#OrderGuideForm input[name=item_surface]").val(data.item_surface);
+            $("#OrderGuideForm input[name=item_packunit]").val(data.item_packunit);
+            $("#OrderGuideForm input[name=document_no]").val(data.revision_document_no);
+
+            $("#OrderGuideForm input[name=order_date]").val(data.order_date).datepicker("update");
+            $("#OrderGuideForm input[name=start_date]").val(data.start_date).datepicker("update");
+            //$("#OrderGuideForm input[name=order_date]").val(data.order_date);
+            //$("#OrderGuideForm input[name=start_date]").val(data.start_date);
+
+            $("#OrderGuideForm input[name=lot_no]").val(data.lot_no);
+            $("#OrderGuideForm input[name=order_qty]").val(data.order_qty);
+
+            $("#OrderGuideForm input[name=valid_date]").val(data.valid_date).datepicker("update");
+            //$("#OrderGuideForm input[name=valid_date]").val(data.valid_date);
+            $("#OrderGuideForm input[name=order_bigo]").val(data.order_bigo);
+
+            $("#OrderGuideSearchForm select[name=order_status]").val(data.order_status);
+            
+        }
+
+        // 공정 트리 리스트 외주 버튼컬럼 생성 (사용안함)
+        function orderGuideGridOutsourceBtn(container, cellInfo) {
+
+            $("<div>").html("<div style='float:left;'>외주</div><div style='float:right;' id='orderGuideOutsource" + (cellInfo.rowIndex + 1) + "'></div>")
+                .appendTo(container);
+
+            $("#orderGuideOutsource" + (cellInfo.rowIndex + 1)).dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                    console.log(e);
+
+                }
+            });
+        }
+
+        // 승인 버튼 토글 (제조지시 정보, 서명정보 div 노출 여부)
+        function orderGuideWorkorderToggleClick() {
+
+            var isDisplaied = $("#OrderGuideWorkorderDiv").hasClass("display-none");
+
+            if (isDisplaied) {
+                $("#OrderGuideWorkorderDiv").removeClass("display-none");
+            } else {
+                $("#OrderGuideWorkorderDiv").addClass("display-none");
+            }
+
+            ItemGudie_ContentResize();
+
+        }
+
+        // 원료 버튼 토글 (공정 트리리스트, bom 그리드 노출 상태 조절)
+        function orderGuideItemProcessToggleClick() {
+
+            var isDisplayed = $("#OrderGuideItemProcessDiv").hasClass("display-none");
+
+            if (isDisplayed) {
+                $("#OrderGuideItemProcessDiv").removeClass("display-none");
+                $("#OrderGuideBomDiv").addClass("display-none");
+            } else {
+                $("#OrderGuideItemProcessDiv").addClass("display-none");
+                $("#OrderGuideBomDiv").removeClass("display-none");
+            }
+        }
+
+        // 제조지시 검색용 팝업 데이터 입력 & 팝업 생성
+        function orderGuideSelectWorkorder() {
+
+            $("#orderGuideWorkorderPopup").dxPopup("instance").show();
+
+            $('#OrderGuidePopupHeader .datepicker').datepicker({
+                format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                templates: {
+                    leftArrow: '&laquo;',
+                    rightArrow: '&raquo;'
+                }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+
+            });
+
+            var today = new Date();
+
+            var year = today.getFullYear();
+            var month = today.getMonth()+1;
+            var date = today.getDate();
+
+            var dateStr = year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date)
+
+            setOrderGuideWorkorderPopupData(dateStr, dateStr);
+        }
+
+        // 제조지시 검색용 팝업 내 검색
+        function OrderGuideWorkorderSearch() {
+
+            setOrderGuideWorkorderPopupData($("#workorder_start_date").val(), $("#workorder_end_date").val());
+        }
+
+        // 제조지시 검색용 팝업 내 검색
+        function setOrderGuideWorkorderPopupData(sDate, eDate) {
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/SelectOrderGuideWorkorder',
+                data: {
+                    sDate: sDate,
+                    eDate: eDate
+                },
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        $("#OrderGuideWorkorderGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#OrderGuideWorkorderGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                        return;
+                    }
+
+                    $("#OrderGuideWorkorderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+        }
+
+        // 제조지시 팝업 로우 선택
+        function OrderGuideWorkorderSelect() {
+
+            var grid = $("#OrderGuideWorkorderGrid").dxDataGrid("instance");
+
+            if (grid.option("focusedRowKey") === null || grid.option("focusedRowKey") === "") {
+
+                $("#orderGuideWorkorderPopup").dxPopup("instance").hide();
+                return;
+            }
+
+            var data = getGridRowByKey("OrderGuideWorkorderGrid", grid.option("focusedRowKey"));
+
+            $("#OrderGuideSearchForm input[name=order_no]").val(data.order_no);
+            $("#OrderGuideSearchForm input[name=item_nm]").val(data.item_nm);
+            //$("#OrderGuideSearchForm input[name=order_status_nm]").val(data.order_status_nm);
+
+            $("#orderGuideWorkorderPopup").dxPopup("instance").hide();
+
+            OrderGuideSelect(data.order_no);
+        }
+
+        // 제조번호로 검색
+        function OrderGuideSelect(order_no) {
+
+            _orderGuideSignCnt = 0;
+
+            $.ajax({
+                type: 'POST',
+                url: '/ProductionManage/SelectOrderGuide',
+                async:false,
+                data: {
+                    order_no: order_no
+                },
+                success: function (result) {
+
+                    if (!Array.isArray(result)) {
+
+                        return;
+                    }
+
+                    orderGuideFillForm(JSON.parse(result[0])[0]);
+                    OrderGuideEditing(false);
+
+
+                    $("#OrderGuideSearchForm select[name=order_status]").val(JSON.parse(result[0])[0].order_status);
+                    $("#OrderGuideSearchForm select[name=order_status]").readonly(true);
+
+                    if (result[1].length > 0) {
+                        $("#OrderGuideSignGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+
+                        for (var i = 0; i < JSON.parse(result[1]).length; i++) {
+                            _orderGuideSignCnt += parseInt(JSON.parse(result[1])[i].sign_yn, 10);
+                        }
+                    } else {
+                        $("#OrderGuideSignGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+
+                    if (result[2].length > 0) {
+                        $("#OrderGuideItemProcessTreeList1").dxTreeList("instance").option("dataSource", JSON.parse(result[2]));
+                        $("#OrderGuideItemProcessTreeList2").dxTreeList("instance").option("dataSource", JSON.parse(result[2]));
+                    } else {
+                        $("#OrderGuideItemProcessTreeList1").dxTreeList("instance").option("dataSource", []);
+                        $("#OrderGuideItemProcessTreeList2").dxTreeList("instance").option("dataSource", []);
+                    }
+
+                    if (result[3].length > 0) {
+                        $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource", JSON.parse(result[3]));
+                    } else {
+                        $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource", []);
+                    }
+
+                    if (result[4].length > 0) {
+                        $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource", JSON.parse(result[4]));
+                    } else {
+                        $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource", []);
+                    }
+
+                    OrderGuideTreeListAllExpand();
+                }
+            });
+        }
+
+        // 전자서명 테이블 클릭
+        function orderGuideSign(e) {
+
+            switch (_oderGuideOrderStatus) {
+
+                case '0':
+
+                    alert("대장작성 서명을 진행해주세요.");
+                    return;
+
+                case '1':
+
+                    var gridData1 = $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource");
+                    var gridData2 = $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource");
+
+                    if (UtilView.isEmpty(gridData1) || UtilView.isEmpty(gridData2)) {
+                        alert("원료 불출지시가 확정되지 않았습니다.");
+                        return;
+                    }
+
+                    //if (gridData1.length <= 0 || gridData2.length <= 0) {
+                    //    alert("불출지시 작업이 진행되지 않았습니다.");
+                    //    return;
+                    //}
+
+                    break;
+
+                //default:
+
+                //    alert("작업중입니다.");
+                //    return;
+
+            }
+
+            if (e.columnIndex == 3) {
+
+                //var status = $("#OrderGuideSearchForm select[name=order_status]").val();
+
+                _orderGuideSignData = e.data;
+
+                //if (status === "0") {
+                //    alert("대장 작성 서명을 진행 해주세요.");
+                //    return;
+                //}
+
+                _oderGuideSignGubun = "EI";
+
+                if (e.data.prev_sign_yn == "0") {
+                    alert("먼저 앞 단계 승인이 필요합니다.");
+                    return;
+                }
+
+                if (e.data.sign_yn == "1") {
+
+                    //대기(0), 준비(1) 상태에서만 취소가 가능
+                    if (parseFloat(_oderGuideOrderStatus) > 1) { //칭량완료부터 서명취소 불가
+                        alert("작업중입니다.");
+                        return;
+                    }
+
+                    if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                        _oderGuideSignGubun = "ED";
+                    }
+                    else {
+                        return;
+                    }
+
+                    if (e.data.next_sign_yn == "1") {
+                        alert("이미 다음 단계가 승인 되어 있습니다.\n먼저 다음 단계 승인을 삭제(취소)해주세요. ");
+                        return;
+                    }
+                }
+
+                var popup = $("#OrderGuideSignPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#OrderGuideSignPopupTemplate"));
+                popup.show();
+
+            }
+        }
+
+        // 서명 권한 체크(id, pw)
+        function orderGuideSignSubmit() {
+
+            var representative_yn = "N";
+            var emp_cd = "";
+            var isValidUser = false;
+
+            var data = new FormData($('#OrderGuideSignForm')[0]);
+
+            var datagrid = ($("#OrderGuideSignGrid").dxDataGrid("instance").getSelectedRowsData())[0];
+
+            data.set("gubun", "S");
+
+            $.ajax({
+                type: 'POST',
+                url: '/Comm/IDValidation',
+                data: data,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        alert("잘못된 ID,PW 입니다.");
+                        return;
+                    }
+
+                    var isOK = true;
+
+                    if (_orderGuideSignData.responsible_emp_cd !== JSON.parse(result)[0].emp_cd) {
+
+                        $.ajax({
+                            type: 'GET',
+                            url: '/Comm/DelegateCheck',
+                            data: {
+                                emp_cd: JSON.parse(result)[0].emp_cd,
+                                sign_set_cd: "2001",
+                                sign_set_seq: datagrid.sign_set_dt_seq
+                            },
+                            async: false,
+                            success: function (result) {
+
+                                if (result.length > 0) {
+                                    isOK = true;
+                                } else {
+                                    isOK = false;
+                                }
+                            }
+                        });
+                    } else {
+                        representative_yn = "Y";
+                        isOK = true;
+                    }
+
+                    if (!isOK) {
+                        alert("권한이 없는 사용자입니다.");
+                        return;
+                    }
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/ProductionManage/OrderGuideSignCRUD',
+                        async: false,
+                        data: {
+                            gubun: _oderGuideSignGubun,
+                            mp_ck: 'M',
+                            order_no: _oderGuideOrderNo,
+                            sign_set_cd: '2001',
+                            sign_set_dt_id: _orderGuideSignData.sign_set_dt_id,
+                            emp_cd: JSON.parse(result)[0].emp_cd,
+                            representative_yn: representative_yn
+                        },
+                        success: function (result) {
+
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                        }
+                    });
+
+                    OrderGuideSelect(_oderGuideOrderNo);
+
+                    setTimeout(function () {
+                        var popup = $("#OrderGuideSignPopup").dxPopup("instance");
+                        popup.hide();
+                    }, 1000);
+                }
+            });
+        }
+
+        // 서명 팝업 인풋 초기화
+        function orderGuideClearSignInput() {
+
+            $('#OrderGuideSignForm')[0].reset();
+            $("input[name='dept_nm']").val("");
+            $("input[name='emp_nm']").val("");
+
+        }
+
+        // 원료 자동 불출 버튼
+        function orderGuideAutoRelease() {
+
+            var signData = $("#OrderGuideSignGrid").dxDataGrid("instance").option("dataSource");
+
+            if (signData[signData.length - 1].sign_emp_nm === null || signData[signData.length - 1].sign_emp_nm === "") {
+                alert("제조기록서 승인을 먼저 해주세요.");
+                return;
+            }
+
+            var data1 = $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource");
+            var data2 = $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource");
+
+            if (UtilView.isEmpty(data1) || UtilView.isEmpty(data2)) {
+                alert("원료 불출지시가 확정되지 않았습니다.");
+                return;
+            }
+
+            //if (data1.length !== "0" && data2.length === "0") {
+            //    alert("불출지시 작업이 진행되지 않았습니다.");
+            //    return;
+            //}
+
+            if (!confirm("원료 자동불출을 진행하시겠습니까?")) return;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/ProductionManage/OrderGuideAutoRelease',
+                    async: false,
+                    data: {
+                        order_no: _oderGuideOrderNo
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        alert(json.messege);
+
+                        OrderGuideSelect(_oderGuideOrderNo);
+                    }
+
+                });
+            
+
+        }
+
+        // 원료 자동 불출 버튼
+        function orderGuideAutoReleaseNotIncludeTransfer() {
+
+            var signData = $("#OrderGuideSignGrid").dxDataGrid("instance").option("dataSource");
+
+            if (signData[signData.length - 1].sign_emp_nm === null || signData[signData.length - 1].sign_emp_nm === "") {
+                alert("제조기록서 승인을 먼저 해주세요.");
+                return;
+            }
+
+            var data1 = $("#OrderGuideItemGrid1").dxDataGrid("instance").option("dataSource");
+            var data2 = $("#OrderGuideItemGrid2").dxDataGrid("instance").option("dataSource");
+
+            if (data1.length !== "0" && data2.length === "0") {
+                alert("원료 불출지시가 확정되지 않았습니다.");
+                return;
+            }
+
+            if (!confirm("원료 자동불출을 진행하시겠습니까? ")) return;
+
+            $.ajax({
+                type: 'POST',
+                url: '/ProductionManage/OrderGuideAutoReleaseNotIncludeTransfer',
+                async: false,
+                data: {
+                    order_no: _oderGuideOrderNo
+                },
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    alert(json.messege);
+
+                    OrderGuideSelect(_oderGuideOrderNo);
+                }
+
+            });
+
+        }
+
+        //2022.02.04 아오스 요청으로 추가(원료 문제로, 해당제품 중단)
+        function orderGuideStop() {
+            if (!$("#OrderGuideSearchForm input[name=order_no]").val()) {
+                alert("전표번호를 선택해주세요.");
+                return;
+            }
+
+            var popup = $("#OrderGuideStopPopup").dxPopup("instance");
+            popup.show();
+        }
+
+
+        function OrderGuideStopConfirm(chk) {
+
+            if (UtilView.isEmpty($("#OrderGuideRemarkForm input[name=OrderGuideRemark]").val())) {
+                alert("사유를 입력하세요."); return;
+            }
+
+            if (chk) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/ProductionManage/OrderGuideStop',
+                    async: false,
+                    data: {
+                        order_no: _oderGuideOrderNo,
+                        remark: $("#OrderGuideRemarkForm input[name=OrderGuideRemark]").val(),
+                        stopYN: $("#OrderGuideRemarkForm input[name='stopYN']:checked").val()
+                    },
+                    success: function (result) {
+                        if (!UtilView.isEmpty(result)) {
+                            var json = JSON.parse(result);
+                            alert(json.messege);
+                        } else {
+                            alert("작업중단에 실패했습니다");
+                        }
+
+                        OrderGuideSelect(_oderGuideOrderNo);
+                    }
+
+                });
+            }
+
+            var popup = $("#OrderGuideStopPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        function OrderGuideStopPopupClear() {
+            $('#OrderGuideRemarkForm')[0].reset();
+        }
+
+        // 제조기록서 조회
+        function OrderGuideSearch() {
+
+            if (!$("#OrderGuideSearchForm input[name=order_no]").val()) {
+                alert("전표번호를 선택해주세요.");
+                return;
+            }
+
+            OrderGuideSelect($("#OrderGuideSearchForm input[name=order_no]").val());
+        }
+
+        // 제조기록서 수정
+        function OrderGuideEdit() {
+
+            var status = $("#OrderGuideSearchForm select[name=order_status]").val();
+
+            if (_oderGuideOrderNo === "") {
+                alert("제조 지시를 선택해주세요.");
+
+                return;
+            }
+
+            if (parseInt(status) != 1) {
+                alert("작업중인 기록서는 수정할 수 없습니다.");
+
+                return;
+            }
+
+            if (_orderGuideSignCnt > 0) {
+                alert("서명된 기록서는 수정할 수 없습니다.");
+
+                return;
+            }
+
+            var isOK = confirm("이 제조 기록서를 수정하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            OrderGuideEditing(true);
+
+        }
+
+        // 제조기록서 저장
+        function OrderGuideSave() {
+
+            var formData = new FormData($("#OrderGuideForm")[0]);
+
+            formData.set("order_status", $("#OrderGuideSearchForm select[name=order_status]").val());
+            formData.set("order_no", _oderGuideOrderNo);
+
+            $.ajax({
+                type: 'POST',
+                url: '/ProductionManage/OrderGuideUpdateWorkOrder',
+                async: false,
+                contentType: false,
+                processData: false,
+                data: formData,
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    OrderGuideSelect(_oderGuideOrderNo);
+                }
+            });
+
+            OrderGuideEditing(false);
+        }
+
+
+        function OrderGuideTreeListAllExpand() {
+            var treeList = $("#OrderGuideItemProcessTreeList1").dxTreeList("instance");
+            var data = treeList.option("dataSource");
+
+            for (var i = 0; i < data.length; i++) {
+                if (data[i].level == "1") {
+                    treeList.expandRow(data[i].mykey);
+                }
+            }
+
+            var treeList2 = $("#OrderGuideItemProcessTreeList2").dxTreeList("instance");
+            var data2 = treeList2.option("dataSource");
+
+            for (var i = 0; i < data2.length; i++) {
+                if (data[i].level == "1") {
+                    treeList2.expandRow(data[i].mykey);
+                }
+            }
+        }
+
+
+        // 제조기록서 취소
+        function OrderGuideUndo() {
+
+            OrderGuideSelect(_oderGuideOrderNo);
+
+            OrderGuideEditing(false);
+        }
+
+        // 엑셀 추출
+        function OrderGuideExcel() {
+
+            treeExportToExcel("OrderGuideItemProcessTreeList1", "제조기록서승인_" + "@DateTime.Now.ToShortDateString()");
+
+        }
+
+        // 제조지시 조회 팝업 DataGridRow 구분값 미확정 일시 배경색 변경
+        function OrderGuideWorkorderHighlightRow(e) {
+
+            if (e.rowType === "data" && e.data.gubun === "미확정") {
+                e.rowElement[0].style.backgroundColor = 'lightgreen';
+            }
+        }
+
+        function OrderGuideHideCheckbox(e) {
+
+            if (e.parentType === "dataRow") {
+
+                if (e.row.node.level === 0 && (e.dataField !== "seq" || e.dataField !== "process_cd" || e.dataField !== "name")) {
+                    e.editorOptions.visible = false;
+                }
+            }
+        }
+
+        function OrderGuideParentNodeBackgroundColor(e) {
+
+            if (e.rowType === "data" && e.level == 0) {
+                e.rowElement[0].style.backgroundColor = '#e8e8e8';
+            }
+        }
+
+
+        function ItemGudie_ContentResize() {
+            var topPoint;
+            var topPoint_mb;
+
+            var isCollpased = $("div#OrderGuide div#OrderGuideWorkorderDiv").hasClass("display-none");
+
+            if (isCollpased) {
+                topPoint = document.querySelector("div#OrderGuide div.mainTop").getBoundingClientRect().bottom;
+                topPoint_mb = $("div#OrderGuide div.mainTop").css("margin-bottom").replace(/[^-\d\.]/g, '');
+            } else {
+                topPoint = document.querySelector("div#OrderGuide div#OrderGuideWorkorderDiv").getBoundingClientRect().bottom;
+                topPoint_mb = $("div#OrderGuide div#OrderGuideWorkorderDiv").css("margin-bottom").replace(/[^-\d\.]/g, '');
+            }
+            var content_max_height = window.innerHeight - topPoint - topPoint_mb - 21;
+
+            document.getElementById("OrderGuideItemProcessTreeList1").style.height = content_max_height + "px";
+            document.getElementById("OrderGuideItemProcessTreeList2").style.height = content_max_height + "px";
+            document.getElementById("OrderGuideItemGrid1").style.height = Math.floor(content_max_height / 2) + "px";
+            document.getElementById("OrderGuideItemGrid2").style.height = Math.floor(content_max_height / 2) + "px";
+
+        }
+    </script>
+
+
+    <div id="OrderGuide">
+
+        @(Html.DevExtreme().Popup()
+            .ID("OrderGuideStopPopup")
+            .Width(450)
+            .Height(230)
+            .ShowTitle(true)
+            .Title("사유작성")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+            .OnHidden("OrderGuideStopPopupClear")
+            .ContentTemplate(new TemplateName("OrderGuideStopPopupTemplate"))
+        )
+
+
+        @using (Html.DevExtreme().NamedTemplate("OrderGuideStopPopupTemplate"))
+        {
+            <form id="OrderGuideRemarkForm">
+                <div class="input-wrapper" style="margin-bottom: 5px;">
+                    <input type="text" style="height:80px;" class="col-12 form-control" name="OrderGuideRemark" placeholder="사유를 입력하세요" />
+                </div>
+                <div class="input-wrapper">
+                    <label class="col-4">작업중단 여부</label>
+                    <div class="col-7 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" id="stop_Y" name="stopYN" />
+                            <span class="form-control-sm"><label for="stop_Y">Y</label></span>
+                            <input class="input-group-append" type="radio" value="N" id="stop_N" name="stopYN" checked />
+                            <span class="form-control-sm"><label for="stop_N">N</label></span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div style="text-align: right; margin-right: 7%;">
+                <button class="btn btn-secondary" onclick="OrderGuideStopConfirm(true)">확인</button>
+                <button class="btn btn-secondary" onclick="OrderGuideStopConfirm(false)">취소</button>
+            </div>
+        }
+
+        <div>
+            @(Html.DevExtreme().Popup()
+            .ID("orderGuideWorkorderPopup")
+            .Width(800)
+            .Height(900)
+            .ShowTitle(true)
+            .Title("제조지시 조회")
+            .Visible(false)
+            .DragEnabled(false)
+            .ContentTemplate(new TemplateName("orderGuideWorkorder_template"))
+        )
+        </div>
+
+        @using (Html.DevExtreme().NamedTemplate("orderGuideWorkorder_template"))
+        {
+            @(Html.DevExtreme().ScrollView()
+            .Width("100%")
+            .Height("100%")
+            .Content(@<text>
+                <div>
+                     @(Html.DevExtreme().Toolbar()
+                        .ID("OrderGuideWorkorderToolbar")
+                        .Items(items =>
+                        {
+                            items.Add()
+                                .Template(new TemplateName("OrderGuidePopupToolbarContent"))
+                                .Location(ToolbarItemLocation.Before);
+
+                            items.Add()
+                                .Widget(w => w
+                                    .Button()
+                                    .Type(ButtonType.Default)
+                                    .StylingMode(ButtonStylingMode.Contained)
+                                    .ID("OrderGuideWorkorderSearch")
+                                    .Icon("search")
+                                    .Text("조회")
+                                .OnClick("OrderGuideWorkorderSearch")
+                                )
+                                .Location(ToolbarItemLocation.After);
+
+                            items.Add()
+                                .Widget(w => w
+                                    .Button()
+                                    .Type(ButtonType.Default)
+                                    .StylingMode(ButtonStylingMode.Contained)
+                                    .ID("OrderGuideWorkorderSelect")
+                                    .Icon("check")
+                                    .Text("확인")
+                                .OnClick("OrderGuideWorkorderSelect")
+                                )
+                                .Location(ToolbarItemLocation.After);
+                        })
+                    )
+
+
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("OrderGuideWorkorderGrid")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .ColumnAutoWidth(true)
+                        .KeyExpr("order_no")
+                        .FocusedRowEnabled(true)
+                        .SearchPanel(s => s.Visible(true))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .OnRowDblClick("OrderGuideWorkorderSelect")
+                        .OnRowPrepared("OrderGuideWorkorderHighlightRow")
+                        .Height(700)
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("order_date").Caption("입력일자");
+                            columns.Add().DataField("item_cd").Caption("제조제품");
+                            columns.Add().DataField("item_nm").Caption("제조제품명");
+                            columns.Add().DataField("lot_no").Caption("제조번호");
+                            columns.Add().DataField("order_no").Caption("전표번호");
+                            columns.Add().DataField("order_status_nm").Caption("상태");
+                            columns.Add().DataField("gubun").Caption("불출상태");
+                        })
+                        )
+
+                </div>
+            </text>)
+        )
+        }
+
+        @using (Html.DevExtreme().NamedTemplate("OrderGuidePopupToolbarContent"))
+        {
+            <div style="width:550px;">
+
+                <div id="OrderGuidePopupHeader" class="input-wrapper">
+
+                    <label class="col-2">입력일자</label>
+                    <input type="text" id="workorder_start_date" value="@DateTime.Today.ToShortDateString()" class="form-control col-4 datepicker">
+                    <input type="text" id="workorder_end_date" value="@DateTime.Today.ToShortDateString()" class="form-control col-4 datepicker">
+
+                </div>
+
+            </div>
+        }
+
+        @* === 전자 서명 팝업 === *@
+        @(Html.DevExtreme().Popup()
+            .ID("OrderGuideSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("orderGuideClearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+        @using (Html.DevExtreme().NamedTemplate("OrderGuideSignPopupTemplate"))
+        {
+            <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+            <form id="OrderGuideSignForm">
+
+                <div class="input-wrapper">
+                    <label class="col-3">아이디</label>
+                    <input type="text" class="col-8 form-control" name="txt_ID">
+
+                    <label class="col-3">비밀번호</label>
+                    <input type="password" class="col-8 form-control" name="txt_Pass">
+                </div>
+
+            </form>
+            <div class="align-content-end">
+                <button onclick="orderGuideSignSubmit()">확인</button>
+            </div>
+
+            <br />
+            <hr />
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        }
+
+
+
+        <div id="ItemGuide_Top" class="mainTop mb-1">
+            <div class="row mb-1">
+                <div class="col-8">
+
+                    <form id="OrderGuideSearchForm">
+
+                        <div class="input-wrapper">
+
+                            <div class="input-group input-group-sm col-6">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">제조지시</span>
+                                </div>
+                                <input type="text" class="form-control searchPopupInput" name="order_no" value="@ViewBag.order_no">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="orderGuideSelectWorkorder()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                                <input type="text" name="item_nm" class="form-control" readonly="readonly" value="@ViewBag.item_nm">
+                                <select class="form-control col-2" name="order_status">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.orderStatusGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+
+                            @*<button type="button" class="btn btn-secondary" onclick="orderGuideItemProcessToggle()">원료</button>*@
+                            @*<button type="button" class="btn btn-secondary" onclick="orderGuideWorkorderToggle()">승인</button>*@
+
+                        </div>
+
+                    </form>
+
+
+                </div>
+
+                <div class="CRUD-btn col-4">
+                    @* === CRUD 버튼 === *@
+                    @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel"); }
+                </div>
+            </div>
+
+            <div class="row">
+
+                <div class="col-12" style="display:inherit;" id="OrderGuideForm2">
+
+                    <div class="col-4 display-flex">
+                        <div class="custom-control custom-switch pr-1">
+                            <input type="checkbox" class="custom-control-input" id="orderGuideItemProcessToggle" onclick="orderGuideItemProcessToggleClick()">
+                            <label class="custom-control-label" for="orderGuideItemProcessToggle">원료 정보</label>
+                        </div>
+                        <div class="custom-control custom-switch pr-1">
+                            <input type="checkbox" class="custom-control-input" id="orderGuideWorkorderToggle" onclick="orderGuideWorkorderToggleClick()">
+                            <label class="custom-control-label" for="orderGuideWorkorderToggle">승인 정보</label>
+                        </div>
+                    </div>
+
+                    <div class="col-8 align-end-only">
+                        @*<button type="button" class="btn btn-secondary" onclick="orderGuideAutoRelease()">원료자동불출(임시)</button>*@
+                        <button type="button" class="btn btn-secondary btn-danger" onclick="orderGuideStop()">사유작성</button>
+                        <button type="button" class="btn btn-secondary" onclick="orderGuideAutoReleaseNotIncludeTransfer()">원료자동불출(인수인계 미포함)</button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+
+        <div id="OrderGuideWorkorderDiv" class="display-none row mb-1">
+
+            <div style="display:flex;">
+
+                <div class="col-5 pr-1">
+
+                    <div class="box mb-0">
+
+                        <div class="divName">
+                            <p>제조지시 정보</p>
+                        </div>
+
+                        <div class="menuDiv">
+
+                            <form id="OrderGuideForm">
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">제조제품</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12" name="item_cd" readonly="readonly">
+                                    </div>
+                                    <div class="input-group col-6">
+                                        <input type="text" class="form-control col-12" name="item_nm" readonly="readonly">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">성상</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="item_surface" readonly="readonly">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">포장단위</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12" name="item_packunit" readonly="readonly">
+                                    </div>
+                                    <label class="col-2">관리번호</label>
+                                    <div class="input-group col-4">
+                                        <textarea type="text" name="document_no" rows="3" class="form-control" readonly="readonly" />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">제조번호</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12 datepicker" name="lot_no" readonly="readonly">
+                                    </div>
+                                    <label class="col-2">제조단위</label>
+                                    <div class="input-group col-4">
+                                        <input type="number" class="form-control col-6 datepicker" name="order_qty" readonly="readonly">
+                                        <input type="text" class="form-control col-6 datepicker" name="item_lot_size_unit" readonly="readonly">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">입력일자</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12 datepicker" name="order_date" readonly="readonly">
+                                    </div>
+                                    <label class="col-2">제조일자</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12 datepicker" name="start_date" readonly="readonly">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">사용기한</label>
+                                    <div class="input-group col-2">
+                                        <input type="text" class="form-control col-12 datepicker" name="valid_date" readonly="readonly">
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-2">비고</label>
+                                    <div class="input-group col-8">
+                                        <input type="text" class="form-control col-12" name="order_bigo" readonly="readonly">
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="col-5 pl-0">
+
+                    <div class="box mb-0">
+
+                        <div class="divName">
+                            <p>전자서명 정보 - 제조기록서 발행</p>
+                        </div>
+
+                        @(Html.DevExtreme().DataGrid()
+                    .ID("OrderGuideSignGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .OnCellClick("orderGuideSign")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                        {
+                            columns.Add().DataField("displayfield").Caption("구분");
+                            columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                            columns.Add().DataField("sign_time").Caption("서명일자").Width(170);
+                            columns.Add().DataField("sign_image").Caption("서명")
+                            .AllowFiltering(false)
+                            .AllowSorting(false)
+                            .CellTemplate(@<text>
+                            <div>
+                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                            </div>
+                        </text>);
+                    })
+                )
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="row" id="OrderGuideItemProcessDiv">
+
+            <div class="col-12">
+
+                <div class="box mb-0">
+
+                    @(Html.DevExtreme().TreeList()
+                .ID("OrderGuideItemProcessTreeList1")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .RootValue("")
+                .KeyExpr("mykey")
+                .ParentIdExpr("pkey")
+                .Height(600)
+                .OnEditorPreparing("OrderGuideHideCheckbox")
+                .OnRowPrepared("OrderGuideParentNodeBackgroundColor")
+                //.OnCellClick("getGridPopup")
+                //.OnRowUpdated("processUpdate")
+                //.OnCellPrepared("processEditableColumn")
+                .Columns(columns => {
+
+                    columns.Add()
+                        .DataField("seq")
+                        .Caption("순서");
+
+                    columns.Add()
+                        .DataField("process_cd")
+                        .Caption("코드");
+
+                    columns.Add()
+                        .DataField("name")
+                        .Caption("공정/세부공정");
+
+                    columns.Add()
+                        .DataField("next_process_cd")
+                        .Caption("다음공정");
+
+                    columns.Add()
+                        .DataField("next_process_nm")
+                        .Caption("다음공정명");
+
+                    columns.Add()
+                        .DataField("order_proc_qc_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return rowData.order_proc_qc_ck == ""Y""; }")
+                        .Caption("시험유무");
+
+                    columns.Add()
+                        .DataField("order_proc_transfer_ck")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return rowData.order_proc_transfer_ck == ""Y""; }")
+                        .Caption("인수인계");
+
+                    columns.Add()
+                        .DataField("workroom_cd")
+                        .Caption("작업실");
+
+                    columns.Add()
+                        .DataField("workroom_nm")
+                        .Caption("작업실명");
+
+                    columns.Add()
+                        .DataField("order_proc_warehouse")
+                        .Caption("제공창고");
+
+                    columns.Add()
+                        .DataField("order_proc_warehouse_nm")
+                        .Caption("제공창고명");
+
+                    columns.Add()
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadParams(new
+                        {
+                            pGubun = "공통코드",
+                            pDiv = "N",
+                            pStrWhere = "RT006",
+                            pTableName = "1"
+                        }).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("order_proc_make_status")
+                        .Caption("제조상태");
+
+                    columns.Add()
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadParams(new
+                        {
+                            pGubun = "공통코드",
+                            pDiv = "N",
+                            pStrWhere = "RT008",
+                            pTableName = "1"
+                        }).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("order_proc_transfer_status")
+                        .Caption("인수인계상태");
+
+                    columns.Add()
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadParams(new
+                        {
+                            gubun = "L3"
+                        }).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("order_proc_qt_status")
+                        .Caption("시험상태");
+
+                    columns.Add()
+                        .DataField("order_proc_keep_method")
+                        .Caption("보관방법");
+
+                    columns.Add()
+                        .DataField("order_proc_remark")
+                        .Caption("비고");
+
+                    columns.Add()
+                        .DataField("order_proc_content")
+                        .Caption("단위중량(허가량)");
+
+                    columns.Add()
+                        .DataField("testrequest_no")
+                        .Caption("시험의뢰번호");
+
+                    columns.Add()
+                        .DataField("order_proc_manage_rate_min")
+                        .Caption("수율(하한)");
+
+                    columns.Add()
+                        .DataField("order_proc_manage_rate_max")
+                        .Caption("수율(상한)");
+
+                    //columns.Add()
+                    //    .Caption("외주")
+                    //    .Name("outsourceBtn")
+                    //    .Width(80)
+                    //    .CellTemplate(new JS("orderGuideGridOutsourceBtn"));
+
+                    //columns.Add()
+                    //    .DataField("outsource")
+                    //    .DataType(GridColumnDataType.Boolean)
+                    //    .CalculateCellValue(@"function(rowData) { return rowData.outsource == ""Y""; }")
+                    //    .Caption("외주여부");
+
+                })
+                .ShowRowLines(true)
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .ColumnAutoWidth(true)
+                .AutoExpandAll(true)
+            )
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="row display-none" id="OrderGuideBomDiv">
+
+            <div class="col-3 pr-1">
+
+                <div class="box mb-0">
+
+                    @(Html.DevExtreme().TreeList()
+                .ID("OrderGuideItemProcessTreeList2")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .RootValue("")
+                .KeyExpr("mykey")
+                .ParentIdExpr("pkey")
+                //.OnCellClick("getGridPopup")
+                //.OnRowUpdated("processUpdate")
+                //.OnCellPrepared("processEditableColumn")
+                .Height(600)
+                .OnRowPrepared("OrderGuideParentNodeBackgroundColor")
+                .Columns(columns => {
+
+                    columns.Add()
+                        .DataField("seq")
+                        .Caption("순서");
+
+                    columns.Add()
+                        .DataField("process_cd")
+                        .Caption("코드");
+
+                    columns.Add()
+                        .DataField("name")
+                        .Caption("공정/세부공정");
+
+                })
+                .ShowRowLines(true)
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .ColumnAutoWidth(true)
+            )
+
+                </div>
+
+            </div>
+
+            <div class="col-9 pl-0">
+
+                <div class="box mb-0">
+
+                    @(Html.DevExtreme().DataGrid()
+                .ID("OrderGuideItemGrid1")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Height(350)
+                .ColumnAutoWidth(true)
+                .HoverStateEnabled(true)
+                .Columns(c =>
+                {
+                    c.Add().DataField("item_bom_seq").Caption("순서");
+                    c.Add().DataField("item_bom_child_cd").Caption("원료코드");
+                    c.Add().DataField("item_bom_child_nm").Caption("원료");
+                    c.Add().DataField("item_bom_tea_qty").Caption("허가량");
+                    c.Add().Caption("단위")
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadParams(new
+                        {
+                            pGubun = "공통코드"
+                            ,
+                            pDiv = "D"
+                            ,
+                            pStrWhere = "CM012"
+                            ,
+                            pTableName = "item_bom_tea_unit"
+                        }
+                        ).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("item_bom_tea_unit")
+                        .DataType(GridColumnDataType.String);
+                    c.Add().DataField("item_bom_batch_qty").Caption("표준량");
+                    c.Add().DataField("item_bom_standard_qty").Caption("기준량");
+                    c.Add().Caption("단위")
+                        .Lookup(lookup => lookup
+                        .DataSource(d => d.WebApi()
+                        .RouteName("Comm")
+                        .LoadAction("GetCommon")
+                        .LoadParams(new
+                        {
+                            pGubun = "공통코드"
+                            ,
+                            pDiv = "D"
+                            ,
+                            pStrWhere = "CM012"
+                            ,
+                            pTableName = "item_bom_batch_unit"
+                        }
+                        ).Key("keyfield"))
+                        .ValueExpr("keyfield")
+                        .DisplayExpr("displayfield")
+                        ).DataField("item_bom_batch_unit")
+                        .DataType(GridColumnDataType.String);
+                    c.Add().DataField("remark").Caption("비고");
+                })
+                )
+                    @(Html.DevExtreme().DataGrid()
+                .ID("OrderGuideItemGrid2")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Height(250)
+                .ColumnAutoWidth(true)
+                .HoverStateEnabled(true)
+                .Columns(c =>
+                {
+                    c.Add().DataField("process_nm").Caption("구분");
+                    c.Add().DataField("child_cd").Caption("원료코드");
+                    c.Add().DataField("child_nm").Caption("원료명");
+                    c.Add().DataField("qc_no").Caption("시험번호");
+                    c.Add().DataField("standard_qty").Caption("지시량");
+                    c.Add().DataField("use_qty").Caption("불출량");
+                })
+            )
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>

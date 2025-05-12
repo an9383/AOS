@@ -1,0 +1,208 @@
+﻿
+@{
+    Layout = null;
+    ViewData["Title"] = "StackSearch_M";
+}
+
+@{
+    var StackSearch_MData = @Html.Raw(Json.Encode(ViewBag.StackSearch_MData.Data));
+    var StackSearch_MAuth = @Html.Raw(Json.Encode(ViewBag.StackSearch_MAuth.Data));
+}
+
+<script type="text/javascript" id="StackSearch_MJs">
+
+    // SP 구문, gubun 변수
+    var StackSearch_M_Gubun = "";
+
+    // 메뉴 권한
+    var _StackSearch_MAuth;
+
+    $(function () {
+
+        if (!(@StackSearch_MData === "")) {
+            // 좌측 그리드 객체 생성
+            $("#StackSearch_M_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@StackSearch_MData));
+            $("#StackSearch_M_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#StackSearch_M_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 사용자 권한
+        _StackSearch_MAuth = JSON.parse(@StackSearch_MAuth)[0];
+
+        if (_StackSearch_MAuth.form_query != "Y") {
+            $("#StackSearch_MSearch").remove();
+        }
+
+    });
+
+    // 포커스 체인지 (좌측 그리드 -> 우측 위 그리드 출력)
+    function StackSearch_M_Left_changed() {
+        
+        var gridData = $("#StackSearch_M_LeftGrid").dxDataGrid("instance").option("focusedRowKey");        
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/StackSearch_Test_Select',
+            data: {
+                item_cd: gridData
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#StackSearchRightUpGrid_M").dxDataGrid("instance").option("dataSource", []);
+                    $("#StackSearchRightUpGrid_M").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+
+                $("#StackSearchRightUpGrid_M").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#StackSearchRightUpGrid_M").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#StackSearchRightUpGrid_M").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+
+    }
+
+    // 포커스 체인지 (우측 위 그리드 -> 우측 아래 그리드 출력)
+    function StackSearch_M_UP_changed() {
+
+        var grid = $("#StackSearchRightUpGrid_M").dxDataGrid("instance");
+        var gridData = getGridRowByKey('StackSearchRightUpGrid_M', grid.option("focusedRowKey"));
+        
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/StackSearch_ReceiptPack_Select',
+            data: {
+                receipt_no: gridData.receipt_no,
+                receipt_id: gridData.receipt_id
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#StackSearchRightDownGrid_M").dxDataGrid("instance").option("dataSource", []);
+                    $("#StackSearchRightDownGrid_M").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#StackSearchRightDownGrid_M").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#StackSearchRightDownGrid_M").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#StackSearchRightDownGrid_M").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+
+</script>
+
+
+<div id="StackSearch_M" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8"></div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4"></div>
+    </div>
+
+
+    <div class="row">
+        <div class="col-5 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("StackSearch_M_LeftGrid")
+                .ShowBorders(true)
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .HoverStateEnabled(true)
+                .KeyExpr("item_cd")
+                .Height(900)
+                .ShowColumnLines(true)
+                .Columns(c =>
+                {
+                    c.Add().DataField("item_cd").Caption("원료코드");
+                    c.Add().DataField("item_nm").Caption("원료명");
+                })
+                .OnFocusedRowChanged("StackSearch_M_Left_changed")
+            )
+            </div>
+        </div>
+
+
+        <div class="col-7">
+            <div class="box mb-0">
+
+                <!-- 우측 위 그리드 -->
+                <div class="divName">
+                    <p>시험번호 적치현황</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("StackSearchRightUpGrid_M")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(400)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("test_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("receipt_remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_pack_unit").Caption("단위").Alignment(HorizontalAlignment.Center);
+                    })
+                    .ShowBorders(true)
+                    .OnFocusedRowChanged("StackSearch_M_UP_changed")
+                )
+
+                <!-- 우측 아래 그리드 -->
+                <div class="divName">
+                    <p>바코드 적치현황</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("StackSearchRightDownGrid_M")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(425)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("receipt_pack_barcode")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("receipt_pack_barcode").Caption("바코드");
+                        c.Add().DataField("receipt_pack_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("receipt_pack_remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("workroom_nm").Caption("창고");
+                        c.Add().DataField("zone_nm").Caption("구역");
+                        c.Add().DataField("cell_nm").Caption("셀");
+                    })
+                    .ShowBorders(true)
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

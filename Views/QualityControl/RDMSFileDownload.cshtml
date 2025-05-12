@@ -1,0 +1,442 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+<script id="@(pagePrefix)Js">
+
+    $(function () {
+
+        $('#RDMSFileDownload .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            toggleActive: true,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });
+
+
+        $("#RDMSFileDownloadSearchForm input[name=start_date]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+        $("#RDMSFileDownloadSearchForm input[name=end_date]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        RDMSFileDownloadSearch();
+
+    });
+
+    // 조회
+    function RDMSFileDownloadSearch() {
+
+        var data = new FormData($('#RDMSFileDownloadSearchForm')[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/RDMSFileDownloadSelect',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowKey", "");
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowKey", "");
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+
+    }
+
+    // 시험 그리드 포커스 변경
+    function RDMSFileDownloadTestControlFocusChanged() {
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/RDMSFileDownloadTestDetailSelect',
+            dataType: "json",
+            data: {
+                testcontrol_id: $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowKey")
+            },
+            success: function (result) {
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowKey", "");
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+
+    }
+
+    // 시험 항목 그리드 포커스 변경
+    function RDMSFileDownloadTestDetailFocusChanged() {
+
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/RDMSFileDownloadTestFileSelect',
+            dataType: "json",
+            data: {
+                testcontrol_id: $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowKey"),
+                teststandardmaster_id: $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowKey")
+            },
+            success: function (result) {
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                }
+                catch (e) {
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "dataSource", []);
+                    $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        })
+
+    }
+
+    // 첨부파일 다운로드
+    function RDMSFileDownloadTestFileDownload() {
+
+        var testcontrol_id = $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowKey");
+        var teststandardmaster_id = $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowKey");
+        var doc_file_id = $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowKey");
+
+        if (testcontrol_id && teststandardmaster_id && doc_file_id) {
+            var url = "";
+            url = updateQueryStringParameter(url, "testcontrol_id", testcontrol_id);
+            url = updateQueryStringParameter(url, "teststandardmaster_id", teststandardmaster_id);
+            url = updateQueryStringParameter(url, "doc_file_id", doc_file_id);
+
+            document.location.assign('/QualityControl/RDMSFileDownloadTestFileDownload' + url);
+
+        } else {
+            alert("다운로드할 파일을 선택해주세요.");
+        }
+    }
+
+    function RDMSFileDownloadTestFilePreview() {
+
+        var testcontrol_id = $("#RDMSFileDownloadTestControlGrid").dxDataGrid("option", "focusedRowKey");
+        var teststandardmaster_id = $("#RDMSFileDownloadTestDetailGrid").dxDataGrid("option", "focusedRowKey");
+        var doc_file_id = $("#RDMSFileDownloadTestFileGrid").dxDataGrid("option", "focusedRowKey");
+
+        if (testcontrol_id && teststandardmaster_id && doc_file_id) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/QualityControl/RDMSFileDownloadTestFilePreview',
+                contentType: "application/json; charset=utf-8",
+                async:false,
+                data: {
+                    testcontrol_id: testcontrol_id,
+                    teststandardmaster_id: teststandardmaster_id,
+                    doc_file_id: doc_file_id
+                },
+                success: function (data, textStatus, xhr) {
+
+                    //var pdfData = atob(data);
+
+                    //// Loaded via <script> tag, create shortcut to access PDF.js exports.
+                    //var pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+                    //// The workerSrc property shall be specified.
+                    //pdfjsLib.GlobalWorkerOptions.workerSrc = '//mozilla.github.io/pdf.js/build/pdf.worker.js';
+
+                    //$("#RDMSFileViewerPopup").dxPopup("instance").show();
+
+                    //// Using DocumentInitParameters object to load binary data.
+                    //var loadingTask = pdfjsLib.getDocument({ data: pdfData });
+                    //loadingTask.promise.then(function (pdf) {
+                    //    console.log('PDF loaded');
+
+                    //    // Fetch the first page
+                    //    var pageNumber = 1;
+                    //    pdf.getPage(pageNumber).then(function (page) {
+                    //        console.log('Page loaded');
+
+                    //        var scale = 1.5;
+                    //        var viewport = page.getViewport({ scale: scale });
+
+                    //        // Prepare canvas using PDF page dimensions
+                    //        var canvas = document.getElementById('the-canvas');
+                    //        var context = canvas.getContext('2d');
+                    //        canvas.height = viewport.height;
+                    //        canvas.width = viewport.width;
+
+                    //        // Render PDF page into canvas context
+                    //        var renderContext = {
+                    //            canvasContext: context,
+                    //            viewport: viewport
+                    //        };
+                    //        var renderTask = page.render(renderContext);
+                    //        renderTask.promise.then(function () {
+                    //            console.log('Page rendered');
+                    //        });
+                    //    });
+                    //}, function (reason) {
+                    //    // PDF loading error
+                    //    console.error(reason);
+                    //});
+                }
+            })
+
+        } else {
+            alert("다운로드할 파일을 선택해주세요.");
+        }
+
+    }
+
+    // 시험 항목 그리드 첨부파일 있을시 로우 하이라이트
+    function RDMSFileDownloadHighlightRow(e) {
+
+        if (e.rowType === "data" && e.data.backdata_yn === "V") {
+            e.rowElement[0].style.backgroundColor = 'lightblue';
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("RDMSFileViewerPopup")
+            .Width(800)
+            .Height(600)
+            .ShowTitle(true)
+            .Title("미리보기")
+            //.OnHidden("ClearPickingCompleteESignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+            .ContentTemplate(new TemplateName("RDMSFileViewerPopupTemplate"))
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("RDMSFileViewerPopupTemplate"))
+    {
+        <canvas id="the-canvas"></canvas>
+    }
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                @*<input type="hidden" name="Gubun" value="@srch.Gubun" />
+                    <input type="hidden" name="le_testcontrol_id" value="@srch.le_testcontrol_id" />*@
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="col-6 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="request" id="date_option1" name="date_option" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="date_option1">의뢰일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="hope" id="date_option2" name="date_option" />
+                        </div>
+                        <span class="form-control-sm"><label for="date_option2">요청일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="pickingorder" id="date_option3" name="date_option" />
+                        </div>
+                        <span class="form-control-sm"><label for="date_option3">지시일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center col-2" name="start_date" autocomplete="off" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control datepicker input-sm  text-center col-2" name="end_date" autocomplete="off" />
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="test_status" value="">
+                            <option value="A">전체</option>
+                            <option value="B">대기</option>
+                            <option value="C">지시</option>
+                            <option value="D">진행</option>
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제형</span>
+                        </div>
+                        <select class="form-control" name="item_form_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM065")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="test_type" value="">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">의뢰품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="search_number0" />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control col-4" name="search_gubun">
+                            @*<option value="0">의뢰품목</option>*@
+                            <option value="1">의뢰번호</option>
+                            <option value="2">제조(관리)번호</option>
+                        </select>
+                        <input type="text" class="form-control col-8" name="search_number" />
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search");}
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("RDMSFileDownloadTestControlGrid")
+                    .KeyExpr("testcontrol_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .AllowColumnReordering(true)
+                    .ColumnResizingMode(ColumnResizingMode.Widget)
+                    .ColumnChooser(cc=>cc.Enabled(true))
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("test_type_nm").Caption("시험종류");
+                        c.Add().DataField("testrequest_no").Caption("의뢰번호");
+                        c.Add().DataField("request_date").Caption("의뢰일자");
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("test_status_nm").Caption("진행상태");
+                    })
+                    .OnFocusedRowChanged("RDMSFileDownloadTestControlFocusChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-8 pl-1">
+
+            <div class="box-height-auto mb-1">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("RDMSFileDownloadTestDetailGrid")
+                    .KeyExpr("teststandardmaster_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(400)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .AllowColumnReordering(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowIndex(0)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("backdata_yn").Caption("자료").DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.backdata_yn == 'V' || rowData.backdata_yn == true); }");
+                        c.Add().DataField("testitem_nm").Caption("시험항목");
+                        c.Add().DataField("teststandard_nm").Caption("시험기준");
+                        c.Add().DataField("reference_test_yn").Caption("참고시험");
+                        c.Add().DataField("content_check").Caption("함량");
+                        c.Add().DataField("testitem_result").Caption("시험결과");
+                        c.Add().DataField("result_yn").Caption("판정");
+                        c.Add().DataField("judge_date").Caption("시험일");
+                        c.Add().DataField("testitem_emp_nm").Caption("시험자");
+                    })
+                    .OnFocusedRowChanged("RDMSFileDownloadTestDetailFocusChanged")
+                    .OnRowPrepared("RDMSFileDownloadHighlightRow")
+                )
+
+            </div>
+
+            <div class="box-height-auto mb-0">
+
+                <div class="align-end-only">
+                    @*<button type="button" class="btn btn-secondary margin-5" onclick="RDMSFileDownloadTestFilePreview()">PDF뷰어</button>*@
+                    <button type="button" class="btn btn-secondary margin-5" onclick="RDMSFileDownloadTestFileDownload()">다운로드</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("RDMSFileDownloadTestFileGrid")
+                    .KeyExpr("doc_file_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(400)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    //.AllowColumnResizing(true)
+                    //.AllowColumnReordering(true)
+                    //.ColumnAutoWidth(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("doc_name").Caption("파일 이름");
+                    })
+                    .OnRowDblClick("RDMSFileDownloadTestFileDownload")
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,1135 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    var testerData = @Html.Raw(Json.Encode(ViewBag.testerData.Data));
+}
+
+@*시험기기 관리*@
+
+<script id="@(pagePrefix)Js">
+
+    var _testerCRUDStatus = "";
+    var _testerChanges = new Array();
+    var _testItemChanges = new Array();
+
+    $(function () {
+
+        TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 1);
+
+        var TesterPopupColumns = {
+            "standardTester": [{ dataField: "tester_cd", caption: "시험기기코드" }, { dataField: "tester_nm", caption: "시험기기명" }, { dataField: "tester_type", caption: "종류" }]
+        };
+
+        $('input[name=tester_cd]+div>button', $('#' + "TesterSearchForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.tester', '시험기기 조회', 'equip_cd', $("#TesterSearchForm input[name=tester_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=tester_cd]", $('#' + "TesterSearchForm")).val(selectedItems.equip_cd);
+                }
+            );
+        });
+
+        $('input[name=tester_response_emp]+div>button', $('#' + "TesterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.employee', '사원 조회', 'emp_cd', $("#TesterWriteForm input[name=tester_response_emp]").val(),
+                function (selectedItems) {
+                    $("input[name=tester_response_emp]", $('#' + "TesterWriteForm")).val(selectedItems.emp_cd);
+                    $("input[name=tester_response_emp_nm]", $('#' + "TesterWriteForm")).val(selectedItems.emp_nm);
+                }
+            );
+        });
+
+        $('input[name=workroom_cd]+div>button', $('#' + "TesterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.workroom', '작업실 조회', 'workroom_cd', $("#TesterWriteForm input[name=workroom_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=workroom_cd]", $('#' + "TesterWriteForm")).val(selectedItems.workroom_cd);
+                    $("input[name=workroom_nm]", $('#' + "TesterWriteForm")).val(selectedItems.workroom_nm);
+                }
+            );
+        });
+
+        $('input[name=tester_gcd]+div>button', $('#' + "TesterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.tester', '시험기기 조회', 'equip_cd', $("#TesterWriteForm input[name=tester_gcd]").val(),
+                function (selectedItems) {
+                    $("input[name=tester_gcd]", $('#' + "TesterWriteForm")).val(selectedItems.equip_cd);
+                    $("input[name=tester_gcd_nm]", $('#' + "TesterWriteForm")).val(selectedItems.equip_nm);
+                }
+            );
+        });
+
+        $('input[name=tester_mcd]+div>button', $('#' + "TesterWriteForm")).click(function (event) {
+            createPopup("StandardTester", "시험기기 조회", [], TesterPopupColumns.standardTester, "tester_cd", function (selectedItems) {
+                $("input[name=tester_mcd]", $('#' + "TesterWriteForm")).val(selectedItems.equip_cd);
+                $("input[name=tester_mcd_nm]", $('#' + "TesterWriteForm")).val(selectedItems.equip_nm);
+            }, $('input[name=tester_mcd]', $('#' + "TesterWriteForm")).val());
+
+            $("#StandardTesterPopup").dxPopup({
+                onShown: function (e) {
+                    $.ajax({
+                        type: 'GET',
+                        url: '/LIMSMaster/TesterSelectStandardTester',
+                        dataType: "json",
+                        async: false,
+                        success: function (result) {
+                            try {
+                                var jsonData = JSON.parse(result);
+                                $("#StandardTester_gridContainer").dxDataGrid("option", "dataSource", jsonData);
+                            }
+                            catch (e) {
+                                $("#StandardTester_gridContainer").dxDataGrid("option", "dataSource", []);
+                            }
+                        }
+                    })
+                }
+            });
+
+            $("#StandardTesterPopup").dxPopup("instance").show();
+
+        });
+
+        if ((@testerData).length > 0) {
+            $("#TesterGrid").dxDataGrid("option", "dataSource", JSON.parse(@testerData));
+            $("#TesterGrid").dxDataGrid("option", "focusedRowIndex", 0);
+        }
+
+        setDatePicker("#Tester .datepicker");
+
+        $($("#TesterImageUploaderBtn")).click(function (event) {
+
+            //if (_testerCRUDStatus !== "U") {
+            //    alert("수정중일때만 등록 할 수 있습니다.");
+            //    return;
+            //}
+
+            var fileUploader = $('#TesterImageUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        TesterEditCheck(false, 'N');
+
+        $(document).on('input', '#Tester .numbers', function (event) {
+            this.value = parseInt(this.value.replaceAll(",", "")).toLocaleString('ko-KR');
+        });
+
+        (function ($) {
+            var originalVal = $.fn.val;
+            $.fn.val = function (value) {
+                var res = originalVal.apply(this, arguments);
+
+                if (this.is('input:text') && arguments.length >= 1) {
+                    // this is input type=text setter
+                    this.trigger("input");
+                }
+
+                return res;
+            };
+        })(jQuery);
+
+    });
+
+    // 수정중인지 체크
+    function TesterEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "TesterToolbar"
+            , "TesterGrid"
+            , "TesterWriteForm"
+            , "tester_cd"
+        );
+
+        _testerCRUDStatus = status;
+
+        if (nowEdit) {
+            $('#Tester .datepicker').datepicker('option', 'disabled', false);
+
+            var editing = {
+                allowAdding: true,
+                allowUpdating: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            var grid = $("#TesterParameterGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+            editing = {
+                allowUpdating: true,
+                mode: 'batch'
+            }
+
+            grid = $("#TestItemGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+        } else {
+
+            $("#TesterWriteForm input[name=tester_cd]").prop("readonly", false);
+
+            $('#Tester .datepicker').datepicker('option', 'disabled', true);
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false
+            }
+
+            var grid = $("#TesterParameterGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+            editing = {
+                allowUpdating: false
+            }
+
+            grid = $("#TestItemGrid").dxDataGrid("instance");
+            grid.option("editing", editing);
+
+            _testerChanges = new Array();
+            _testItemChanges = new Array();
+        }
+
+    }
+
+    // 탭 변경
+    function TesterMenutab(tabId, contentId, seq) {
+
+        if (_testerCRUDStatus === "U" && seq === 5) {
+            if ($("#TesterWriteForm input[name=tester_cd]").val() !== $("#TesterWriteForm input[name=tester_gcd]").val()) {
+                alert("기기코드와 그룹코드가 다릅니다!.\r\n수정할 수 없습니다.");
+                TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 1);      //첫번째 탭으로 이동시킨다.(기기코드와 그룹코드가 다르다는걸 보여주기 위함)
+                return;
+            }
+        }
+
+        $("#" + contentId + ">div").hide();
+        $("#" + contentId + " #" + contentId + "_" + seq).show();
+
+        $("#" + tabId + " .nav-link").removeClass("active");
+        $("#" + tabId + " li:nth-child(" + seq + ")").children('a').addClass("active");
+
+        if (seq === 5) {
+            $("#TestItemGrid").dxDataGrid("instance").repaint();
+        }
+    }
+
+    // 메인그리드 포커스 변경
+    function TesterFocusChanged() {
+
+        UtilView.setDataGridFormBind("TesterGrid", "TesterWriteForm");
+
+        var tester_cd = $("#TesterGrid").dxDataGrid("instance").option("focusedRowKey");
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TesterSelectDetail',
+            data: {
+                tester_cd: tester_cd
+            },
+            success: async function (result) {
+
+                if (result[0].length > 0) {
+                    $("#TesterParameterGrid").dxDataGrid("option", "dataSource", JSON.parse(result[0]));
+                } else {
+                    $("#TesterParameterGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+                if (result[1].length > 0) {
+                    $("#TesterImage").attr('src', JSON.parse(result[1])[0].tester_image);
+                } else {
+                    $("#TesterImage").attr('src', '/Content/image/defaultSign.png');
+                }
+
+                if (result[2].length > 0) {
+                    $("#TestItemGrid").dxDataGrid("option", "dataSource", JSON.parse(result[2]));
+                } else {
+                    $("#TestItemGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+            }
+        });
+    }
+
+    // 디테일 초기화
+    function TesterClearDeatil() {
+        $("#TesterWriteForm")[0].reset();
+        $("#TesterWriteForm .datepicker").datepicker("update", "");
+        $("#TesterParameterGrid").dxDataGrid("option", "dataSource", []);
+        $("#TesterImage").attr('src', '/Content/image/defaultSign.png');
+        $("#TestItemGrid").dxDataGrid("option", "dataSource", []);
+    }
+
+    //#region 팝업 관련
+
+    // 대표코드 팝업 로우 선택
+    //function StandardTesterRowDblClick(selectedItems) {
+    //    var data = selectedItems.data;
+
+    //    $("input[name=tester_mcd]", $('#' + "TesterWriteForm")).val(data.tester_cd);
+    //    $("input[name=tester_mcd_nm]", $('#' + "TesterWriteForm")).val(data.tester_nm);
+
+    //    $("#StandardTesterPopup").dxPopup("instance").hide();
+    //}
+
+    //#endregion 팝업관련 END
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function TesterSearch() {
+
+        UtilView.dataGridSelect('TesterGrid', 'TesterSearchForm');
+
+        var grid = $("#TesterGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            TesterClearDeatil();
+            grid.option("focusedRowKey", "");
+            return;
+        }
+
+        if (!grid.option("focusedRowKey")) {
+            grid.option("focusedRowIndex", 0);
+        } else {
+            TesterFocusChanged();
+        }
+    }
+
+    // 입력
+    function TesterInput() {
+        TesterEditCheck(true, 'I');
+        TesterClearDeatil();
+        $("#TesterWriteForm input[name=tester_use_gb][value=Y]").prop("checked", true);
+    }
+
+    // 수정
+    function TesterEdit() {
+
+        var grid = $("#TesterGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정할 사항이 없습니다.");
+            return;
+        }
+
+        var seq = $("#TesterInnerTab .active").parent().index();
+
+        if (seq === 4) {
+            if ($("#TesterWriteForm input[name=tester_cd]").val() !== $("#TesterWriteForm input[name=tester_gcd]").val()) {
+                alert("기기코드와 그룹코드가 다릅니다!.\r\n수정할 수 없습니다.");
+                TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 1);      //첫번째 탭으로 이동시킨다.(기기코드와 그룹코드가 다르다는걸 보여주기 위함)
+            }
+        }
+
+        TesterEditCheck(true, 'U');
+    }
+
+    // 삭제
+    function TesterDelete() {
+
+        var grid = $("#TesterGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            return;
+        }
+
+        if(!(confirm("삭제하시겠습니까?"))){
+            return;
+        }
+
+        TesterEditCheck(true, 'D');
+
+        TesterSave();
+    }
+
+    // 저장
+    async function TesterSave() {
+
+        if (!UtilView.checkValidForm("TesterWriteForm")) {
+            return;
+        }
+
+        var form = $('#TesterWriteForm')[0];
+        var formData = new FormData(form);
+
+        formData.set("gubun", _testerCRUDStatus);
+        formData.set("tester_buy_amt", formData.get("tester_buy_amt").replace(/[^\d]+/g, ""));
+
+        await UtilView.dataGridTRX(formData, () => TesterSaveDetail(formData.get("tester_cd")));
+    }
+
+    // 취소
+    function TesterUndo() {
+        TesterEditCheck(false, 'N');
+        TesterFocusChanged();
+    }
+
+    // 디테일 저장
+    async function TesterSaveDetail(tester_cd) {
+
+        await $("#TesterParameterGrid").dxDataGrid("instance").saveEditData();
+
+        if (_testerChanges.length > 0) {
+            $.ajax({
+                type: 'POST',
+                url: '/LIMSMaster/TesterParameterTRX',
+                dataType: "json",
+                async: false,
+                data: {
+                    testerParameter: JSON.stringify(_testerChanges),
+                    tester_cd: tester_cd
+                },
+                success: function (result) {
+
+                }
+            })
+        }
+
+        await $("#TestItemGrid").dxDataGrid("instance").saveEditData();
+
+        if (_testItemChanges.length > 0) {
+            $.ajax({
+                type: 'POST',
+                url: '/LIMSMaster/TestItemTRX',
+                dataType: "json",
+                async: false,
+                data: {
+                    testItems: JSON.stringify(_testItemChanges),
+                    tester_cd: tester_cd
+                },
+                success: function (result) {
+
+                }
+            })
+        }
+
+        TesterEditCheck(false, 'N');
+        TesterSearch();
+    }
+
+    //#endregion 툴바 클릭 이벤트 관련 END
+
+    // 파라미터 그리드 입력
+    function TesterParameterInsert(info) {
+        var data = info.data;
+        data.gubun = "I";
+        _testerChanges.push(data);
+    }
+
+    // 파라미터 그리드 수정
+    function TesterParameterUpdate(info) {
+        var data = info.data;
+        data.gubun = "U";
+        _testerChanges.push(data);
+    }
+
+    // 파라미터 그리드 삭제
+    function TesterParameterDelete(info) {
+        var data = info.data;
+        data.gubun = "D";
+        _testerChanges.push(data);
+    }
+
+    // 저장전 업로드된 시험기기 이미지 표시
+    function TesterUploadImage(e) {
+        if (e.value.length) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                $('#TesterImage').attr('src', e.target.result);
+            }
+            reader.readAsDataURL(e.value[0]);
+        }
+    }
+
+    // 시험항목 그리드 수정 가능항 컬럼 조정
+    function TestItemEditableColumn(cellElement) {
+
+        if (cellElement.rowType != "data" || !cellElement.isEditing)
+            return;
+
+        if (cellElement.column.dataField !== 'testitem_use_yn')
+            cellElement.element.find('input').prop('disabled', true);
+    }
+
+    // 시험항목 그리드 수정
+    function TestItemUpdate(info) {
+
+        var data = info.data;
+
+        _testItemChanges.push(data);
+    }
+
+
+    function TesterBarcodeLabel(gubun){
+
+        var grid = $("#TesterGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TesterGrid", grid.option("focusedRowKey"));
+
+        var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "LIMSMaster", RptFileName: "TesterLabel" },
+            objSp: {
+                SpName: ""
+                , GUBUN: ""
+                , reportParam: ""
+            },
+            objEtcInfo: {
+                subParam: "tester_nm=" + gridData.tester_nm
+                    + ";tester_cd=" + gridData.tester_cd
+                    + ";tester_barcode=" + gridData.tester_cd},
+            objTblNm: { tblName: "" }
+        });
+
+        switch (gubun) {
+            case "Preview":
+                report.preview();
+                break;
+            case "Print":
+                report.print();
+                break;
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="StandardTesterPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험기기종류</span>
+                        </div>
+                        <select class="form-control" name="tester_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC011")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험기기코드</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="tester_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" type="button" onclick="TesterBarcodeLabel('Preview')">바코드 라벨 확인</button>
+                    <button class="btn btn-secondary" type="button" onclick="TesterBarcodeLabel('Print')">바코드 라벨 발행</button>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TesterGrid")
+                    .KeyExpr("tester_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("tester_cd").Caption("코드");
+                        c.Add().DataField("tester_manage_num").Caption("관리번호");
+                        c.Add().DataField("tester_nm").Caption("시험기기명");
+                        c.Add().DataField("tester_response_emp_nm").Caption("담당자");
+                        c.Add().DataField("tester_use_gb").Caption("가동")
+                            .DataType(GridColumnDataType.Boolean)
+                            .TrueText("Y")
+                            .FalseText("N")
+                            .CalculateCellValue(@"function(rowData) { return (rowData.tester_use_gb == ""Y"" || rowData.tester_use_gb == true); }");
+                        c.Add().DataField("tester_mcd_nm").Caption("대표시험기기");
+                    })
+                    .OnFocusedRowChanged("TesterFocusChanged")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">            
+            <div class="box mb-0">
+
+                <ul class="nav nav-tabs" id="TesterInnerTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 1);">기본정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 2);">추가정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 3);">인터페이스 정보</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 4);">시험기기이미지</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="TesterMenutab('TesterInnerTab', 'TesterInnerTabContent', 5);">시험항목설정</a>
+                    </li>
+                </ul>
+
+                <div class="flex-grow-1">
+
+                    <form id="TesterWriteForm" class="required-star">
+
+                        <div id="TesterInnerTabContent" class="height-inherit">
+
+                            <div id="TesterInnerTabContent_1">
+
+                                <div class="menuDiv">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">시험기기코드</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control required" name="tester_cd" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">시험기기명</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control required" name="tester_nm" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">영문명</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_enm" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">관리번호</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control" name="tester_manage_num" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">사업장</label>
+                                        <div class="input-group col-8">
+                                            <select class="form-control required" name="plant_cd">
+                                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("사업장", "D", "")).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">작업실</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control required searchPopupInput" name="workroom_cd">
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button">
+                                                    <i class="fa fa-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="workroom_nm" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">담당자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control required searchPopupInput" name="tester_response_emp">
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button">
+                                                    <i class="fa fa-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="tester_response_emp_nm" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">설치일자</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control datepicker" name="tester_install_date" />
+                                        </div>
+
+                                        <label class="col-2">가동일자</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control datepicker" name="tester_work_date" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">폐기일자</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control datepicker" name="tester_disuse_date" />
+                                        </div>
+
+                                        <label class="col-2">가동구분</label>
+                                        <div class="input-group col-3">
+                                            <div class="radioDiv required">
+                                                <label><input type="radio" name="tester_use_gb" value="Y" />Yes </label>
+                                                <label><input type="radio" name="tester_use_gb" value="N" />No </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">용량</label>
+                                        <div class="input-group col-3">
+                                            <input type="number" class="form-control" name="tester_volume" />
+                                        </div>
+
+                                        <label class="col-3">동시처리건수</label>
+                                        <div class="input-group col-2">
+                                            <input type="number" class="form-control" name="test_cnt" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">형식및성능</label>
+                                        <div class="input-group col-8">
+                                            <textarea class="form-control" rows="4" name="tester_property"></textarea>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">그룹코드</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control searchPopupInput" name="tester_gcd">
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button">
+                                                    <i class="fa fa-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="tester_gcd_nm" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">대표코드</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control searchPopupInput" name="tester_mcd">
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button">
+                                                    <i class="fa fa-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="tester_mcd_nm" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">시험기기종류</label>
+                                        <div class="input-group col-8">
+                                            <select class="form-control" name="tester_type">
+                                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC011")).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">IQ</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control" name="IQ_data" />
+                                        </div>
+
+                                        <label class="col-2">OQ</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control" name="OQ_data" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                            <div id="TesterInnerTabContent_2">
+
+                                <div class="divName">
+                                    <p>구매정보</p>
+                                </div>
+
+                                <div class="menuDiv">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제조업체</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_prod_cust" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제품명</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_item_nm" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">모델넘버</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_model_num" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">시리얼넘버</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_serial_num" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제조번호</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_prod_num" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제작일자</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control datepicker" name="tester_prod_year" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">관리업체</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_manage_cust" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">구입업체</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="tester_buy_cust" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">구입일자</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control datepicker" name="tester_buy_date" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">구입금액</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control numbers" name="tester_buy_amt" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div class="divName">
+                                    <p>인터페이스 정보</p>
+                                </div>
+
+                                <div class="menuDiv">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">인터페이스코드</label>
+                                        <div class="input-group col-8">
+                                            <select class="form-control" name="interface_cd">
+                                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "IS001")).Rows)
+                                                {
+                                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">PLC Node No</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control" name="plc_node_no" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                            <div id="TesterInnerTabContent_3">
+
+                                <div class="menuDiv">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@A</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data1" />
+                                        </div>
+                                        <label class="col-1">@@K</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data11" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@B</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data2" />
+                                        </div>
+                                        <label class="col-1">@@L</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data12" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@C</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data3" />
+                                        </div>
+                                        <label class="col-1">@@M</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data13" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@D</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data4" />
+                                        </div>
+                                        <label class="col-1">@@N</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data14" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@E</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data5" />
+                                        </div>
+                                        <label class="col-1">@@O</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data15" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@F</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data6" />
+                                        </div>
+                                        <label class="col-1">@@P</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data16" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@G</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data7" />
+                                        </div>
+                                        <label class="col-1">@@Q</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data17" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@H</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data8" />
+                                        </div>
+                                        <label class="col-1">@@R</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data18" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@I</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data9" />
+                                        </div>
+                                        <label class="col-1">@@S</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data19" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-1">@@J</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data10" />
+                                        </div>
+                                        <label class="col-1">@@T</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control" name="qc_inst_data20" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">계산방법</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="qc_inst_dis_text" />
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">계산수식</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control" name="qc_inst_calc_text" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("TesterParameterGrid")
+                                        .KeyExpr("tester_parameter_cd")
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .Height("483")
+                                        .ShowBorders(true)
+                                        .FocusedRowEnabled(true)
+                                        .FocusedRowIndex(0)
+                                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .ShowColumnLines(true)
+                                        .HoverStateEnabled(true)
+                                        .OnToolbarPreparing("HideToolbarButton")
+                                        .Columns(c =>
+                                        {
+                                            c.Add().DataField("tester_parameter_cd").Caption("파라미터 코드")
+                                                .ValidationRules(vr =>
+                                                {
+                                                    vr.AddRequired().Message("파라미터코드는 필수 입력사항입니다.");
+                                                });
+                                            c.Add().DataField("tester_parameter_nm").Caption("파라미터 명")
+                                                .ValidationRules(vr =>
+                                                {
+                                                    vr.AddRequired().Message("파라미터명은 필수 입력사항입니다.");
+                                                });
+
+                                        })
+                                        .OnRowInserted("TesterParameterInsert")
+                                        .OnRowUpdated("TesterParameterUpdate")
+                                        .OnRowRemoved("TesterParameterDelete")
+                                    //.OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                                    )
+                                </div>
+
+                            </div>
+
+                            <div id="TesterInnerTabContent_4">
+
+                                <div class="menuDiv">
+
+                                    <div class="col-12 mb-1">
+                                        <img id="TesterImage" class="equipment-image border border-dark" src="" alt="" />
+                                    </div>
+
+                                    <div class="align-end">
+                                        <button id="TesterImageUploaderBtn" class="btn btn-sm btn-secondary" type="button">등록</button>
+                                    </div>
+
+                                    @(Html.DevExtreme().FileUploader()
+                                        .Visible(false)
+                                        .ID("TesterImageUploader")
+                                        .Name("tester_image")
+                                        .Multiple(false)
+                                        .Accept("image/*")
+                                        .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                        //.UploadUrl(Url.Action("TesterUploadImage", "LIMSMaster"))
+                                        .UploadMode(FileUploadMode.UseForm)
+                                        .MaxFileSize(10000000)
+                                        .OnValueChanged("TesterUploadImage")
+                                        //.OnUploaded("reLoadTesterImage")
+                                    )
+                                </div>
+
+                            </div>
+
+                            <div id="TesterInnerTabContent_5">
+
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("TestItemGrid")
+                                        .KeyExpr("testitem_cd")
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .Height("833")
+                                        .ShowBorders(true)
+                                        .FocusedRowEnabled(true)
+                                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .ShowColumnLines(true)
+                                        .HoverStateEnabled(true)
+                                        .OnToolbarPreparing("HideToolbarButton")
+                                        .OnCellPrepared("TestItemEditableColumn")
+                                        .OnRowUpdated("TestItemUpdate")
+                                        .Columns(c =>
+                                        {
+                                            c.Add().DataField("testitem_cd").Caption("항목코드");
+                                            c.Add().DataField("testitem_nm").Caption("항목명");
+                                            c.Add().DataField("testitem_use_yn").Caption("사용")
+                                                .DataType(GridColumnDataType.Boolean)
+                                                .TrueText("Y")
+                                                .FalseText("N")
+                                                .CalculateCellValue(@"function(rowData) { return (rowData.testitem_use_yn == ""Y"" || rowData.testitem_use_yn == true); }");
+                                        })
+                                    )
+
+                            </div>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

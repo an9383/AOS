@@ -1,0 +1,468 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+}
+
+@{
+    var Employee = @Html.Raw(Json.Encode(ViewBag.Employee.Data));
+    var DepartMent = @Html.Raw(Json.Encode(ViewBag.DepartMent.Data));
+    var ChangeControlObject = @Html.Raw(Json.Encode(ViewBag.ChangeControlObject.Data));
+}
+
+@*변경관리 대상 설정*@
+
+<script id="ChangeControlObjectJs">
+
+        var _changeControlObjectIsEditing = false;
+        var _changeControlObjectSCRUDStatus = "";
+        var _changeControlObjectCellClickEvent;
+        var _changeControlObjectCd;
+        var _changeControlObjectIsValid = false;
+
+        var _changeControlObjectDeptChanges = new Array();
+        var _changeControlObjectDocChanges = new Array();
+
+         $(function () {
+
+             if (@ChangeControlObject) {
+                 $("#ChangeControlObjectGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ChangeControlObject));
+                 $("#ChangeControlObjectGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                 $("#ChangeControlObjectGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+             }
+
+             var popupColumns = {
+                "dept": [{ dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+                ,  "employee":  [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+             };
+
+             createPopup("ChangeControlObjectEmp", "사원 조회", @Employee, popupColumns.employee, "emp_cd");
+             createPopup("ChangeControlObjectDept", "부서 조회", @DepartMent, popupColumns.dept, "dept_cd");
+
+             ChangeControlObjectEditCheck(false, "");
+
+         });
+
+        // 메인 그리드 포커스 변경
+        function ChangeControlObjectFocusChanged() {
+
+            var gridId ="ChangeControlObjectGrid";
+
+            var grid = $("#" + gridId).dxDataGrid("instance");
+            var data = getGridRowByKey(gridId, grid.option("focusedRowKey"));
+
+            _changeControlObjectCd = data.common_part_cd;
+
+            $.ajax({
+                type: 'GET',
+                url: '/Change/ChangeControlObjectSelectDetail',
+                data: {
+                    changecontrol_cd: data.common_part_cd
+                },
+                success: function (result) {
+
+                    if (result[0].length > 0) {
+                        $("#ChangeControlObjectDeptGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                    } else {
+                        $("#ChangeControlObjectDeptGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#ChangeControlObjectDeptGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+
+                    if (result[1].length > 0) {
+                        $("#ChangeControlObjectDocGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                    } else {
+                        $("#ChangeControlObjectDocGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#ChangeControlObjectDocGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                    }
+                }
+            });
+        }
+
+        // 수정중인지 체크
+        function ChangeControlObjectEditCheck(nowEdit, status) {
+
+            _changeControlObjectIsEditing = nowEdit;
+            _changeControlObjectSCRUDStatus = status;
+
+            if (nowEdit) {
+                // 툴바 활성/비활성
+                $('#ChangeControlObjectSave, #ChangeControlObjectUndo').dxButton().parent().parent().removeClass("display-none");
+                $('#ChangeControlObjectSearch, #ChangeControlObjectEdit').dxButton().parent().parent().addClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlObjectGrid').dxDataGrid("instance").option("disabled", true);
+            }
+            else {
+                // 툴바 활성/비활성
+                $('#ChangeControlObjectSave, #ChangeControlObjectUndo').dxButton().parent().parent().addClass("display-none");
+                $('#ChangeControlObjectSearch, #ChangeControlObjectEdit').dxButton().parent().parent().removeClass("display-none");
+
+                //그리드 및 폼 활성/비활성
+                $('#ChangeControlObjectGrid').dxDataGrid("instance").option("disabled", false);
+
+                var editing = {
+                    allowAdding: false,
+                    allowUpdating: false,
+                    allowDeleting: false
+                }
+
+                $("#ChangeControlObjectDeptGrid").dxDataGrid("option", "editing", editing);
+                $("#ChangeControlObjectDocGrid").dxDataGrid("option", "editing", editing);
+
+                _changeControlObjectDeptChanges = new Array();
+                _changeControlObjectDocChanges = new Array();
+            }
+        }
+
+        // 조회
+        function ChangeControlObjectSearch() {
+
+            _changeControlObjectCd = "";
+
+            UtilView.m_controller = 'Change';
+            UtilView.m_actionPrefix = 'ChangeControlObject';
+            UtilView.dataGridSelect('ChangeControlObjectGrid', "ChangeControlObjectSearchForm");
+        }
+
+        // 수정
+        function ChangeControlObjectEdit(){
+
+            var editing = {
+                allowAdding: true,
+                allowUpdating: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            $("#ChangeControlObjectDeptGrid").dxDataGrid("option", "editing", editing);
+            $("#ChangeControlObjectDocGrid").dxDataGrid("option", "editing", editing);
+
+            ChangeControlObjectEditCheck(true, "U");
+        }
+
+        // 저장
+        async function ChangeControlObjectSave() {
+
+            await $("#ChangeControlObjectDeptGrid").dxDataGrid("instance").saveEditData();
+            await $("#ChangeControlObjectDocGrid").dxDataGrid("instance").saveEditData();
+
+            if (!_changeControlObjectIsValid) {
+                return;
+            }
+
+            if (_changeControlObjectDeptChanges.length > 0) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Change/ChangeControlObjectDeptTRX',
+                    async: false,
+                    data: {
+                        paramData: JSON.stringify(_changeControlObjectDeptChanges)
+                    },
+                    dataType: 'json',
+                    success: function (result) {
+
+                        _changeControlObjectDeptChanges = new Array();
+                    }
+                });
+            }
+
+            if (_changeControlObjectDocChanges.length > 0) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Change/ChangeControlObjectDocTRX',
+                    async: false,
+                    data: {
+                        paramData: JSON.stringify(_changeControlObjectDocChanges)
+                    },
+                    dataType: 'json',
+                    success: function (result) {
+
+                        _changeControlObjectDocChanges = new Array();
+                    }
+                });
+            }
+
+            ChangeControlObjectEditCheck(false, "");
+
+        }
+
+        // 취소
+        function ChangeControlObjectUndo(){
+
+            ChangeControlObjectSearch();
+            ChangeControlObjectEditCheck(false, "");
+        }
+
+        // 버튼 컬럼
+        function ChangeControlObjectCellWithButton(container, cellInfo) {
+
+            $("<div>").html("<div style='float:left; line-height: 2;'>" + cellInfo.value + "</div><div style='float:right;' class='icon-plus'></div>")
+                .appendTo(container);
+
+            $(".icon-plus").dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                }
+            });
+        }
+
+        // 셀 클릭 이벤트
+        function ChangeControlObjectGridPopup(e) {
+
+            if (!_changeControlObjectIsEditing) {
+                return;
+            }
+
+            _changeControlObjectCellClickEvent = e;
+
+            if (e.columnIndex == 0) {
+
+                var workroomPopup1 = $("#ChangeControlObjectDeptPopup").dxPopup("instance");
+                workroomPopup1.show();
+            }
+            else if (e.columnIndex == 2) {
+                var workroomPopup2 = $("#ChangeControlObjectEmpPopup").dxPopup("instance");
+                workroomPopup2.show();
+            }
+
+        }
+
+        // 사원조회 팝업 로우 선택
+        function ChangeControlObjectEmpRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            var dataGrid = $("#ChangeControlObjectDeptGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_changeControlObjectCellClickEvent.rowIndex, "emp_cd", data.emp_cd);
+            dataGrid.cellValue(_changeControlObjectCellClickEvent.rowIndex, "emp_nm", data.emp_nm);
+
+            var popup = $("#ChangeControlObjectEmpPopup").dxPopup("instance");
+
+            popup.hide();
+        }
+
+        // 부서조회 팝업 로우 선택
+        function ChangeControlObjectDeptRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            var dataGrid = $("#ChangeControlObjectDeptGrid").dxDataGrid("instance");
+            dataGrid.cellValue(_changeControlObjectCellClickEvent.rowIndex, "dept_cd", data.dept_cd);
+            dataGrid.cellValue(_changeControlObjectCellClickEvent.rowIndex, "dept_nm", data.dept_nm);
+
+            var popup = $("#ChangeControlObjectDeptPopup").dxPopup("instance");
+
+            popup.hide();
+        }
+
+        // ChangeControlObjectDept CRUD -----------------
+        function ChangeControlObjectDeptInsert(info) {
+
+            var data = info.data;
+            data.changecontrol_cd = _changeControlObjectCd;
+            data.gubun = "I";
+
+            _changeControlObjectDeptChanges.push(data);
+        }
+
+        function ChangeControlObjectDeptUpdate(info) {
+
+            var data = info.data;
+            data.gubun = "U";
+
+            console.log(data);
+            _changeControlObjectDeptChanges.push(data);
+        }
+
+        function ChangeControlObjectDeptDelete(info) {
+
+            var data = info.data;
+            data.gubun = "D";
+
+            _changeControlObjectDeptChanges.push(data);
+        }
+
+        // ---------------------------------------------
+
+
+        // ChangeControlObjectDoc CRUD ----------------
+        function ChangeControlObjectDocInsert(info) {
+
+            var data = info.data;
+            data.changecontrol_cd = _changeControlObjectCd;
+            data.gubun = "I";
+
+            _changeControlObjectDocChanges.push(data);
+        }
+
+        function ChangeControlObjectDocUpdate(info) {
+
+            var data = info.data;
+            data.gubun = "U";
+
+            _changeControlObjectDocChanges.push(data);
+        }
+
+        function ChangeControlObjectDocDelete(info) {
+
+            var data = info.data;
+            data.gubun = "D";
+
+            _changeControlObjectDocChanges.push(data);
+        }
+        // --------------------------------------------
+
+        // 그리드 컬럼 벨리데이션 체크
+        function ChangeControlObjectRequired(e) {
+            _changeControlObjectIsValid = e.isValid;
+        }
+
+</script>
+
+<div id="ChangeControlObject" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="ChangeControlObjectEmpPopup"></div>
+    <div id="ChangeControlObjectDeptPopup"></div>
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="ChangeControlObjectSearchForm">
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">변경상태</span>
+                        </div>
+                        <select class="form-control" name="changecontrol_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CH001")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo"); }
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-7 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlObjectGrid")
+                    .KeyExpr("common_part_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("common_part_nm").Caption("변경대상").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("ChangeControlObjectFocusChanged")
+                    )
+            </div>
+        </div>
+
+        <div class="col-5 pl-0">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlObjectDeptGrid")
+                    .KeyExpr("changecontrol_sop_dept_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(250)
+                    .OnCellClick("ChangeControlObjectGridPopup")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnRowInserted("ChangeControlObjectDeptInsert")
+                    .OnRowUpdated("ChangeControlObjectDeptUpdate")
+                    .OnRowRemoved("ChangeControlObjectDeptDelete")
+                    .OnRowValidating("ChangeControlObjectRequired")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("dept_cd").Caption("부서코드").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("ChangeControlObjectCellWithButton"))
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("부서코드는 필수 입력사항입니다.");
+                            });
+
+                        c.Add().DataField("dept_nm").Caption("부서명").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("부서명은 필수 입력사항입니다.");
+                            });
+
+                        c.Add().DataField("emp_cd").Caption("사원코드").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("ChangeControlObjectCellWithButton"))
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("사원코드는 필수 입력사항입니다.");
+                            });
+
+                        c.Add().DataField("emp_nm").Caption("사원명").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("사원명은 필수 입력사항입니다.");
+                            });
+
+                        c.Add().DataField("review_contents").Caption("검토사항").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("검토사항은 필수 입력사항입니다.");
+                            });
+
+                        c.Add().DataField("review_dept_gubun_yn").Caption("품질관리담당").DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.review_dept_gubun_yn == ""Y"" || rowData.review_dept_gubun_yn == true); }")
+                            .Alignment(HorizontalAlignment.Center);
+                    })
+                    )
+
+                <hr />
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlObjectDocGrid")
+                    .KeyExpr("changecontrol_sop_doc_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnRowInserted("ChangeControlObjectDocInsert")
+                    .OnRowUpdated("ChangeControlObjectDocUpdate")
+                    .OnRowRemoved("ChangeControlObjectDocDelete")
+                    .OnRowValidating("ChangeControlObjectRequired")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("changecontrol_sop_doc_contents").Caption("변경검토문서").Alignment(HorizontalAlignment.Center)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("변경검토문서는 필수 입력사항입니다.");
+                            });
+                    })
+                    )
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,215 @@
+﻿@using System.Data
+@{
+    Layout = null;
+    ViewBag.Title = "ReceiptCheckView_M";
+}
+
+<script type="text/javascript" id="ReceiptCheckView_MJs">
+
+    $(function () {
+
+        // 아래 그리드 셋팅
+        if ((@Html.Raw(Json.Encode(Model.Data))).length > 0) {
+            $("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@Html.Raw(Json.Encode(Model.Data))));
+        }
+
+        setDatePicker("#ReceiptCheckView_M .datepicker");
+
+    });
+
+    // 조회
+    function ReceiptCheckView_MSearch() {
+
+        // 초기화       
+        $("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("dataSource", []);
+
+        var formData = new FormData($("#S_ReceiptCheckView_M_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatln/ReceiptCheckView_M_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                //$("#ReceiptCheckView_MGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                
+            }
+        });
+    }
+
+    // 로우 더블 클릭 이벤트
+    function RCVM_OnRowDblClick(e) {
+
+        var data = e.data;
+
+        //form 초기화
+        $("#ReceiveMaterial_M_UpRight_form")[0].reset();
+
+        $("#ReceiveMaterial_M input[name=receipt_check_no]").val(data.receipt_check_rpt_no); // 검수번호
+        $("#ReceiveMaterial_M input[name=purchase_no]").val(data.purchase_no); // 발주번호
+        $("#ReceiveMaterial_M input[name=purchase_id]").val(data.purchase_seq); // 발주순번
+        $("#ReceiveMaterial_M select[name=obtain_status]").val(data.obtain_status); // 조달구분
+        $("#ReceiveMaterial_M input[name=receipt_time_date]").val(data.receipt_check_rpt_dt); // 입고일자
+        $("#ReceiveMaterial_M input[name=item_cd]").val(data.purchase_item_cd); // 원자재 코드
+        $("#ReceiveMaterial_M input[name=item_nm]").val(data.item_nm); // 원료명
+        //$("#ReceiveMaterial_M input[name=receipt_qty]").val(data.receipt_check_rpt_qty.replace(",", "")); // 입고총량
+        $("#ReceiveMaterial_M input[name=receipt_qty]").val(data.receipt_check_rpt_qty); // 입고총량
+        $("#ReceiveMaterial_M input[name=receipt_pack_qty]").val(""); // 포장수량
+        $("#ReceiveMaterial_M input[name=item_unit]").val(data.purchase_unit); // 단위
+        $("#ReceiveMaterial_M input[name=receipt_material_maker_cd]").val(data.manufacture_cd); // 제조원 코드
+        $("#ReceiveMaterial_M input[name=receipt_lot_cust_nm]").val(data.manufacture_nm); // 제조원 명
+        $("#ReceiveMaterial_M input[name=cust_cd]").val(data.supply_cd); // 공급원 코드
+        $("#ReceiveMaterial_M input[name=cust_nm]").val(data.supply_nm); // 공급원 명
+        $("#ReceiveMaterial_M input[name=purchase_date]").val(data.purchase_date); // 
+        $("#ReceiveMaterial_M input[name=receipt_check_id]").val(data.receipt_check_rpt_id); //
+
+        $("#ReceiveMaterial_M input[name=item_gb]").val(data.item_gb); // 품목 구분
+        
+        //#region 검수된 품목이 '상품' 인 경우, 바로 PASS 상태로 입고
+        if (data.item_gb == "4") {
+            $("#ReceiveMaterial_M_UpRight_form select[name=receipt_status]").val("5");             //입고번호 : 'PASS' 로 변경
+        } else {            //실험필요여부 아니면 바로 PASS로 변경
+            ReceiveMaterial_ST_M();
+
+            if (_ReceiveMaterial_ST_M == false) {
+                $("#ReceiveMaterial_M_UpRight_form select[name=receipt_status]").val("5");             //입고번호 : 'PASS' 로 변경
+            } else {
+                $("#ReceiveMaterial_M_UpRight_form select[name=receipt_status]").val("6");             //입고번호 : '입고검수' 로 변경
+            }
+
+        }
+
+        RMM_receipt_status();       //상태 값에 따른 입력 data 확인.
+        //#endregion
+
+        // 아래 그리드 초기화
+        $("#ReceiveMaterial_M_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        var popup = $("#ReceiptCheckView_MPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+</script>
+
+<div id="ReceiptCheckView_M">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="S_ReceiptCheckView_M_form">
+
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Today.AddDays(-7).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+                    
+                </div>
+                <div class="input-group input-group-sm col-3"></div>
+                <div class="input-group input-group-sm col-2"></div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @(Html.DevExtreme().Toolbar()
+            .ID("ReceiptCheckView_MToolBar")
+            .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ReceiptCheckView_MSearch")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("ReceiptCheckView_MSearch")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box" style="">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ReceiptCheckView_MGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr("receipt_check_rpt_no")
+                    .Height(560)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("purchase_no").Caption("발주번호");
+                        c.Add().DataField("receipt_check_rpt_no").Caption("입고검수번호");
+                        c.Add().DataField("purchase_item_cd").Caption("원료코드");
+                        c.Add().DataField("item_nm").Caption("원료명");
+                        c.Add().DataField("receipt_check_rpt_qty").Caption("검수수량").Format("#,##0.###");
+                        c.Add().DataField("pack_form").Caption("포장내역").DataType(GridColumnDataType.Number).Format("#,##0");
+                        c.Add().DataField("purchase_unit").Caption("단위");
+                        c.Add().DataField("receipt_check_rpt_dt").Caption("검수일자");
+                        c.Add().DataField("purchase_status").Caption("발주상태")
+                               .Lookup(lookup => lookup
+                               .DataSource(d => d.WebApi()
+                               .RouteName("Comm")
+                               .LoadAction("GetCommon")
+                               .LoadMethod("GET")
+                               .LoadParams(new
+                               {
+                                   pGubun = "공통코드",
+                                   pDiv = "D",
+                                   pStrWhere = "WR100",
+                                   pTableName = "unit"
+                               }
+                               ).Key("keyfield"))
+                               .ValueExpr("keyfield")
+                               .DisplayExpr("displayfield")
+                               );
+                    })
+                    .OnRowDblClick("RCVM_OnRowDblClick")
+                 )
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+</div>

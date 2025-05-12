@@ -1,0 +1,870 @@
+﻿@using System.Data
+@using HACCP.Libs.Views 
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Process";
+
+    var ProcessData = @Html.Raw(Json.Encode(ViewBag.ProcessData.Data));
+    var ProcessEmpData = @Html.Raw(Json.Encode(ViewBag.ProcessEmpData.Data));
+    var ProcessWorkRoomData = @Html.Raw(Json.Encode(ViewBag.ProcessWorkRoomData.Data));
+}
+
+@*공정 관리*@
+
+<script id="ProcessJs">
+
+    var _processCRUDGubun;
+
+    $(function () {
+
+    var process_data = @ProcessData;
+
+        if (process_data.length > 0) {
+
+            $("#PROCESSGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ProcessData));
+            $("#PROCESSGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#PROCESSGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        var columns1 = [
+            { dataField: "process_cd", caption: "공정코드" },
+            { dataField: "process_nm", caption: "공정명" }
+        ];
+
+        createPopup("Process", "공정 조회", @ProcessData, columns1, "process_cd");
+
+        var columns2 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("ProcessWorker1", "사원 조회", @ProcessEmpData, columns2, "emp_cd");
+        createPopup("ProcessWorker2", "사원 조회", @ProcessEmpData, columns2, "emp_cd");
+        createPopup("ProcessInspector", "사원 조회", @ProcessEmpData, columns2, "emp_cd");
+        createPopup("ProcessManager", "사원 조회", @ProcessEmpData, columns2, "emp_cd");
+
+        var columns3 = [
+            { dataField: "workroom_cd", caption: "작업실코드" },
+            { dataField: "workroom_nm", caption: "작업실명" },
+            { dataField: "common_part_nm", caption: "팀구분" }
+        ];
+
+        createPopup("ProcessWorkeRoom", "작업실 조회", @ProcessWorkRoomData, columns3, "workroom_cd");
+        processEditCheck(false);
+    });
+
+    // 수정중인지 체크
+    function processEditCheck(nowEdit) {
+
+        $("#processForm input[name=process_cd]").attr("readonly", false);
+
+        if (nowEdit) {
+
+            $("#PROCESSSave").dxButton().parent().parent().removeClass("display-none");
+            $("#PROCESSUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#PROCESSInput").dxButton().parent().parent().addClass("display-none");
+            $("#PROCESSEdit").dxButton().parent().parent().addClass("display-none");
+            $("#PROCESSDelete").dxButton().parent().parent().addClass("display-none");
+            $("#PROCESSExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#processForm :disabled").attr('disabled', false);
+            $("#PROCESSGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+
+            $("#PROCESSSave").dxButton().parent().parent().addClass("display-none");
+            $("#PROCESSUndo").dxButton().parent().parent().addClass("display-none");
+            $("#PROCESSInput").dxButton().parent().parent().removeClass("display-none");
+            $("#PROCESSEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#PROCESSDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#PROCESSExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#processForm :enabled").attr('disabled', true);
+            $("#PROCESSGrid").dxDataGrid("option", "disabled", false);
+        }
+
+    }
+
+    function setProcessManagerData() {
+
+    }
+
+    function processSearchProcess(){
+        $("#ProcessPopup").dxPopup("instance").show();
+
+    }
+
+    function processSearchWorker1() {
+        $("#ProcessWorker1Popup").dxPopup("instance").show();
+
+    }
+
+    function processSearchWorker2() {
+        $("#ProcessWorker2Popup").dxPopup("instance").show();
+
+    }
+
+    function processSearchInspector() {
+        $("#ProcessInspectorPopup").dxPopup("instance").show();
+
+    }
+
+    function processSearchWorkRoom() {
+        $("#ProcessWorkeRoomPopup").dxPopup("instance").show();
+
+    }
+
+    function ProcessRowDblClick(selectedItems) {
+
+        $("#processSearchForm input[name=process_cd]").val(selectedItems.data.process_cd);
+        $("#ProcessPopup").dxPopup("instance").hide();
+    }
+
+    function ProcessWorker1RowDblClick(selectedItems) {
+
+        $("#processForm input[name=process_worker1]").val(selectedItems.data.emp_cd);
+        $("#processForm input[name=process_worker1_nm]").val(selectedItems.data.emp_nm);
+        $("#ProcessWorker1Popup").dxPopup("instance").hide();
+    }
+
+    function ProcessWorker2RowDblClick(selectedItems) {
+
+        $("#processForm input[name=process_worker2]").val(selectedItems.data.emp_cd);
+        $("#processForm input[name=process_worker2_nm]").val(selectedItems.data.emp_nm);
+        $("#ProcessWorker2Popup").dxPopup("instance").hide();
+    }
+
+    function ProcessInspectorRowDblClick(selectedItems) {
+
+        $("#processForm input[name=process_inspector]").val(selectedItems.data.emp_cd);
+        $("#processForm input[name=process_inspector_nm]").val(selectedItems.data.emp_nm);
+        $("#ProcessInspectorPopup").dxPopup("instance").hide();
+    }
+
+    function ProcessWorkeRoomRowDblClick(selectedItems) {
+
+        $("#processForm input[name=workroom_cd]").val(selectedItems.data.workroom_cd);
+        $("#processForm input[name=workroom_nm]").val(selectedItems.data.workroom_nm);
+        $("#ProcessWorkeRoomPopup").dxPopup("instance").hide();
+    }
+
+    function processRefreshProcess() {
+        var data;
+        var grid = $("#PROCESSGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            try {
+                data = getGridRowByKey('PROCESSGrid', grid.option("focusedRowKey"));
+            }
+            catch (e) {
+                return;
+            }
+        }
+        else {
+            alert("공정 데이터가 존재하지 않습니다");
+            return;
+        }
+
+        selectProcess(data);
+    }
+
+    function processSelectProcess(e) {
+        if (!e.row || !e.row.data) return;
+
+        var data = e.row.data;
+
+        selectProcess(data);
+
+    }
+
+    function selectProcess(data) {
+
+        $("#processForm")[0].reset();
+        $("#processForm textarea").text("");
+
+        $("#processForm input[name=process_cd]").val(data.process_cd);
+        $("#processForm input[name=process_nm]").val(data.process_nm);
+
+        if (data.process_qc_ck === "Y") {
+            $("#processForm input[name=process_qc_ck][value='Y']").prop("checked", true);
+        } else {
+            $("#processForm input[name=process_qc_ck][value='N']").prop("checked", true);
+        }
+
+        if (data.process_transfer_ck === "Y") {
+            $("#processForm input[name=process_transfer_ck][value='Y']").prop("checked", true);
+        } else {
+            $("#processForm input[name=process_transfer_ck][value='N']").prop("checked", true);
+        }
+
+        $("#processForm input[name=process_worker1]").val(data.process_worker1);
+        $("#processForm input[name=process_worker1_nm]").val(data.process_worker1_nm);
+        $("#processForm input[name=process_worker2]").val(data.process_worker2);
+        $("#processForm input[name=process_worker2_nm]").val(data.process_worker2_nm);
+        $("#processForm input[name=process_inspector]").val(data.process_inspector);
+        $("#processForm input[name=process_inspector_nm]").val(data.process_inspector_nm);
+        $("#processForm input[name=workroom_cd]").val(data.workroom_cd);
+        $("#processForm input[name=workroom_nm]").val(data.workroom_nm);
+        $("#processForm select[name=process_type]").val(data.process_type);
+        $("#processForm select[name=process_rate_type]").val(data.process_rate_type);
+        $("#processForm input[name=valid_period]").val(data.valid_period);
+        $("#processForm select[name=item_form_cd]").val(data.item_form_cd);
+        //$("#processForm select[name=ccp_cd]").val(data.ccp_cd);
+        $("#processForm textarea[name=process_keep_method]").text(data.process_keep_method);
+        $("#processForm textarea[name=process_remark]").text(data.process_remark);
+
+        //selectProcessRateType(data.process_rate_type);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/SelectProcessRateType',
+            data: {
+                process_rate_type: data.process_rate_type
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    $("#processForm textarea[name=common_etc]").text(json[0].common_etc);
+                } else {
+                    $("#processForm textarea[name=common_etc]").text("");
+                }
+            }
+        });
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/SelectProcessManager',
+            data: {
+                process_cd: data.process_cd
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#processManagerGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#processManagerGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+    }
+
+    function selectProcessRateType() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/SelectProcessRateType',
+            data: {
+                process_rate_type: $("#processForm select[name=process_rate_type]").val()
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    $("#processForm textarea[name=common_etc]").text(json[0].common_etc);
+                } else {
+                    $("#processForm textarea[name=common_etc]").text("");
+                }
+            }
+        });
+    }
+
+    function PROCESSSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/SelectProcess',
+            data: {
+                process_cd: $("#processSearchForm input[name=process_cd]").val(),
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#PROCESSGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#PROCESSGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+        UtilView.setGridFocus("G", "PROCESSGrid");
+    }
+
+    function PROCESSInput() {
+        processEditCheck(true);
+        $("#processForm")[0].reset();
+        $("#processManagerGrid").dxDataGrid("option", "dataSource", []);
+
+        _processCRUDGubun = "I";
+    }
+
+    function PROCESSEdit() {
+
+        var grid = $("#PROCESSGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            try {
+                var data = getGridRowByKey('PROCESSGrid', grid.option("focusedRowKey"));
+            }
+            catch (e) {
+                alert("공정이 선택되지 않았습니다.");
+                return;
+            }
+        }
+        processEditCheck(true);
+
+        $("#processForm input[name=process_cd]").attr("readonly", true);
+
+        var editing = {
+            allowAdding: true,
+            allowUpdating: true,
+            allowDeleting: true,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+
+        $("#processManagerGrid").dxDataGrid("option", "editing", editing);
+
+        _processCRUDGubun = "U";
+    }
+
+    function PROCESSDelete() {
+
+        var grid = $("#PROCESSGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            try {
+                var data = getGridRowByKey('PROCESSGrid', grid.option("focusedRowKey"));
+            }
+            catch (e) {
+                alert("공정이 선택되지 않았습니다.");
+                return;
+            }
+
+            var isOk = confirm("이 공정을 삭제하시겠습니까?");
+
+            if (!isOk) {
+                return;
+            }
+
+            _processCRUDGubun = "D";
+
+            //var grid2 = $("#processManagerGrid").dxDataGrid("instance");
+
+            //var data2 = getGridRowByKey('processManagerGrid', grid2.option("focusedRowKey"));
+
+            //if (grid2.totalCount() > 0) {
+            //    for (var i = 0; i < data2.length; i++) {
+
+            //        var info;
+            //        info.data = data2[i];
+
+            //        processManagerDelete(info);
+            //    }
+            //}
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/ProcessCRUD',
+                data: {
+                    process_cd: data.process_cd,
+                    gubun: _processCRUDGubun
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        alert(json.messege);
+                    }
+
+                    var editing = {
+                        allowAdding: false,
+                        allowUpdating: false,
+                        allowDeleting: false,
+                        selectTextOnEditStart: false,
+                    }
+
+                    $("#processManagerGrid").dxDataGrid("option", "editing", editing);
+
+                    processEditCheck(false);
+                    PROCESSSearch();
+                }
+            });
+        }
+
+    }
+
+    async function PROCESSSave() {
+
+        if (!UtilView.checkValidForm("processForm")) {
+            return;
+        }
+
+        var formData = new FormData($("#processForm")[0]);
+        formData.set("gubun", _processCRUDGubun);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/ProcessCRUD',
+            data: formData,
+            processData: false,
+            contentType: false,
+            async: false,
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    var json = JSON.parse(result);
+                    alert(json.messege);
+                }
+            }
+        })
+
+        await $("#processManagerGrid").dxDataGrid("instance").saveEditData();
+
+        var editing = {
+            allowAdding: false,
+            allowUpdating: false,
+            allowDeleting: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#processManagerGrid").dxDataGrid("option", "editing", editing);
+
+        processEditCheck(false);
+        PROCESSSearch();
+
+    }
+
+    function PROCESSUndo() {
+
+        processRefreshProcess();
+
+        processEditCheck(false);
+
+        var editing = {
+            allowAdding: false,
+            allowUpdating: false,
+            allowDeleting: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#processManagerGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    function PROCESSExcel(gridName, ExcelName) {
+        gridExportToExcel("PROCESSGrid", "ProcessData");
+    }
+
+    function processEditableColumn(cellElement) {
+
+        if (cellElement.rowType != "data" || !cellElement.isEditing)
+            return;
+        if (cellElement.column.dataField != "user_id" && !cellElement.row.inserted) {
+            cellElement.element.find('input').prop('readonly', true);
+        }
+    }
+
+    function processGetGridPopup(e) {
+
+        _workroomCellClickEvent = e;
+
+        if (e.columnIndex == 0 && e.row.isEditing) {
+
+            $("#ProcessManagerPopup").dxPopup("instance").show();
+        }
+    }
+
+    function ProcessManagerRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        var dataGrid = $("#processManagerGrid").dxDataGrid("instance");
+        dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "user_id", data.emp_cd);
+        dataGrid.cellValue(_workroomCellClickEvent.rowIndex, "emp_nm", data.emp_nm);
+
+        $("#ProcessManagerPopup").dxPopup("instance").hide();
+    }
+
+    function processManagerInsert(info) {
+
+        var data = info.key;
+
+        data.process_cd = $("#processForm input[name=process_cd]").val();
+        data.gubun = "UC"
+
+        processManagerCRUD(data);
+    }
+
+    function processManagerDelete(info) {
+        var data = info.key;
+
+        data.process_cd = $("#processForm input[name=process_cd]").val();
+        data.gubun = "DC"
+
+        processManagerCRUD(data);
+    }
+
+    function processManagerCRUD(data) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/ProcessManagerCRUD',
+            data: {
+                process_cd: data.process_cd,
+                user_id: data.user_id,
+                gubun: data.gubun
+            },
+            success: function (result) {
+            }
+        });
+    }
+
+</script>
+
+
+<div id="PROCESS">
+
+    <div id="ProcessPopup"></div>
+    <div id="ProcessWorker1Popup"></div>
+    <div id="ProcessWorker2Popup"></div>
+    <div id="ProcessInspectorPopup"></div>
+    <div id="ProcessManagerPopup"></div>
+    <div id="ProcessWorkeRoomPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="processSearchForm" hidden="hidden">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공정코드</span>
+                        </div>
+                        <input type="text" class="form-control" name="process_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="processSearchProcess()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PROCESSGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .Height(869)
+                    .KeyExpr("process_cd")
+                    .OnFocusedRowChanged("processSelectProcess")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface");
+                        c.Add().DataField("process_cd").Caption("공정코드");
+                        c.Add().DataField("process_nm").Caption("공정명");
+                        c.Add().DataField("process_qc_ck").Caption("시험의뢰여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.process_qc_ck == ""Y"" || rowData.process_qc_ck == true); }");
+                        c.Add().DataField("process_transfer_ck").Caption("인수인계여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.process_transfer_ck == ""Y"" || rowData.process_transfer_ck == true); }");
+                        c.Add()
+                             .Caption("공정타입")
+                             .Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드"
+                                         ,
+                                         pDiv = "D"
+                                         ,
+                                         pStrWhere = "RT011"
+                                         ,
+                                         pTableName = "ProcessType"
+                                     }
+                                     ).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                             ).DataField("process_type")
+                             .DataType(GridColumnDataType.String);
+                        c.Add()
+                             .Caption("수율타입")
+                             .Lookup(lookup => lookup
+                                 .DataSource(d => d.WebApi()
+                                     .RouteName("Comm")
+                                     .LoadAction("GetCommon")
+                                     .LoadParams(new
+                                     {
+                                         pGubun = "공통코드"
+                                         ,
+                                         pDiv = "D"
+                                         ,
+                                         pStrWhere = "RT015"
+                                         ,
+                                         pTableName = "ProcessRateType"
+                                     }
+                                     ).Key("keyfield"))
+                                 .ValueExpr("keyfield")
+                                 .DisplayExpr("displayfield")
+                             ).DataField("process_rate_type")
+                             .DataType(GridColumnDataType.String);
+                    })
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>공정 정보</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="processForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공정코드 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="process_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공정명 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="process_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">시험의뢰여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="process_qc_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="process_qc_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">인수인계여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="process_transfer_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="process_transfer_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">작업자 (정)</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_worker1" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="processSearchWorker1()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_worker1_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">작업자 (부)</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_worker2" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="processSearchWorker2()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_worker2_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">확인자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_inspector" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="processSearchInspector()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="process_inspector_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper display-flex">
+                            <label class="col-3">공정관리담당자</label>
+                            <div class="col-8 pr-0 pl-0">
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("processManagerGrid")
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                    .DataSource(new JS("setProcessManagerData"))
+                                    .ColumnAutoWidth(true)
+                                    .HoverStateEnabled(true)
+                                    .AllowColumnResizing(true)
+                                    .Height(250)
+                                    .OnRowInserted("processManagerInsert")
+                                    .OnRowRemoved("processManagerDelete")
+                                    .OnCellPrepared("processEditableColumn")
+                                    .OnCellClick("processGetGridPopup")
+                                    .OnToolbarPreparing("HideToolbarButton")
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("user_id").Caption("사원번호");
+                                        c.Add().DataField("emp_nm").Caption("사원명");
+
+                                    })
+                                    .ShowBorders(true)
+                                )
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">작업실</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="workroom_cd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="processSearchWorkRoom()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="workroom_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공정 타입 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="process_type">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.processType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">수율 타입 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="process_rate_type" onchange="selectProcessRateType()">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.processRateType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3"></label>
+                            <div class="input-group col-8">
+                                <textarea rows="3" readonly="readonly" class="form-control" name="common_etc"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">보관기간</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12" name="valid_period">
+                            </div>
+                            <div class="input-group col-1">
+                                <span>(일)</span>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">제형</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="item_form_cd">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.formulation).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        @*<div class="input-wrapper">
+                            <label class="col-3">CCP코드</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="ccp_cd">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.CCP_CD).Rows)
+                                    {
+                                        <option value="@row["ccp_cd"]">@row["ccp_description"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>*@
+
+                        <div class="input-wrapper">
+                            <label class="col-3">저장 방법</label>
+                            <div class="input-group col-8">
+                                <textarea rows="3" class="form-control" name="process_keep_method"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <textarea rows="3" class="form-control" name="process_remark"></textarea>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

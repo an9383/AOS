@@ -1,0 +1,1451 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Services.Mont
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewBag.Title = "HACCP_CodeRegistration";
+}
+@{
+    var HACCP_CodeRegistrationData = @Html.Raw(Json.Encode(ViewBag.HACCP_CodeRegistrationData.Data));
+    var CR_empPopupData = @Html.Raw(Json.Encode(ViewBag.CR_empPopupData.Data));
+
+    var HACCP_CodeRegistrationAuth = @Html.Raw(Json.Encode(ViewBag.HACCP_CodeRegistrationAuth.Data));
+}
+@{
+    string[] masterKey = { "HaccpCode", "ChgSerNo" };
+}
+
+<script id="HACCP_CodeRegistrationJs" type="text/javascript">
+
+        //구분값
+        var codeGubun = "";
+        //그리드 출력 Data
+        var HACCP_CodeRegistrationData = @HACCP_CodeRegistrationData;
+        var _HACCP_CodeRegistrationAuth;
+        var _HACCP_CodeRegistrationCellClickEvent;
+        var _ListPopupCellClickEvent;
+
+        //항목등록 Level 값;
+        var _parentCodeLevel;
+        var _parentCodeValue;
+
+        //설비 목록 변경사항 담는 Array
+        var _HeaderList = new Array();
+        //설비 수집 데이터 담는 Array
+        var _ItemList = new Array();
+
+
+    $(function () {
+        //#region 달력 api
+        setDatePicker("#HACCP_CodeRegistration .datepicker");
+        //#endregion
+
+        //#region 설비 목록 그리드 생성
+            if (HACCP_CodeRegistrationData.length <= 0) {
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@HACCP_CodeRegistrationData));
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        //#endregion
+
+        //수정중인지 체크
+        CR_EditCheck(false);
+        CR_EditDetailCheck(false);
+
+        //사용자 권한
+        _HACCP_CodeRegistrationAuth = JSON.parse(@HACCP_CodeRegistrationAuth)[0];
+
+        if (_HACCP_CodeRegistrationAuth.form_insert != "Y") {
+            $("#HACCP_CodeRegistrationInput").remove();
+        }
+        if (_HACCP_CodeRegistrationAuth.form_edit != "Y") {
+            $("#HACCP_CodeRegistrationEdit").remove();
+        }
+
+        //#region 팝업세팅
+
+        //담당자 목록
+            var columns = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("CR_Emp", "사원 조회", @CR_empPopupData, columns, "emp_cd", 700, 800);
+
+        //#endregion
+
+    });
+
+        //설비 목록 수정중인지 체크
+        function CR_EditCheck(nowEdit) {
+
+            // 수정중일 때
+            if (nowEdit) {
+                $("#HACCP_CodeRegistrationSave").dxButton().parent().parent().removeClass("display-none");
+                $("#HACCP_CodeRegistrationUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#HACCP_CodeRegistrationInput").dxButton().parent().parent().addClass("display-none");
+                $("#HACCP_CodeRegistrationSearch").dxButton().parent().parent().addClass("display-none");
+
+                $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("option", "disabled", true);
+                $("#HACCP_CodeRegistrationDetail button").prop('disabled', true);
+
+            }
+            if (!nowEdit) {
+                $("#HACCP_CodeRegistrationSave").dxButton().parent().parent().addClass("display-none");
+                $("#HACCP_CodeRegistrationUndo").dxButton().parent().parent().addClass("display-none");
+                $("#HACCP_CodeRegistrationInput").dxButton().parent().parent().removeClass("display-none");
+                $("#HACCP_CodeRegistrationSearch").dxButton().parent().parent().removeClass("display-none");
+
+                $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("option", "disabled", false);
+                $("#HACCP_CodeRegistrationDetail button").prop('disabled', false);
+            }
+        }
+
+        //설비 수집 데이터 수정 체크
+        function CR_EditDetailCheck(nowEdit) {
+            //수정중
+            if (nowEdit) {
+                $("#HACCP_CodeRegistrationDetail button[name=getChgSerNo]").css("display", "inline");
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("display", "none");
+                $("#HACCP_CodeRegistrationDetail button[name=btnEdit]").css("display", "none");
+                $("#HACCP_CodeRegistrationDetail button[name=btnExcel]").css("display", "none");
+                $("#HACCP_CodeRegistrationDetail button[name=btnSave]").css("display","inline");
+                $("#HACCP_CodeRegistrationDetail button[name=btnUndo]").css("display","inline");
+
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+                $("#HACCP_CodeRegistrationDetail button[name=getChgSerNo]").css("display", "none");
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("display", "inline");
+                $("#HACCP_CodeRegistrationDetail button[name=btnEdit]").css("display", "inline");
+                $("#HACCP_CodeRegistrationDetail button[name=btnExcel]").css("display", "inline");
+                $("#HACCP_CodeRegistrationDetail button[name=btnSave]").css("display", "none");
+                $("#HACCP_CodeRegistrationDetail button[name=btnUndo]").css("display", "none");
+
+                $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("option", "disabled", false);
+            }
+        }
+
+
+    //#region 팝업 기능
+
+        //#region 문서 목록 List
+        //문서 목록 팝업
+        function CR_HeaderPopup() {
+            var popup = $("#CR_HeaderPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#CR_HeaderPopupTemplate_1"));
+            popup.show();
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getHaccpDocPopup',
+                success: function (result) {
+                    if (result[0] != "") {
+                        var jsonResult = JSON.parse(result);
+
+                        $("#CR_HeaderPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+                    }
+                }
+            });
+        }
+
+        //문서 목록 row 일괄 입력
+        function CR_HeaderPopupInput() {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var popgrid = $("#CR_HeaderPopupGrid").dxDataGrid("instance");
+            var CR_dataArr = popgrid.getSelectedRowsData();
+
+            if (CR_dataArr.length == 0) {
+                alert("선택된 데이터가 없습니다.");
+                return;
+            }
+            for (var i = 0; i < CR_dataArr.length; i++) {
+                grid.addRow();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Mont/getMaxChgSerNo',
+                    data: {
+                        HaccpCode: CR_dataArr[i].doc_no
+                    },
+                    async:false,
+                    success: function (result) {
+
+                        var jsonData = JSON.parse(result);
+
+                        if (jsonData[0].ChgSerNo == "") {
+                            grid.cellValue(0, "ChgSerNo", 1);
+                        }
+                        grid.cellValue(0, "ChgSerNo", JSON.parse(jsonData[0].ChgSerNo) + 1);
+                    }
+                });
+
+                grid.cellValue(0, "HaccpCode", CR_dataArr[i].doc_no);
+                grid.cellValue(0, "doc_name", CR_dataArr[i].doc_name);
+                grid.cellValue(0, "EmpCode", CR_dataArr[i].writer_cd);
+
+            }
+            $("#CR_HeaderPopupGrid").dxDataGrid("instance").deselectAll();
+            var popup = $("#CR_HeaderPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //문서 목록 팝업 더블클릭
+        function CR_HeaderRowDblClick(selectedItems) {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");      //설비목록 그리드
+
+            grid.addRow();
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getMaxChgSerNo',
+                data: {
+                    HaccpCode: selectedItems.data.doc_no
+                },
+                success: function (result) {
+
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData[0].ChgSerNo == "") {
+                        grid.cellValue(0, "ChgSerNo", 1);
+                    }
+                    grid.cellValue(0, "ChgSerNo", JSON.parse(jsonData[0].ChgSerNo)+1);
+                }
+            });
+
+            grid.cellValue(0, "HaccpCode", selectedItems.data.doc_no);
+            grid.cellValue(0, "doc_name", selectedItems.data.doc_name);
+            grid.cellValue(0, "EmpCode", selectedItems.data.writer_cd);
+
+            var popup = $("#CR_HeaderPopup").dxPopup("instance");
+            popup.hide();
+        }
+        //#endregion
+
+        //#region 담당자 List
+        //담당자코드 팝업
+        function CR_empCellEvent(e) {
+            _HACCP_CodeRegistrationCellClickEvent = e;
+
+            if (e.columnIndex == 2) {
+                if (codeGubun == "I_U") {
+                    if (e.row.isNewRow) {
+                        var popup = $("#CR_EmpPopup").dxPopup("instance");
+                        popup.show();
+                    }
+                    else {
+                        alert("revision을 새로 추가하십시오.");
+                        return;
+                    }
+                }
+
+            }
+
+        }
+
+        //담당자코드 팝업 더블클릭
+        function CR_EmpRowDblClick(selectedItems) {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+
+            grid.cellValue(_HACCP_CodeRegistrationCellClickEvent.rowIndex, "EmpCode", selectedItems.data.emp_cd);
+
+            var popup = $("#CR_EmpPopup").dxPopup("instance");
+            popup.hide();
+        }
+        //#endregion
+
+        //#region revision 팝업
+        //revision 팝업
+        function getChgSerNo() {
+
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            var popup = $("#CR_RevisionPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#CR_RevisionPopupTemplate_1"));
+            popup.show();
+            $("#CR_RevisionPopup_form select[name=ChgSerNoPopup] option").remove();
+            console.log(gridData.HaccpCode);
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getHaccpItemByRevisionPopup',
+                data: {
+                    HaccpCode: gridData.HaccpCode,
+                    ChgSerNo: gridData.ChgSerNo
+                },
+                success: function (result) {
+                    if (result[0].length <= 0) {
+                        $("#CR_RevisionPopupGrid").dxDataGrid("option", "dataSource", []);
+                        $("#CR_RevisionPopupGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+
+                        //revision selectbox 조회
+                        var jsonData = JSON.parse(result[1]);
+                        for (var i = 0; i < jsonData.length; i++) {
+                            $("#CR_RevisionPopup_form select[name=ChgSerNoPopup]").append("<option value='" + jsonData[i].ChgSerNo + "'>" + jsonData[i].ChgSerNo + "</option>");
+                        }
+                        $("#CR_RevisionPopup_form select[name=ChgSerNoPopup]").val(gridData.ChgSerNo);
+
+                        return;
+                    }
+
+                    //revision data 조회
+                    if (result[0] != "") {
+
+                        var jsonData = JSON.parse(result[0]);
+
+                        $("#CR_RevisionPopupGrid").dxDataGrid("option", "dataSource", jsonData);
+
+                    }
+
+                    //revision selectbox 조회
+                    if (result[1] != "") {
+
+                        var jsonData = JSON.parse(result[1]);
+
+                        $("#CR_RevisionPopup_form select[name=ChgSerNoPopup] option").remove();
+
+                        for (var i = 0; i < jsonData.length; i++) {
+                            $("#CR_RevisionPopup_form select[name=ChgSerNoPopup]").append("<option value='" + jsonData[i].ChgSerNo + "'>" + jsonData[i].ChgSerNo + "</option>");
+                        }
+                        $("#CR_RevisionPopup_form select[name=ChgSerNoPopup]").val(gridData.ChgSerNo);
+                    }
+                }
+            });
+        }
+
+        //revision번호로 재조회
+        function CR_RevisionPopupItemSearch() {
+
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getHaccpItemByRevisionSearch',
+                data: {
+                    HaccpCode: gridData.HaccpCode,
+                    ChgSerNo: $("#CR_RevisionPopup_form select[name=ChgSerNoPopup]").val()
+                },
+                success: function (result) {
+                    if (result[0].length <= 0) {
+                        $("#CR_RevisionPopupGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+
+                    if (result[0] != "") {
+
+                        var jsonData = JSON.parse(result[0]);
+
+                        $("#CR_RevisionPopupGrid").dxDataGrid("option", "dataSource", jsonData);
+
+                    }
+                }
+            });
+        }
+
+        //revision 팝업 row 일괄 입력
+        function CR_RevisionPopupItemInput() {
+            var grid = $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance");
+            var popgrid = $("#CR_RevisionPopupGrid").dxDataGrid("instance");
+            var CR_dataArr = popgrid.getSelectedRowsData();
+            console.log(CR_dataArr);
+            if (CR_dataArr.length == 0) {
+                alert("선택된 데이터가 없습니다.");
+                return;
+            }
+            for (var i = 0; i < CR_dataArr.length; i++) {
+                grid.addRow();
+
+                grid.cellValue(0, "CodeCode", CR_dataArr[i].CodeCode);
+                grid.cellValue(0, "CodeName", CR_dataArr[i].CodeName);
+                grid.cellValue(0, "ParentCode", CR_dataArr[i].ParentCode);
+                grid.cellValue(0, "CodeDescr", CR_dataArr[i].CodeDescr);
+                grid.cellValue(0, "CodeUse", CR_dataArr[i].CodeUse);
+            }
+            $("#CR_RevisionPopupGrid").dxDataGrid("instance").deselectAll();
+            var popup = $("#CR_RevisionPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //revision 팝업 더블클릭
+        function CR_RevisionRowClick(selectedItems) {
+            var grid = $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance");
+
+            grid.addRow();
+
+            grid.cellValue(0, "CodeCode", selectedItems.data.CodeCode);
+            grid.cellValue(0, "CodeName", selectedItems.data.CodeName);
+            grid.cellValue(0, "ParentCode", selectedItems.data.ParentCode);
+            grid.cellValue(0, "CodeDescr", selectedItems.data.CodeDescr);
+            grid.cellValue(0, "CodeUse", selectedItems.data.CodeUse);
+
+            var popup = $("#CR_RevisionPopup").dxPopup("instance");
+            popup.hide();
+        }
+        //#endregion
+
+        //항목등록 리스트 팝업(CCP공정, 작업장조도)
+        function CR_ListPopupCellEvent(e) {
+
+            _ListPopupCellClickEvent = e;
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            //#region CCP모니터링 공정
+            if (gridData.CCP_yn == "Y" && e.columnIndex == 0) {
+
+                //최상위Level 공정목록 팝업
+                if (_parentCodeLevel == "0") {//e.row.node.level == 0
+
+                    if (!e.row.isNewRow) {
+                        return;
+                    }
+
+                    var popup = $("#CR_ProcessPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#CR_ProcessPopupTemplate_1"));
+                    popup.show();
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Mont/getProcess_cd',
+                        success: function (result) {
+                            if (result[0] != "") {
+                                var jsonResult = JSON.parse(result);
+
+                                $("#CR_ProcessPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+
+                            }
+                        }
+                    });
+
+                }
+
+                //2Level 검사항목 팝업
+                if (_parentCodeLevel == "1") {//e.row.node.level == 1
+
+                    if (!e.row.isNewRow) {
+                        return;
+                    }
+
+                    var popup = $("#CR_ProcessExamPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#CR_ProcessExamPopupTemplate_1"));
+                    popup.show();
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Mont/getProcess_exam_cd',
+                        data: {
+                            ParentCode: _parentCodeValue
+                        },
+                        success: function (result) {
+                            if (result[0] != "") {
+                                var jsonResult = JSON.parse(result);
+
+                                $("#CR_ProcessExamPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+                                
+                            }
+                        }
+                    });
+                }
+
+            }
+            //#endregion
+
+            //#region Haccp일지류
+            else if (gridData.CCP_yn != "Y" && e.columnIndex == 0) {
+                if (!e.row.isNewRow) {
+                    return;
+                }
+
+                //#region 작업장 조도 관리
+                if (gridData.HaccpCode == "GMPHAP-101-02") {
+                    console.log("작업장조도들어옴");                    
+                    var popup = $("#CR_WorkRoomPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("CR_WorkRoomPopupTemplate_1"));
+                    popup.show();
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Mont/getWorkroom_cd',
+                        success: function (result) {
+                            if (result[0] != "") {
+                                var jsonResult = JSON.parse(result);
+                                console.log(jsonResult);
+
+                                $("#CR_WorkRoomPopupGrid").dxDataGrid("option", "dataSource", jsonResult);
+                            }
+                        }
+                    });
+                }
+                //#endregion 작업장 조도 관리
+            }
+            //#endregion Haccp일지류
+        }
+
+        //#region CCP모니터링 공정 팝업
+        //공정목록 팝업 '+' Level 이벤트
+        function CR_ProcessExam_onInitNewRow(e) {
+            
+            if (e.data.ParentCode == "") {                
+                _parentCodeLevel = "0";
+            }
+
+            if (e.data.ParentCode != "") {
+                _parentCodeLevel = "1";
+                _parentCodeValue = e.data.ParentCode;
+            }
+
+        }
+
+        //공정 검사  팝업 더블 클릭
+        function CR_ProcessRowDblClick(selectedItems) {
+
+            var grid = $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance");
+
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeCode", selectedItems.data.ccp_cd);
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeName", selectedItems.data.ccp_description);
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeDescr", selectedItems.data.ccp_nm);            
+
+            _parentCodeLevel = "";
+            var popup = $("#CR_ProcessPopup").dxPopup("instance");
+            popup.hide();
+
+        }
+
+        //검사 항목  팝업 더블 클릭
+        function CR_ProcessExamRowDblClick(selectedItems) {
+
+            var grid = $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance");
+
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeCode", selectedItems.data.process_exam_cd);
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeName", selectedItems.data.process_exam_nm);
+
+            _parentCodeLevel = "";
+            _parentCodeValue = "";
+
+            var popup = $("#CR_ProcessExamPopup").dxPopup("instance");
+            popup.hide();
+
+        }
+        //#endregion CCP모니터링 공정 팝업
+
+        //작업실 리스트 팝업 더블 클릭
+        function CR_WorkRoomRowDblClick(selectedItems) {
+
+            var grid = $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance");
+
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeCode", selectedItems.data.workroom_cd);
+            grid.cellValue(_ListPopupCellClickEvent.rowIndex, "CodeName", selectedItems.data.workroom_nm);
+            
+            var popup = $("#CR_WorkRoomPopup").dxPopup("instance");
+            popup.hide();
+        }
+    
+    //#endregion
+
+    //#region Focus Row 변경 이벤트
+        function HACCP_CodeRegistrationMasterGrid_changed() {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            //햇썹문서 문서코드/문서명 채우기
+            $("#HACCP_CodeRegistrationDetail input[name=HaccpCode]").val(gridData.HaccpCode);
+            $("#HACCP_CodeRegistrationDetail input[name=HaccpName]").val(gridData.doc_name);
+
+            //최종승인 된 문서 승인버튼 구분
+            if (gridData.FinalConfirm == "Y") {
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("background-color", "#6c757d");
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("border-color", "#6c757d");
+            } else {
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("background-color", "red");
+                $("#HACCP_CodeRegistrationDetail button[name=setFinalConfirm]").css("border-color", "red");
+            }
+
+            //설비 수집 데이터 Data 조회
+            HACCP_Item();
+        }
+
+        //설비 수집 데이터 Data 조회
+        function HACCP_Item() {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getGridItem',
+                data: {
+                    HaccpCode: gridData.HaccpCode
+                },
+                success: function (result) {
+                    if (result <= 0) {
+                        $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance").option("dataSource", []);
+                        $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance").option("focusedRowIndex", -1);
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    //설비 수집 데이터 채우기
+                    $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+        }
+
+    //#endregion
+
+    //#region 그리드 editing 모드
+
+        //#region 설비 목록
+        function HeaderList_Update(info) {
+
+            CR_EditCheck(true);
+
+            var data = info.data;
+
+            _HeaderList.push(data);
+        }
+
+        function HeaderList_Insert(info) {
+
+            CR_EditCheck(true);
+
+            var data = info.data;
+
+            var date = new Date(data.BDate);
+            console.log(data.BDate);
+
+            if (data.CCP_yn == true) {
+                data.CCP_yn = "Y";
+            } else {
+                data.CCP_yn = "N";
+            }
+
+            var year = date.getFullYear();
+            var month = date.getMonth() + 1;
+            var day = date.getDate();
+            month = (month < 10) ? ("0" + month) : month;
+            day = (day < 10) ? ("0" + day) : day;
+
+            data.BDate = year + "-" + month + "-" + day;
+            data.EDate = "2099" + "-" + month + "-" + day;          //종료일자 99년으로 고정
+            data.gubun = "I";
+
+            _HeaderList.push(data);
+
+            }
+        //#endregion
+
+        //#region 설비 수집 데이터
+        function itemUpdate(info) {
+            CR_EditDetailCheck(true);
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            var data = info.data;
+
+            if (data.CodeUse == true) {
+                data.CodeUse = "Y";
+            } else {
+                data.CodeUse = "N";
+            }
+
+            data.HaccpCode = gridData.HaccpCode;
+            data.ChgSerNo = gridData.ChgSerNo;
+
+            data.gubun = "U_D";
+
+            _ItemList.push(data);
+        }
+
+        function itemInsert(info) {
+            CR_EditDetailCheck(true);
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            var data = info.data;
+
+            if (data.CodeUse == true) {
+                data.CodeUse = "Y";
+            } else {
+                data.CodeUse = "N";
+            }
+
+            data.gubun = "I_D";
+            data.HaccpCode = gridData.HaccpCode;
+            data.ChgSerNo = gridData.ChgSerNo;
+
+
+            _ItemList.push(data);
+        }
+
+        function itemDelete(info) {
+            CR_EditDetailCheck(true);
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            var data = info.data;
+
+            data.gubun = "D_D";
+            data.HaccpCode = gridData.HaccpCode;
+            data.ChgSerNo = gridData.ChgSerNo;
+
+            _ItemList.push(data);
+        }
+        //#endregion
+
+    //#endregion
+
+    //#region '설비 목록' 상단 버튼 이벤트
+
+        //조회
+        function HACCP_CodeRegistrationSearch() {
+            CR_EditCheck(false);
+            codeGubun = "";
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getHaccpDoc',
+                data: {
+                    use_yn: "Y"
+                },
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.lentgh <= 0) {
+                        $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    }
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+            });
+        }
+
+        //신규
+        function HACCP_CodeRegistrationInput() {
+
+            CR_EditCheck(true);
+            codeGubun = "I_U";
+
+            //설비 목록 edit 모드로 전환
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                mode:'batch'
+            }
+
+            $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("option", "editing", editing);
+
+            CR_HeaderPopup();
+        }
+
+        //저장
+        async function HACCP_CodeRegistrationSave() {
+            if (!confirm("신규 설비 목록을 저장하시겠습니까?")) {
+                return;
+            }
+
+            await $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance").saveEditData();
+
+            //새로운 설비 목록 추가
+            inputHeaderHaccp(_HeaderList);
+        }
+
+        //설비 목록 추가
+        function inputHeaderHaccp(data) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/HaccpTRX',
+                data: {
+                    hACCP_CodeRegistration: JSON.stringify(data)
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData.hasOwnProperty("failMessege")) {
+                        console.log(jsonData.messege.replace(/\\n/g, "\\n"));
+                        alert(jsonData.messege.replace(/\\n/g, "\\n"));
+
+                        return;
+                    }
+
+                    alert("저장되었습니다.");
+
+                    codeGubun = "";
+                    _HeaderList = new Array();
+
+                    var editing = {
+                        allowUpdating: false,
+                        allowAdding: false,
+                        allowDeleting: false,
+                        mode: 'batch'
+                    }
+
+                    $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("option", "editing", editing);
+
+                    HACCP_CodeRegistrationSearch();
+
+                }
+            });
+        }
+
+        //취소
+        function HACCP_CodeRegistrationUndo() {
+
+            CR_EditCheck(false);
+            _HeaderList = new Array();
+            codeGubun = "";
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+
+            $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("option", "editing", editing);
+            HACCP_CodeRegistrationSearch();
+        }
+
+    //#endregion
+
+    //#region '설비 수집 데이터' 상단 버튼 이벤트
+
+        //수정
+        function HACCP_CodeRegistration_1Edit() {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            if (gridData.FinalConfirm == "Y") {
+                alert("최종승인 처리된 문서는 수정 할 수 없습니다.");
+                return;
+            }
+
+            CR_EditDetailCheck(true);
+
+            codeGubun = "";
+
+
+            //설비 목록 edit 모드로 전환
+            var editing2 = {
+                allowUpdating: true,
+                allowAdding: true,
+                allowDeleting: true,
+                mode: 'batch'
+            }
+
+            $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("option", "editing", editing2);
+        }
+
+        //저장
+        async function HACCP_CodeRegistration_1Save() {
+            if (!confirm("변경사항을 저장하시겠습니까?")) {
+                return;
+            }
+
+            await $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("instance").saveEditData();
+
+            CCPmanage(_ItemList);
+        }
+
+        //CCP 관리
+        function CCPmanage(data) {
+            console.log(data);
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/HaccpTRX',
+                data: {
+                    hACCP_CodeRegistration: JSON.stringify(data)
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData.hasOwnProperty("failMessege")) {
+                        console.log(jsonData.messege.replace(/\\n/g, "\\n"));
+                        alert(jsonData.messege.replace(/\\n/g, "\\n"));
+
+                        return;
+                    }
+
+                    alert("저장되었습니다.");
+
+                    codeGubun = "";
+                    _ItemList = new Array();
+
+                    var editing2 = {
+                        allowUpdating: false,
+                        allowAdding: false,
+                        allowDeleting: false,
+                        mode: 'batch'
+                    }
+
+                    $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("option", "editing", editing2);
+                    CR_EditDetailCheck(false);
+
+                    HACCP_CodeRegistrationSearch();
+                }
+            });
+        }
+
+        //취소
+        function HACCP_CodeRegistration_1Undo() {
+            CR_EditDetailCheck(false);
+            _ItemList = new Array();
+            codeGubun = "";
+
+            var editing2 = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+
+            $("#HACCP_CodeRegistrationDetailGrid").dxTreeList("option", "editing", editing2);
+
+            HACCP_CodeRegistrationSearch();
+        }
+
+        //엑셀
+        //function HACCP_CodeRegistration_1Excel() {
+        //    gridExportToExcel("HACCP_CodeRegistrationDetailGrid", "HACCP_CodeRegistrationDetailData");
+        //}
+
+    //#endregion
+
+    //#region '+' 버튼 팝업 활성화
+        function CR_ToolbarEdit(e) {
+            var CR_toolbarItems = e.toolbarOptions.items;
+
+            $.each(CR_toolbarItems, function (_, item) {
+                if (item.name == "saveButton") {
+                    item.visible = false;
+                }
+                if (item.name == "addRowButton") {
+                    item.options.onClick = function (e) {
+                        CR_HeaderPopup();
+                    }
+                }
+            });
+        }
+
+        //설비 수집 데이터 '저장' 버튼 안보이기
+        function CR_DetailToolbarEdit(e) {
+            var CR_DetailToolbarItems = e.toolbarOptions.items;
+            
+            $.each(CR_DetailToolbarItems, function (_, item) {
+                if (item.name == "saveButton") {
+                    item.visible = false;
+                }
+            });
+        }
+
+    //#endregion
+
+    //#region CellClick 이벤트
+        function CR_empcellWithButton(container, cellInfo) {
+            if (typeof cellInfo.value == "undefined" || cellInfo.value == null)
+                cellInfo.value = "";
+
+            if (!(codeGubun == "I_U")) {
+                $("<div>").html(cellInfo.value)
+                    .appendTo(container);
+                return;
+            }
+
+            $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' class='HACCP_CodeRegistration_icon-plus'></div>")
+                .appendTo(container);
+
+            $(".HACCP_CodeRegistration_icon-plus").dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                }
+            });
+        }
+
+        //cell readonly
+        function CR_HeaderEditableCell(e) {
+
+            if (e.parentType === "dataRow") {
+                if (e.columnIndex == 0 || e.dataField == "HaccpCode") {
+                        e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 1 || e.dataField == "doc_name") {
+                        e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 2 || e.dataField == "EmpCode") {
+                        e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 3 || e.dataField == "CCP_yn") {
+                    if (!e.row.isNewRow) {
+                        if (codeGubun == "I_U") {
+                            e.editorOptions.disabled = true;
+                        }
+                    }
+                }
+                if (e.columnIndex == 4 || e.dataField == "BDate") {
+                    if (!e.row.isNewRow) {
+                        e.editorOptions.disabled = true;
+                    }
+                }
+                if (e.columnIndex == 5 || e.dataField == "ChgSerNo") {
+                    if (!e.row.isNewRow) {
+                        e.editorOptions.disabled = true;
+                    }
+                }
+            }
+
+        }
+
+    //#endregion
+
+    //#region 최종승인 이벤트
+        function setFinalConfirm() {
+            var grid = $("#HACCP_CodeRegistrationMasterGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('HACCP_CodeRegistrationMasterGrid', grid.option("focusedRowKey"));
+
+            if (!confirm("최종승인을 하시면 수정 할 수 없습니다.\n승인 하시겠습니까?")) {
+                return;
+            }
+
+            if (gridData.FinalConfirm == "Y") {
+                alert("이미 최종승인 처리 되었습니다.");
+                retrun;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/setFinalConfirm',
+                data: {
+                    HaccpCode: gridData.HaccpCode,
+                    ChgSerNo: gridData.ChgSerNo
+                },
+                success: function (result) {
+                    alert("최종승인 처리 되었습니다.");
+
+                    HACCP_CodeRegistrationSearch();
+                }
+            });
+        }
+    //#endregion
+
+</script>
+
+<div id="HACCP_CodeRegistration" autoresize="Y">
+
+    <!--#region 신규 팝업-->
+    <!--설비 목록 팝업-->
+    <div id="CR_HeaderPopup"></div>
+    <!--담당자 팝업-->
+    <div id="CR_EmpPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("CR_HeaderPopup")
+            .Width(1200)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("문서목록 리스트")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--revision 가져오기 팝업-->
+    <div id="CR_RevisionPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("CR_RevisionPopup")
+            .Width(1200)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("설비수집 데이터")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--대표 공정 목록 팝업-->
+    <div id="CR_ProcessPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("CR_ProcessPopup")
+            .Width(600)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("공정목록 리스트")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--공정 검사 항목 팝업-->
+    <div id="CR_ProcessExamPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("CR_ProcessExamPopup")
+            .Width(600)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("검사항목 리스트")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--작업실 항목 팝업-->
+    <div id="CR_WorkRoomPopup"></div>
+    @(Html.DevExtreme().Popup()
+            .ID("CR_WorkRoomPopup")
+            .Width(600)
+            .Height(700)
+            .ShowTitle(true)
+            .Title("작업실 항목 리스트")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--#endregion-->
+    <!--#region 설비목록 팝업 화면-->
+    @using (Html.DevExtreme().NamedTemplate("CR_HeaderPopupTemplate_1"))
+    {
+
+        @(Html.DevExtreme().Toolbar()
+                .ID("CR_HeaderPopupToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("CR_HeaderPopupInput")
+                        .Icon("add")
+                        .Text("입력")
+                        .OnClick("CR_HeaderPopupInput")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+
+        <div class="row">
+            <div class="col-12">
+                <div id="CR_HeaderPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("CR_HeaderPopupGrid")
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(600)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("doc_no")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("doc_no").Caption("문서코드");
+                            c.Add().DataField("doc_name").Caption("문서명");
+                            c.Add().DataField("writer_cd").Caption("담당자코드").Width(200);
+                            c.Add().DataField("use_yn").Caption("사용여부").Width(100);
+                        })
+                        .OnRowDblClick("CR_HeaderRowDblClick")
+                    )
+                </div>
+            </div>
+        </div>
+    }
+    <!--#endregion-->
+    <!--#region revision 팝업 화면-->
+    @using (Html.DevExtreme().NamedTemplate("CR_RevisionPopupToolbar_1"))
+    {
+        <div style="width:1000px;">
+            <form id="CR_RevisionPopup_form">
+                <div class="input-wrapper">
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">revision</span>
+                        </div>
+                        <select class="form-control" name="ChgSerNoPopup"></select>
+                    </div>
+                </div>
+            </form>
+        </div>
+    }
+
+    @using (Html.DevExtreme().NamedTemplate("CR_RevisionPopupTemplate_1"))
+    {
+        @(Html.DevExtreme().Toolbar()
+            .ID("CR_RevisionPopupToolBar")
+            .Items(items =>
+            {
+                items.Add()
+                    .Template(new TemplateName("CR_RevisionPopupToolbar_1"))
+                    .Location(ToolbarItemLocation.Before);
+                items.Add()
+                    .Widget(w => w
+                    .Button()
+                    .Type(ButtonType.Default)
+                    .StylingMode(ButtonStylingMode.Contained)
+                    .ID("CR_RevisionPopupItemSearch")
+                    .Icon("search")
+                    .Text("조회")
+                    .OnClick("CR_RevisionPopupItemSearch")
+                    )
+                    .Location(ToolbarItemLocation.After);
+
+                items.Add()
+                    .Widget(w => w
+                    .Button()
+                    .Type(ButtonType.Default)
+                    .StylingMode(ButtonStylingMode.Contained)
+                    .ID("CR_RevisionPopupItemInput")
+                    .Icon("add")
+                    .Text("입력")
+                    .OnClick("CR_RevisionPopupItemInput")
+                    )
+                    .Location(ToolbarItemLocation.After);
+            })
+        )
+
+        <div class="row">
+            <div class="col-12 pt-1">
+                <div id="CR_RevisionPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("CR_RevisionPopupGrid")
+                        .ShowBorders(true)
+                        .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(600)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("CodeCode")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("CodeCode").Caption("항목코드").Width(100);
+                            c.Add().DataField("CodeName").Caption("항목명");
+                            c.Add().DataField("ParentCode").Caption("상위코드").Width(100);
+                            c.Add().DataField("CodeDescr").Caption("비고");
+                            c.Add().DataField("CodeUse").Caption("사용").DataType(GridColumnDataType.Boolean).Width(50)
+                                .CalculateCellValue(@"function(rowData) { return (rowData.CodeUse == ""Y"" || rowData.CodeUse == true); }");
+                        })
+                        .OnRowDblClick("CR_RevisionRowClick")
+                        )
+                </div>
+            </div>
+        </div>
+    }
+
+    <!--#endregion-->
+    <!--#region 공정목록 팝업 화면-->
+    @using (Html.DevExtreme().NamedTemplate("CR_ProcessPopupTemplate_1"))
+    {
+
+        <div class="row">
+            <div class="col-12">
+                <div id="CR_ProcessPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("CR_ProcessPopupGrid")
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(600)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("ccp_cd")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("ccp_cd").Caption("공정코드");
+                            c.Add().DataField("ccp_nm").Caption("일지");
+                            c.Add().DataField("ccp_description").Caption("공정명");
+                        })
+                    .OnRowDblClick("CR_ProcessRowDblClick")
+                    )
+                </div>
+            </div>
+        </div>
+    }
+    <!--#endregion-->
+    <!--#region 검사항목 팝업 화면-->
+    @using (Html.DevExtreme().NamedTemplate("CR_ProcessExamPopupTemplate_1"))
+    {
+
+        <div class="row">
+            <div class="col-12">
+                <div id="CR_ProcessExamPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("CR_ProcessExamPopupGrid")
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(600)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("process_exam_cd")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("process_exam_cd").Caption("검사항목코드");
+                            c.Add().DataField("process_exam_nm").Caption("검사항목명");
+                        })
+                    .OnRowDblClick("CR_ProcessExamRowDblClick")
+                    )
+                </div>
+            </div>
+        </div>
+    }
+    <!--#endregion-->    
+    <!--#region 작업실항목 팝업 화면-->
+    @using (Html.DevExtreme().NamedTemplate("CR_WorkRoomPopupTemplate_1"))
+    {
+
+        <div class="row">
+            <div class="col-12">
+                <div id="CR_WorkRoomPopupGrid" class="box">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("CR_WorkRoomPopupGrid")
+                        .ShowBorders(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(600)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("workroom_cd")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("workroom_cd").Caption("구분");
+                            c.Add().DataField("workroom_nm").Caption("작업장명");
+                            c.Add().DataField("Illumination").Caption("조도기준(Lux)");
+                            c.Add().DataField("workroom_area").Caption("작업장구분");
+                        })
+                        .OnRowDblClick("CR_WorkRoomRowDblClick")
+                    )
+                </div>
+            </div>
+        </div>
+    }
+    <!--#endregion-->
+
+    
+    <div class="mainTop row">
+        <div class="CRUD-btn col-12">
+            @{ Html.SetToolbar(0, true, "Search;Input;Save;Undo");}
+        </div>
+    </div>    
+
+    <div class="row">
+
+        <!--#region 좌측 그리드(설비분류별 설비 목록)-->
+        <div class="col-4 pr-1">
+
+            <div id="HACCP_CodeRegistrationMaster" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("HACCP_CodeRegistrationMasterGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .KeyExpr(masterKey)
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Batch);
+                        editing.AllowUpdating(false);
+                    })
+                    .OnRowInserted("HeaderList_Insert")
+                    .OnToolbarPreparing("CR_ToolbarEdit")
+                    .OnCellClick("CR_empCellEvent")
+                    .OnEditorPreparing("CR_HeaderEditableCell")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("HaccpCode").Caption("문서코드");
+                        c.Add().DataField("doc_name").Caption("문서명");
+                        c.Add().DataField("EmpCode").Caption("담당자코드").CellTemplate(new JS("CR_empcellWithButton"));
+                        c.Add().DataField("CCP_yn").Caption("CCP여부").DataType(GridColumnDataType.Boolean).Width(80)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.CCP_yn == ""Y"" || rowData.CCP_yn == true); }");
+                        c.Add().DataField("BDate").Caption("작성일").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("ChgSerNo").Caption("revision");
+
+                    })
+                    .OnFocusedRowChanged("HACCP_CodeRegistrationMasterGrid_changed")
+                )
+            </div>
+
+        </div>
+        <!--#endregion-->
+        <!--#region 우측 그리드(설비 수집 데이터)-->
+        <div class="col-8 pl-0">
+            <div id="HACCP_CodeRegistrationDetail" class="box mb-0">
+                <div class="divName">
+                    <div class="input-group col-3">
+                        <input type="text" class="form-control" name="HaccpCode" readonly />
+                    </div>
+                    <div class="input-group col-5">
+                        <input type="text" class="form-control" name="HaccpName" readonly />
+                    </div>
+                </div>
+
+                <div class="input-wrapper" style="text-align:right;">
+                    <button type="button" class="btn btn-secondary" name="getChgSerNo" onclick="getChgSerNo()">가져오기</button>
+                    <button type="button" class="btn btn-secondary" name="setFinalConfirm" onclick="setFinalConfirm()">최종승인</button>
+
+                    <button type="button" class="btn btn-secondary" name="btnEdit" onclick="HACCP_CodeRegistration_1Edit()">수정</button>
+                    <button type="button" class="btn btn-secondary" name="btnSave" onclick="HACCP_CodeRegistration_1Save()">저장</button>
+                    <button type="button" class="btn btn-secondary" name="btnUndo" onclick="HACCP_CodeRegistration_1Undo()">취소</button>                    
+                </div>
+
+                @(Html.DevExtreme().TreeList()
+                    .ID("HACCP_CodeRegistrationDetailGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Height(900)
+                    .KeyExpr("CodeCode")
+                    .OnToolbarPreparing("CR_DetailToolbarEdit")
+                    .OnCellClick("CR_ListPopupCellEvent")
+                    .OnInitNewRow("CR_ProcessExam_onInitNewRow")
+                    .OnRowUpdated("itemUpdate")
+                    .OnRowInserted("itemInsert")
+                    .OnRowRemoved("itemDelete")
+                    .RootValue("")
+                    .ParentIdExpr("ParentCode")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("CodeCode").Caption("항목코드").Width(250);
+                        c.Add().DataField("CodeName").Caption("항목명");
+                        c.Add().DataField("CodeDescr").Caption("비고");
+                        c.Add().DataField("ParentCode").Caption("상위코드").Width(100);
+                        c.Add().DataField("CodeUse").Caption("사용").DataType(GridColumnDataType.Boolean).Width(50)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.CodeUse == ""Y"" || rowData.CodeUse == true); }");
+                    })
+                )
+            </div>
+        </div>
+        <!--#endregion-->
+
+    </div>
+
+</div>

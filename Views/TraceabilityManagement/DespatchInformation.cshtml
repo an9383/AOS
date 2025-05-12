@@ -1,0 +1,734 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+<style>
+    /*데이터생성*/
+    #DespatchInformation .darksalmon {
+        background-color: darksalmon;
+        color: black;
+    }
+
+    /*전송준비*/
+    #DespatchInformation .limegreen {
+        background-color: limegreen;
+        color: black;
+    }
+
+    /*전송완료*/
+    #DespatchInformation .dodgerblue {
+        background-color: dodgerblue;
+        color: black;
+    }
+
+    /*전송실패*/
+    #DespatchInformation .red {
+        background-color: red;
+        color: black;
+    }
+
+    /*재전송대기*/
+    #DespatchInformation .lightgrey {
+        background-color: lightgrey;
+        color: black;
+    }
+
+    /* 필수값 입력안되어있을때*/
+    #DespatchInformation .danger {
+        background-color: red;
+        opacity: 0.5;
+        color: black;
+    }
+</style>
+
+@* 출고 정보 준비*@
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var DespatchInformation_FocusedRowData = null;
+
+    var DespatchInformation_tempArray = new Array();
+
+    var DespatchInformation_signChk = "";
+
+    $(function () {
+        setDatePicker("#DespatchInformation .datepicker");
+
+        // 수정중인지 체크
+        DespatchInformation_EditCheck(false);
+        // 그리드 데이터 조회
+        DespatchInformationSearch();
+
+    })
+
+    // 수정중인지 체크
+    function DespatchInformation_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#DespatchInformationSave").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchInformationUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchInformationSearch").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchInformationEdit").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchInformationExcel").dxButton().parent().parent().addClass("display-none");
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: true,
+                allowDeleting: false,
+                mode: 'row'
+            }
+
+            $("#DespatchInformationGrid").dxDataGrid("option", "editing", editing);
+
+        }
+        if (!nowEdit) {
+            $("#DespatchInformationSave").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchInformationUndo").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchInformationSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchInformationEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchInformationExcel").dxButton().parent().parent().removeClass("display-none");
+
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false,
+                mode: 'row'
+            }
+
+            $("#DespatchInformationGrid").dxDataGrid("option", "editing", editing);
+
+        }
+    }
+
+    //출고정보 조회
+    function DespatchInformationSearch() {
+
+        var formData = new FormData($("#DespatchInformationSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/TraceabilityManagement/DespatchInformationSearch',
+            async: false,
+            data: {
+                s_date: formData.get("create_date_S"),
+                e_date: formData.get("create_date_E")
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#DespatchInformationGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#DespatchInformationGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    DespatchInformation_FocusedRowData = null;
+                }
+            }
+        })
+
+        UtilView.setGridFocus("G", "DespatchInformationGrid");
+    }
+
+
+    //출고 정보 수정
+    function DespatchInformationEdit() {
+
+        if (UtilView.isEmpty(DespatchInformation_FocusedRowData)) {
+            alert("수정할 항목이 없습니다."); return;
+        }
+
+        //if (DespatchInformation_FocusedRowData.send_status != "0") {
+        //    alert("이미 전송준비가 된 항목은 수정할 수 없습니다."); return;
+        //}
+
+        DespatchInformation_EditCheck(true);
+    }
+
+    //출고 정보 저장
+    async function DespatchInformationSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        await $("#DespatchInformationGrid").dxDataGrid("instance").saveEditData();
+
+        if (UtilView.isEmpty(DespatchInformation_tempArray)) {
+            alert("수정된 출고 정보가 없습니다."); return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/DespatchInformationSave',
+            data: {
+                paramData: JSON.stringify(DespatchInformation_tempArray)
+            },
+            //dataType: 'json',
+            success: function (result) {
+
+                if (result.length > 0) {
+                    alert("저장하였습니다.");
+
+                } else {
+                    alert("저장 실패하였습니다");
+                }
+
+                DespatchInformation_tempArray = new Array();
+
+            }
+        })
+
+        DespatchInformation_EditCheck(false);
+        DespatchInformationSearch();
+
+        $("#DespatchInformationGrid").dxDataGrid("instance").deselectAll();
+
+    }
+
+    //수정 취소
+    function DespatchInformationUndo() {
+
+        DespatchInformation_EditCheck(false);
+        DespatchInformationSearch();
+
+    }
+
+
+    //출고 정보 엑셀다운
+    function DespatchInformationExcel() {
+        gridExportToExcel("DespatchInformationGrid", "DespatchInformationData");
+    }
+
+    //출고 데이터 생성
+    function DespatGenerate() {
+
+        var data = $("#DespatchInformationGrid").dxDataGrid("instance").option("dataSource");
+
+        if (UtilView.isEmpty(data)) {
+
+            //전체불러오기(insert)
+            DepatchLoadAll_DateBetween();
+
+        } else {
+            var check = false;
+
+            var selectedRowsData = $("#DespatchInformationGrid").dxDataGrid("instance").getSelectedRowsData();
+
+            var date_S = $("#DespatchInformationSearchForm input[name='create_date_S']").val();
+
+            //체크한 값 중
+            $.map(selectedRowsData, function (value, index) {
+
+                //전송완료 상태가 아닐때, 삭제후 다시 입력
+                if (value.send_status != "2") {
+
+                    check = true;
+
+                    $.ajax({
+                        type: 'POST',
+                        async: false,
+                        url: '/TraceabilityManagement/DepatchLoadPart',
+                        data: {
+                            date_S: date_S,
+                            gms_despatch_order_no: value.gms_despatch_order_no,
+                            gms_item_issue_id: value.gms_item_issue_id
+                        },
+                        success: function (result) {
+
+                            if (result.length > 0) {
+                                alert("삭제하였습니다.");
+                            } else {
+                                alert("삭제 실패하였습니다.");
+                            }
+
+                        }
+                    })
+
+                }
+
+            });
+
+            if (!check) {
+                //전체불러오기(insert)
+                DepatchLoadAll_DateBetween();
+            }
+        }
+
+        $("#DespatchInformationGrid").dxDataGrid("instance").deselectAll();
+        DespatchInformationSearch();
+
+        var Data = $("#DespatchInformationGrid").dxDataGrid("instance").option("dataSource");
+
+        if (UtilView.isEmpty(Data)) {
+            alert("해당 기간에 출고된 내역이 없습니다."); return;
+        }
+
+
+    }
+
+
+    //날짜 해당 전체 불러오기(출고정보 입력)
+    function DepatchLoadAll_DateBetween() {
+        var s_date = $("#DespatchInformationSearchForm input[name='create_date_S']").val();
+        var e_date = $("#DespatchInformationSearchForm input[name='create_date_E']").val();
+
+        //시작 ~ 종료일 사이 동안의 출고내역을 확인하여 데이터를 만들어줌.
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/DepatchLoadAll',
+            data: {
+                s_date: s_date,
+                e_date: e_date
+            },
+            success: function (result) {
+
+            }
+        })
+    }
+
+    //출고 전송준비
+    function DespatchPrepare() {
+
+
+        //1. 그리드 데이터가 있는지 체크
+        var data = $("#DespatchInformationGrid").dxDataGrid("instance").option("dataSource");
+
+        if (UtilView.isEmpty(data)) {
+            alert("전송할 데이터가 없습니다"); return;
+        }
+
+        //2. 선택한 값(체크) 중에 데이터생성(0)이 아닌 다른 상태가 있는지 체크
+
+        var selectedRowsData = $("#DespatchInformationGrid").dxDataGrid("instance").getSelectedRowsData();
+
+        if (UtilView.isEmpty(selectedRowsData)) {
+            alert("전송할 항목을 체크해주세요.");
+            return;
+        }
+        else {
+            var check_send = false;
+
+            $.map(selectedRowsData, function (value, index) {
+
+                if (value.send_status == "0") check_send = true;
+                else {
+                    check_send = false;
+                    return;
+                }
+            });
+
+            if (!check_send) {
+                alert("선택된 항목 중에 정보로드 상태가 아닌 것이 있습니다.");
+                return;
+            }
+
+            //3. 조건충족시 전자서명(준비상태로 변경하기 위해)
+            DespatchInformation_signChk = "I";
+
+            //전자서명 팝업
+            var popup = $("#DespatchInformation_SignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#DespatchInformation_SignPopupTemplate"));
+            popup.show();
+        }
+
+    }
+
+    //출고 준비서명 취소
+    function DespatchSignCancel() {
+
+        //그리드 포커스된 로우만 서명취소(단일선택)
+        if (UtilView.isEmpty(DespatchInformation_FocusedRowData)) return;
+
+        if (UtilView.isEmpty(DespatchInformation_FocusedRowData.confirm_emp_cd)) {
+            alert("전송준비 서명이 되어있지 않습니다."); return;
+        }
+
+        if (DespatchInformation_FocusedRowData.send_status == "1") {
+
+            if (!confirm("전송준비를 취소하시겠습니까?")) return;
+
+            DespatchInformation_signChk = "D";
+
+            //전자서명 팝업
+            var popup = $("#DespatchInformation_SignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#DespatchInformation_SignPopupTemplate"));
+            popup.show();
+
+        } else {
+            alert("전송준비 상태가 아닙니다."); return;
+        }
+    }
+
+    //식품이력추적관리 필수데이터 입력 확인
+    function DepatchDataCheck(gms_seq) {
+
+         //FOOD_TGOW 필수 사항 : 출고일, 식품이력추적등록번호, 식품이력추적관리번호, 출고지명, 출고지 사업자등록번호, 출고단위, 출고수량
+         //tgow_dt, reg_num, food_histrace_num, to_pst_nm, to_pst_cd, tgow_unt, qty
+         var check = false;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/DepatchDataCheck',
+            data: {
+                gms_seq: gms_seq
+            },
+            success: function (result) {
+                check = result;
+                console.log(result);
+            }
+        })
+
+        if ("Y" == check) return true;
+        else return false;
+    }
+
+    //출고 준비상태 변경
+    function DespatchPreparePart(gms_seq, tgow_dt, emp_cd) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/DespatchPreparePart',
+            data: {
+                gms_seq: gms_seq,
+                tgow_dt: tgow_dt,
+                emp_cd: emp_cd
+            },
+            success: function (result) {
+
+            }
+        })
+    }
+
+
+    //출고 준비상태 취소
+    function DespatchPrepareCancel() {
+
+        if (UtilView.isEmpty(DespatchInformation_FocusedRowData)) return;
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/TraceabilityManagement/DespatchPrepareCancel',
+            data: {
+                gms_seq: DespatchInformation_FocusedRowData.gms_seq
+            },
+            success: function (result) {
+
+            }
+        })
+
+    }
+
+    //그리드 이벤트
+
+    //출고 정보 포커스 변경
+    function DespatchInformationGrid_FocusedRowChanged(e) {
+
+        //서명자, 서명시간 초기화
+        $("#DespatchInformationSearchForm input[name=confirm_emp_nm]").val("");
+        $("#DespatchInformationSearchForm input[name=confirm_emp_time]").val("");
+
+        if (!e.row || !e.row.data) {
+            DespatchInformation_FocusedRowData = null;
+
+        } else {
+            DespatchInformation_FocusedRowData = e.row.data;
+
+            //서명자, 서명시간 설정
+            var confirm_time = new Date(DespatchInformation_FocusedRowData.confirm_emp_time).format("yyyy-MM-dd HH:mm");
+            $("#DespatchInformationSearchForm input[name=confirm_emp_nm]").val(DespatchInformation_FocusedRowData.confirm_emp_nm);
+            $("#DespatchInformationSearchForm input[name=confirm_emp_time]").val(confirm_time);
+        }
+    }
+
+
+    //출고정보 수정모드일때, 수정된 데이터 저장
+    function DespatchInformation_OnRowUpdated(e) {
+        var data = e.data;
+        DespatchInformation_tempArray.push(data);
+
+    }
+
+    //출고 정보 상태컬럼 배경설정
+    function DespatchInformationGridCellPrepared(e) {
+
+        //상태 컬럼
+        if (e.rowType == "data" && e.column.dataField === "send_status_nm") {
+            if (e.data.send_status == "0") {              //데이터생성        
+                e.cellElement.addClass('darksalmon');
+            } else if (e.data.send_status == "1") {       //전송준비
+                e.cellElement.addClass('limegreen');
+            } else if (e.data.send_status == "2") {       //전송완료
+                e.cellElement.addClass('dodgerblue');
+            } else if (e.data.send_status == "3") {       //전송실패
+                e.cellElement.addClass('red');
+            } else if (e.data.send_status == "4") {       //재전송대기
+                e.cellElement.addClass('lightgrey');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "food_histrace_num") {
+            if (UtilView.isEmpty(e.data.food_histrace_num)) {
+                e.cellElement.addClass('danger');
+            }
+        } else if (e.rowType == "data" && e.column.dataField === "reg_num") {
+            if (UtilView.isEmpty(e.data.reg_num)) {
+                e.cellElement.addClass('danger');
+            }
+        }
+    }
+
+    function DespatchInformation_OnEditingStart(e) {
+
+        if ("0" != e.data.send_status) {
+            alert("데이터생성 상태 이외의 항목은 수정할 수 없습니다.");
+            e.cancel = true;
+        } 
+    }
+
+
+    //전자서명 
+
+    //서명 폼 초기화
+    function DespatchInformation_SignFormReset() {
+        $('#DespatchInformationSignForm')[0].reset();
+    }
+
+    //서명자 확인 -> 유효한 사용자 -> 출고정보 준비상태로 변경
+    function DespatchInformation_SignSubmit() {
+
+        setTimeout(function () {
+            var popup = $("#DespatchInformation_SignPopup").dxPopup("instance");
+            popup.hide();
+        }, 1000);
+
+        //유효한 사용자인지 확인
+        var validate_emp_cd = DespatchInformation_SignIDValidation();
+        if (validate_emp_cd == "") return;
+
+
+        //두 가지 서명(준비, 취소)
+        //1. 전송준비 서명
+        if (DespatchInformation_signChk == "I") {
+            DespatchInformation_signChk = "";
+
+            //체크된 것만 전송준비로 상태 변경
+            var selectedRowsData = $("#DespatchInformationGrid").dxDataGrid("instance").getSelectedRowsData();
+
+            if (UtilView.isEmpty(selectedRowsData)) return;
+
+            $.map(selectedRowsData, function (value, index) {
+
+                if (value.send_status == "0") {
+
+                    //필수항목 입력 제대로되었는지 체크 -> 전송준비 상태로 변경
+                    if (DepatchDataCheck(value.gms_seq)) {
+                        DespatchPreparePart(value.gms_seq, value.tgow_dt, validate_emp_cd);
+                    }
+                    else {
+                        alert("필수항목 중 입력되지 않은 항목이 있습니다;\n 식품이력추적관리번호 : " + value.food_histrace_num);
+                        return;
+                    }
+
+                }
+            });
+
+        }
+
+        //2. 전송준비 취소 서명
+        if (DespatchInformation_signChk == "D") {
+            DespatchInformation_signChk = "";
+
+            DespatchPrepareCancel();
+        }
+
+        DespatchInformation_signChk = "";
+        DespatchInformationSearch();
+    }
+
+    //유효 사용자 확인
+    function DespatchInformation_SignIDValidation() {
+        var emp_cd = "";
+
+        var data = new FormData($('#DespatchInformationSignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (!result) {
+                    alert("잘못된 ID,PW 입니다.");
+                }
+
+                emp_cd = data.get("txt_ID");
+
+                var json = JSON.parse(result)[0];
+
+                //로그인폼 부서, 사원명 설정
+                $("#DespatchInformationSignForm input[name='dept_nm']").val(json.dept_nm);
+                $("#DespatchInformationSignForm input[name='emp_nm']").val(json.emp_nm);
+            }
+        });
+
+        return emp_cd;
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @* 전자서명 공통 팝업*@
+    @using (Html.DevExtreme().NamedTemplate("DespatchInformation_SignPopupTemplate"))
+    {
+        @*<h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>*@
+
+        <form id="DespatchInformationSignForm">
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+            <br />
+            <div class="input-wrapper">
+                <label class="col-3">부서</label>
+                <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+                <label class="col-3">성명</label>
+                <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+            </div>
+        </form>
+
+        <div class="align-center margin-top">
+            <button class="btn btn-secondary" onclick="DespatchInformation_SignSubmit()">확인</button>
+        </div>
+    }
+
+    @(Html.DevExtreme().Popup()
+        .ID("DespatchInformation_SignPopup")
+        .Width(500)
+        .Height(230)
+        .ShowTitle(true)
+        .Title("전자서명 - 수기서명과 동일한 효력을 갖습니다.")
+        .OnHidden("DespatchInformation_SignFormReset")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+    @* 전자서명 공통 팝업*@
+
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">출고일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="create_date_S" value="@DateTime.Now.AddDays(-7).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="create_date_E" value="@DateTime.Now.ToShortDateString()">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="DespatGenerate()">데이터 생성</button>
+
+                    <div class="input-group input-group-sm col-1"></div>
+
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="DespatchPrepare()">전송준비</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="DespatchSignCancel()">준비서명 취소</button>
+                    <div class="input-group input-group-sm col-1">
+                        <input type="text" class="form-control text-center" name="confirm_emp_nm" readonly>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <input type="text" class="form-control text-center" name="confirm_emp_time" readonly>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel;");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DespatchInformationGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always).AllowSelectAll(false))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(false)
+                    .KeyExpr("gms_seq")
+                    .Height(800)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnCellPrepared("DespatchInformationGridCellPrepared")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("send_status_nm").Caption("상태").AllowEditing(false);
+                        c.Add().DataField("gms_item_cd").Caption("제품코드").AllowEditing(false);
+                        c.Add().DataField("gms_item_nm").Caption("제품명").AllowEditing(false);
+                        c.Add().DataField("reg_num").Caption("식품이력추적등록번호").AllowEditing(false);
+                        c.Add().DataField("food_histrace_num").Caption("식품이력추적관리번호").AllowEditing(false);
+                        c.Add().DataField("gms_lot_no").Caption("제조번호").AllowEditing(false);
+                        c.Add().DataField("tgow_unt").Caption("출고단위").AllowEditing(false);
+                        c.Add().DataField("qty").Caption("출고수량").AllowEditing(false);
+                        c.Add().DataField("gms_despatch_order_no").Caption("전표번호").AllowEditing(false);
+                        c.Add().DataField("tgow_dt").Caption("출고일자").AllowEditing(false);
+                        c.Add().DataField("gms_cust_cd").Caption("거래처코드").AllowEditing(false);
+                        c.Add().DataField("to_pst_nm").Caption("출고지명").AllowEditing(false);
+                        c.Add().DataField("to_pst_cd").Caption("사업자번호").AllowEditing(false);
+                        c.Add().DataField("to_pst_addr").Caption("출고지주소").AllowEditing(false);
+                        c.Add().DataField("remark").Caption("비고").AllowEditing(true);
+                        c.Add().DataField("temp_1").Caption("임시필드1").AllowEditing(true);
+                        c.Add().DataField("temp_2").Caption("임시필드2").AllowEditing(true);
+                        c.Add().DataField("temp_3").Caption("임시필드3").AllowEditing(true);
+                    })
+                    .OnFocusedRowChanged("DespatchInformationGrid_FocusedRowChanged")
+                    .OnRowUpdated("DespatchInformation_OnRowUpdated")
+                    .OnEditingStart("DespatchInformation_OnEditingStart")
+                )
+
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,272 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "EmployeeEduHistory";
+}
+@{
+    var employeeEduHistoryData = @Html.Raw(Json.Encode(ViewBag.EmployeeEduHistoryData.Data));
+    var employeeEduHistory_Emp = @Html.Raw(Json.Encode(ViewBag.EmployeeEduHistoryEmp.Data));
+    var employeeEduHistory_Dept = @Html.Raw(Json.Encode(ViewBag.EmployeeEduHistoryDept.Data));
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+}
+
+<script id="EmployeeEduHistoryJs" type="text/javascript">
+
+    $(function () {
+        var EEH_employee = @employeeEduHistory_Emp;
+        var EEH_department = @employeeEduHistory_Dept;
+
+        var employeeEduHistory_Data = @employeeEduHistoryData;
+
+
+        var EEH_emp_columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var EEH_dept_columns = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+
+        createPopup("EmployeeEduHistory_Emp", "사원조회", EEH_employee, EEH_emp_columns, "emp_cd");
+        createPopup("EmployeeEduHistory_Dept", "부서조회", EEH_department, EEH_dept_columns, "dept_cd");
+
+        setDatePicker("#EmployeeEduHistory .datepicker");
+
+        if (employeeEduHistory_Data.length <= 0) {
+            $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@employeeEduHistoryData));
+            $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+
+    });
+
+    function EmployeeEduHistorySearch() {
+
+        var formData = new FormData();
+
+        formData.append("sdate", $("#EEH_search_sdate").val());
+        formData.append("edate", $("#EEH_search_edate").val());
+        formData.append("title", $("#EEH_search_title").val());
+        if ($("#EEH_search_emp_nm").val() == "") {
+            formData.append("emp_cd", "");
+        }
+        else {
+            formData.append("emp_cd", $("#EEH_search_emp_cd").val());
+        }
+        if ($("#EEH_search_dept_nm").val() == "") {
+            formData.append("dept_cd", "");
+        }
+        else {
+            formData.append("dept_cd", $("#EEH_search_dept_cd").val());
+        }
+
+
+        $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("dataSource", []);
+        $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+
+        call_EmployeeEduHistorySearch(formData);
+    }
+
+
+    function call_EmployeeEduHistorySearch(formData){
+
+        $.ajax({
+            type: 'POST',
+            url: '/Education/EmployeeEduHistorySearch',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result == "") return;
+
+                var json = JSON.parse(result);
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                //alert(json.messege);
+                $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#EmployeeEduHistoryGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    //사원 검색
+    function EmployeeEduHistory_EmpSearch() {
+        //팝업띄우고
+        var popup = $("#EmployeeEduHistory_EmpPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function EmployeeEduHistory_EmpRowDblClick(selectedItems) {
+
+        $("#EEH_search_emp_cd").val(selectedItems.values[0]);
+        $("#EEH_search_emp_nm").val(selectedItems.values[1]);
+
+        var popup = $("#EmployeeEduHistory_EmpPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //부서 검색
+    function EmployeeEduHistory_DeptSearch() {
+        //팝업띄우고
+        var popup = $("#EmployeeEduHistory_DeptPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+
+    function EmployeeEduHistory_DeptRowDblClick(selectedItems) {
+
+        $("#EEH_search_dept_cd").val(selectedItems.values[0]);
+        $("#EEH_search_dept_nm").val(selectedItems.values[1]);
+
+        var popup = $("#EmployeeEduHistory_DeptPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    //#region 미리보기 (리포트)
+    function EmployeeEduHistoryPrint() {
+
+        var eeh_report = new ReportHelper($(event.target));
+
+        
+        var grid = $("#EmployeeEduHistoryGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("교육 목록이 없습니다.");
+            return;
+        }
+        var gridData = getGridRowByKey("EmployeeEduHistoryGrid", grid.option("focusedRowKey"));
+
+
+        var param = "sdate:" + gridData.edu_start_date +
+            ";edate:" + gridData.edu_start_date +
+            ";emp_cd:" + gridData.emp_cd +
+            ";dept_cd:" + gridData.dept_cd + 
+                ";title:" + gridData.title +
+                ";complete_yn:" + gridData.complete_yn;
+
+        eeh_report.addParam({
+            objFile: { path: "Education", RptFileName: "EducationHistory" },
+            objSp: { SpName: "SP_EmployeeEduHistory_AOS", gubun: "EmployeeEduHistoryReport", reportParam: param },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+        eeh_report.testObj();
+        eeh_report.run();
+    }
+
+
+    //#endregion
+
+
+</script>
+
+<div id="EmployeeEduHistory" autoresize="Y">
+
+    <div id="EmployeeEduHistory_EmpPopup"></div>
+    <div id="EmployeeEduHistory_DeptPopup"></div>
+
+    <div class="mainTop row p-0 m-0">
+        <div class="col-10 p-0" id="EmployeeEduHistorySearchOptions">
+            <form id="EmployeeEduHistorySearchForm">
+                <div class="input-wrapper col-12" style="padding:0px">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="EEH_search_sdate" id="EEH_search_sdate" value="@DateTime.Today.ToShortDateString()" />
+                        <Label class="p-1">~</Label>
+                        <input type="text" class="form-control datepicker" name="EEH_search_edate" id="EEH_search_edate" value="@DateTime.Today.AddMonths(1).ToShortDateString()" />
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사원</span>
+                        </div>
+                        <input type="hidden" hidden name="EEH_search_emp_cd" id="EEH_search_emp_cd" />
+                        <input type="text" class="form-control" name="EEH_search_emp_nm" id="EEH_search_emp_nm" />
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEduHistory_EmpSearch()">찾기</button>
+                        </div>
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">부서</span>
+                        </div>
+                        <input type="hidden" hidden name="EEH_search_dept_cd" id="EEH_search_dept_cd" />
+                        <input type="text" class="form-control" name="EEH_search_dept_nm" id="EEH_search_dept_nm" />
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-secondary" onclick="EmployeeEduHistory_DeptSearch()">찾기</button>
+                        </div>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">교육과정</span>
+                        </div>
+                        <input type="text" class="form-control" name="EEH_search_title" id="EEH_search_title" />
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="col-2 p-0">
+            @*조회버튼 only*@
+            @{Html.SetToolbar(0, true, "Search;Print;Preview");}
+        </div>
+    </div>
+
+    <div class="row p-0 m-0">
+        <div class="col-12 p-0">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>교육 이력</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeeEduHistoryGrid")
+                    .Height("900")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .KeyExpr("no")
+                    .ShowBorders(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("emp_nm").Caption("사원").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("dept_nm").Caption("부서").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_no").Caption("교육번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("title").Caption("교육과정").Width("25%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_start_date").Caption("교육일자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_start_time").Caption("시작시간").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_end_time").Caption("종료시간").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("edu_time").Caption("교육시간").Alignment(HorizontalAlignment.Center);
+                    })
+                )
+            </div>
+        </div>
+    </div>
+
+</div>

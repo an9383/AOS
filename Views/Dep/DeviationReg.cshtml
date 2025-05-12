@@ -1,0 +1,1108 @@
+﻿@*일탈 등록*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var DeviationRegData = @Html.Raw(Json.Encode(ViewBag.DeviationRegData.Data));
+    var DeviationRegAuth = @Html.Raw(Json.Encode(ViewBag.DeviationRegAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+    var workroomPopupJson = @Html.Raw(Json.Encode(ViewBag.workRoomPopupData.Data));
+    var itemPopupJson = @Html.Raw(Json.Encode(ViewBag.itemPopupData.Data));
+    //var testItemPopupJson = @Html.Raw(Json.Encode(ViewBag.testItemPopupData.Data));
+    var equipPopupJson = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    var deptPopupJson = @Html.Raw(Json.Encode(ViewBag.deptPopupData.Data));
+}
+
+
+<script type="text/javascript" id="DeviationRegJs">
+    // SP 구문, gubun 변수
+    var toDay = new Date();
+    var _CRUDGubun = "";
+
+    $(document).ready(function () {
+        DeviationRegCommonEditCheck(false);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+
+        $("#DeviationRegSearchForm #s_start_date").val(getFormatDate(sDate));
+        $("#DeviationRegSearchForm #s_end_date").val(getFormatDate(toDay));
+
+        $("#DeviationRegSearchForm #dept_nm").val(sessionStorage.getItem("deptNM"));
+        $("#DeviationRegSearchForm #deptEmp_nm").val(sessionStorage.getItem("loginNM"));
+        $("#DeviationRegSearchForm #s_dep_status").val("1");
+
+        if (@Html.Raw(Json.Encode(ViewBag.DeviationRegData.Data)) != "") {
+            $("#DeviationRegGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@DeviationRegData));
+            $("#DeviationRegGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#DeviationRegGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            DeviationRegSelect(JSON.parse(@DeviationRegData)[0]);
+        }
+
+        var popupColumns = {
+            "employee": [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ]
+            , "workroom": [
+                { dataField: "workroom_cd", caption: "장소코드" },
+                { dataField: "workroom_nm", caption: "장소명" }
+            ]
+            , "item": [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ]
+            , "testItem": [
+                { dataField: "testitem_cd", caption: "항목코드" },
+                { dataField: "testitem_nm", caption: "항목명" }
+            ]
+            , "equip": [
+                { dataField: "equip_cd", caption: "장치코드" },
+                { dataField: "equip_nm", caption: "장치명" }
+            ]
+            , "department": [
+                { dataField: "dept_cd", caption: "장치코드" },
+                { dataField: "dept_nm", caption: "장치명" }
+            ]
+        };
+
+        createPopup("S_DetectEmpSearch", "발견자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("DetectEmpSearch", "작성자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("DeviationConfrimEmpSearch", "CAPA담당자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("DeviationDeptCdSearch", "부서 조회", @deptPopupJson, popupColumns.department, "dept_cd");
+        createPopup("DeviationPlaceSearch", "장소 조회", @workroomPopupJson, popupColumns.workroom, "workroom_cd");
+        createPopup("DeviationRefItemSearch", "제품 조회", @itemPopupJson, popupColumns.item, "item_cd");
+        //createPopup("DeviationRefTestItemSearch", "항목 조회", @*@testItemPopupJson*@, popupColumns.testItem, "testitem_cd");
+        createPopup("DeviationRefEquipSearch", "장치 조회", @equipPopupJson, popupColumns.equip, "equip_cd");
+
+
+        // CRUD체크
+        var DeviationRegAuth = JSON.parse(@DeviationRegAuth)[0];
+        if (DeviationRegAuth.form_query != "Y") {
+            $("#DeviationRegSearch").remove();
+        }
+        if (DeviationRegAuth.form_insert != "Y") {
+            $("#DeviationRegInput").remove();
+        }
+        if (DeviationRegAuth.form_edit != "Y") {
+            $("#DeviationRegEdit").remove();
+        }
+        if (DeviationRegAuth.form_delete != "Y") {
+            $("#DeviationRegDelete").remove();
+        }
+
+        setDatePicker("#DeviationReg .datepicker");
+
+    })
+
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function DeviationRegCommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#DeviationRegSave").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegSearch").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegInput").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegEdit").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegDelete").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegExcel").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegPrint").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegPreview").dxButton().parent().parent().addClass("display-none");
+
+            $("#DeviationRegDetailForm #deviation_place").css("background", "#f6c4db");
+            $("#DeviationRegDetailForm #detect_emp_cd").css("background", "#f6c4db");
+            $("#DeviationRegDetailForm #deviation_radio_div").css("background", "#f6c4db");
+
+            $("#DeviationRegGrid").dxDataGrid("option", "disabled", true);
+            $("#DeviationRegDetailForm :disabled").attr('disabled', false);
+
+            _CRUDGubun = true;
+        }
+        if (!nowEdit) {
+            $("#DeviationRegSave").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegUndo").dxButton().parent().parent().addClass("display-none");
+            $("#DeviationRegSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegInput").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegExcel").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegPrint").dxButton().parent().parent().removeClass("display-none");
+            $("#DeviationRegPreview").dxButton().parent().parent().removeClass("display-none");
+
+            $("#DeviationRegDetailForm #deviation_place").css("background", "");
+            $("#DeviationRegDetailForm #detect_emp_cd").css("background", "");
+            $("#DeviationRegDetailForm #deviation_radio_div").css("background", "");
+
+            $("#DeviationRegGrid").dxDataGrid("option", "disabled", false);
+            $("#DeviationRegDetailForm :enabled").attr('disabled', true);
+
+            _CRUDGubun = false;
+        }
+    }
+
+
+    // 조회버튼 기능
+    function DeviationRegSearch() {
+
+        $("#DeviationRegRightMain_1 #DeviationRegDetailForm")[0].reset();
+        $("#DeviationRegDetailForm #detect_date").val("");
+
+        gridReset("DeviationRegGrid");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/DeviationRegSearch',
+            data: {
+                sDate: $("#DeviationRegSearchForm #s_start_date").val(),
+                eDate: $("#DeviationRegSearchForm #s_end_date").val(),
+                emp_cd: $("#DeviationRegSearchForm #s_detect_emp").val(),
+                status: $("#DeviationRegSearchForm #s_dep_status").val()
+            },
+            success: function (result) {
+                if (result == "") {
+                    DeviationRegCommonEditCheck(false);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#DeviationRegGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#DeviationRegGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#DeviationRegGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+
+                DeviationRegSelect(json[0]);
+
+                _CRUDGubun = "";
+                DeviationRegCommonEditCheck(false);
+            }
+        });
+    }
+
+
+    // 입력버튼 기능
+    function DeviationRegInput() {
+        DeviationRegCommonEditCheck(true);
+        _CRUDGubun = "I";
+
+
+        $("#DeviationRegRightMain_1 #DeviationRegDetailForm")[0].reset();
+
+        $("#DeviationRegDetailForm #detect_date").val("@DateTime.Today.ToShortDateString()");
+        $("#DeviationRegDetailForm #deviation_status_nm").val("등록");
+        $("#DeviationRegDetailForm #detect_emp_cd").val(sessionStorage.getItem("loginCD"));
+        $("#DeviationRegDetailForm #detect_emp_nm").val(sessionStorage.getItem("loginNM"));
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/CheckConfirmEmp',
+            data: {
+                emp_cd: $("#DeviationRegDetailForm #detect_emp_cd").val()
+            },
+            success: function (result) {
+
+
+                if (result <= 0) {
+
+                    return;
+                } else {
+                    var json = JSON.parse(result);
+
+
+                    $("#DeviationRegDetailForm #deviation_confirm_emp").val(json[0].manager_emp_cd);
+                    $("#DeviationRegDetailForm #confirm_emp_nm").val(json[0].manager_emp_nm);
+
+                }
+            }
+        });
+
+    }
+
+
+    // 수정버튼 기능
+    function DeviationRegEdit() {
+        var grid = $("#DeviationRegGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 항목이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("DeviationRegGrid", grid.option("focusedRowKey"));
+
+            if (data.deviation_status == "1") {
+                DeviationRegCommonEditCheck(true);
+                _CRUDGubun = "U";
+
+            } else {
+                alert("등록 상태일 때만 수정할 수 있습니다");
+
+                return;
+            }
+
+        }
+    }
+
+
+    // 취소버튼 기능
+    function DeviationRegUndo() {
+        DeviationRegCommonEditCheck(false);
+
+        DeviationRegSelect({ rowIndex: "0" });
+    }
+
+
+    // 저장버튼 기능
+    function DeviationRegSave() {
+        $("#DeviationRegDetailForm input[name='deviation_type']")[0].value = "2";
+        $("#DeviationRegDetailForm input[name='deviation_type']")[1].value = "1";
+
+        var input_arr = $("#DeviationRegDetailForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+                if (input_arr[i].value.length <= 0) {
+
+                    alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                    return;
+                }
+        }
+
+        var type = $("#DeviationRegDetailForm input[name='deviation_type']:checked");
+
+        if (type.length <= 0) {
+
+            alert("필수 입력 자료를 모두 입력하십시요!!");
+
+            return;
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/DeviationRegSave',
+            data: {
+                deviation_no: $("#DeviationRegDetailForm #deviation_no").val(),
+                deviation_title: $("#DeviationRegDetailForm #deviation_title").val(),
+                detect_date: $("#DeviationRegDetailForm #detect_date").val(),
+                deviation_place: $("#DeviationRegDetailForm #deviation_place").val(),
+                detect_emp_cd: $("#DeviationRegDetailForm #detect_emp_cd").val(),
+                deviation_contents: $("#DeviationRegDetailForm #deviation_contents").val(),
+                detect_method: $("#DeviationRegDetailForm #detect_method").val(),
+                deviation_doc: $("#DeviationRegDetailForm #deviation_doc").val(),
+                deviation_type: type.val(),
+                deviation_dept_cd: $("#DeviationRegDetailForm #deviation_dept_cd").val(),
+                deviation_ref_no: $("#DeviationRegDetailForm #deviation_ref_no").val(),
+                deviation_ref_process_cd: $("#DeviationRegDetailForm #deviation_ref_process_cd").val(),
+                deviation_ref_item_cd: $("#DeviationRegDetailForm #deviation_ref_item_cd").val(),
+                deviation_ref_test_item: $("#DeviationRegDetailForm #deviation_ref_test_item").val(),
+                deviation_ref_equip_cd: $("#DeviationRegDetailForm #deviation_ref_equip_cd").val(),
+                deviation_confirm_emp: $("#DeviationRegDetailForm #deviation_confirm_emp").val(),
+                deviation_early_respond: $("#DeviationRegDetailForm #deviation_early_respond").val(),
+                deviation_request_remark: $("#DeviationRegDetailForm #deviation_request_remark").val(),
+                _CRUDGubun: _CRUDGubun
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    DeviationRegSearch();
+                } else {
+                    alert("실패하였습니다.");
+                }
+            }
+        })
+    }
+
+
+    // 삭제버튼 기능
+    function DeviationRegDelete() {
+        var grid = $("#DeviationRegGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 항목이 없습니다");
+
+            return;
+        } else {
+            var data = getGridRowByKey("DeviationRegGrid", grid.option("focusedRowKey"));
+
+            if (data.deviation_status == "1") {
+                if (confirm("삭제하시겠습니까?")) {
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Dep/DeviationRegDelete',
+                        data: {
+                            deviation_no: data.deviation_no
+                        },
+                        success: function (result) {
+
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            if (json.message != "") {
+                                alert(json.message);
+                                _CRUDGubun = "D";
+
+                                DeviationRegSearch();
+
+                            } else {
+                                alert("실패하였습니다.");
+                            }
+                        }
+                    })
+                }
+            } else {
+                alert("등록 상태일 때만 수정할 수 있습니다");
+
+                return;
+            }
+
+        }
+
+    }
+
+
+    // 프린트 기능
+    function DeviationRegPrint() {
+        // report 출력 객체 생성
+        var report = new ReportHelper($(event.target));
+        //var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "Deviation", RptFileName: "DeviationRequest" },
+            objSp: {
+                SpName: "SP_DeviationReg_Y", gubun: "RPT",
+                reportParam: "deviation_no:" + $("#DeviationRegDetailForm #deviation_no").val()
+                    + ";table_id:deviation_master"
+            },
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+        });
+
+
+        report.run();
+    }
+
+
+    // 엑셀버튼 기능
+    function DeviationRegExcel() {
+        gridExportToExcel("DeviationRegGrid", "DeviationRegGrid");
+    }
+
+
+    // 미리보기버튼 기능
+    function DeviationRegPreview() {
+
+    }
+
+    // #endregion
+
+
+    // #region 그리드 선택 시
+    // 메인 그리드 선택 시
+    function DeviationRegSelect() {
+        $("#DeviationRegRightMain_1 #DeviationRegDetailForm")[0].reset();
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#DeviationRegGrid").dxDataGrid("instance");
+
+            if (grid.option("focusedRowIndex") >= 0) {
+
+                data = getGridRowByKey("DeviationRegGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#DeviationRegDetailForm #deviation_no").val(data.deviation_no);
+        $("#DeviationRegDetailForm #deviation_title").val(data.deviation_title);
+        $("#DeviationRegDetailForm #detect_date").val(data.detect_date);
+        $("#DeviationRegDetailForm #deviation_place").val(data.deviation_place);
+        $("#DeviationRegDetailForm #deviation_place_nm").val(data.deviation_place_nm);
+        $("#DeviationRegDetailForm #detect_emp_cd").val(data.detect_emp_cd);
+        $("#DeviationRegDetailForm #detect_emp_nm").val(data.detect_emp_nm);
+        $("#DeviationRegDetailForm #deviation_contents").val(data.deviation_contents);
+        $("#DeviationRegDetailForm #detect_method").val(data.detect_method);
+        $("#DeviationRegDetailForm #deviation_doc").val(data.deviation_doc);
+        $("#DeviationRegDetailForm #deviation_dept_cd").val(data.deviation_dept_cd);
+        $("#DeviationRegDetailForm #deviation_dept_nm").val(data.deviation_dept_nm);
+        $("#DeviationRegDetailForm #deviation_ref_no").val(data.deviation_ref_no);
+        $("#DeviationRegDetailForm #deviation_ref_process_cd").val(data.deviation_ref_process_cd);
+        $("#DeviationRegDetailForm #deviation_ref_process_nm").val(data.deviation_ref_process_nm);
+        $("#DeviationRegDetailForm #deviation_ref_item_cd").val(data.deviation_ref_item_cd);
+        $("#DeviationRegDetailForm #ref_item_nm").val(data.ref_item_nm);
+        $("#DeviationRegDetailForm #deviation_ref_test_item").val(data.deviation_ref_test_item);
+        $("#DeviationRegDetailForm #ref_test_item_nm").val(data.ref_test_item_nm);
+        $("#DeviationRegDetailForm #deviation_ref_equip_cd").val(data.deviation_ref_equip_cd);
+        $("#DeviationRegDetailForm #deviation_ref_equip_nm").val(data.deviation_ref_equip_nm);
+        $("#DeviationRegDetailForm #deviation_confirm_emp").val(data.deviation_confirm_emp);
+        $("#DeviationRegDetailForm #confirm_emp_nm").val(data.confirm_emp_nm);
+        $("#DeviationRegDetailForm #deviation_status_nm").val(data.deviation_status_nm);
+        $("#DeviationRegDetailForm #deviation_early_respond").val(data.deviation_early_respond);
+        $("#DeviationRegDetailForm #deviation_request_remark").val(data.deviation_request_remark);
+
+        if (data.deviation_type == "1") {
+            $("#DeviationRegDetailForm #type_h").prop("checked", false);
+            $("#DeviationRegDetailForm #type_l").prop("checked", true);
+        } else {
+            $("#DeviationRegDetailForm #type_h").prop("checked", true);
+            $("#DeviationRegDetailForm #type_l").prop("checked", false);
+        }
+    }
+
+    // #endregion 그리드 선택 시 END
+
+
+
+    // #region 팝업 관련
+    // 검색용 사원 팝업 띄우기
+    function s_DetectEmpSearch() {
+        $("#DeviationReg #S_DetectEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 검색용 사원 팝업 로우 더블클릭
+    function S_DetectEmpSearchRowDblClick(selectedItems) {
+        $("#DeviationRegSearchForm #s_detect_emp").val(selectedItems.data.emp_cd);
+        $("#DeviationRegSearchForm #s_detect_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#DeviationReg #S_DetectEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 사원 조회
+    function DetectEmpSearch() {
+        $("#DeviationReg #DetectEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 사원 팝업 로우 더블클릭
+    function DetectEmpSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #detect_emp_cd").val(selectedItems.data.emp_cd);
+        $("#DeviationRegDetailForm #detect_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#DeviationReg #DetectEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 CAPA담당자 조회
+    function DeviationConfrimEmpSearch() {
+        $("#DeviationReg #DeviationConfrimEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 CAPA담당자 팝업 로우 더블클릭
+    function DeviationConfrimEmpSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_confirm_emp").val(selectedItems.data.emp_cd);
+        $("#DeviationRegDetailForm #confirm_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#DeviationReg #DeviationConfrimEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 장소 팝업 띄우기
+    function DeviationPlaceSearch() {
+        $("#DeviationReg #DeviationPlaceSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 장소 팝업 로우 더블클릭
+    function DeviationPlaceSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_place").val(selectedItems.data.workroom_cd);
+        $("#DeviationRegDetailForm #deviation_place_nm").val(selectedItems.data.workroom_nm);
+
+        var popup = $("#DeviationReg #DeviationPlaceSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 부서 팝업 띄우기
+    function DeviationDeptCdSearch() {
+        $("#DeviationReg #DeviationDeptCdSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 부서 팝업 로우 더블클릭
+    function DeviationDeptCdSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_dept_cd").val(selectedItems.data.dept_cd);
+        $("#DeviationRegDetailForm #deviation_dept_nm").val(selectedItems.data.dept_nm);
+
+        var popup = $("#DeviationReg #DeviationDeptCdSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 제품 팝업 띄우기
+    function DeviationRefItemSearch() {
+        $("#DeviationReg #DeviationRefItemSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 제품 팝업 로우 더블클릭
+    function DeviationRefItemSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_ref_item_cd").val(selectedItems.data.item_cd);
+        $("#DeviationRegDetailForm #ref_item_nm").val(selectedItems.data.item_nm);
+
+        var popup = $("#DeviationReg #DeviationRefItemSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 제조번호 팝업 띄우기
+    function DeviationRefNoSearch() {
+        if ($("#DeviationRegDetailForm #deviation_ref_item_cd").val().length <= 0) {
+            alert("관련 제품을 먼저 선택해주세요");
+
+            return;
+        } else {
+
+
+            $.ajax({
+                type: 'POST',
+                url: '/Dep/DeviationRefNoSearch',
+                data: {
+                    deviation_ref_item_cd: $("#DeviationRegDetailForm #deviation_ref_item_cd").val()
+                },
+                success: function (result) {
+
+
+                    if (result <= 0) {
+                        alert("해당하는 제조번호가 존재하지 않습니다.");
+                        $("#DeviationRegDetailForm #deviation_ref_no").val("");
+
+                        return;
+
+                    } else {
+
+                        var DeviationRefNo = [
+                            { dataField: "lot_no", caption: "제조번호" },
+                            { dataField: "order_status", caption: "제조상태" }
+                        ];
+
+                        createPopup("DeviationRefNoSearch", "제조번호 조회", result, DeviationRefNo, "lot_no");
+
+                        $("#DeviationReg #DeviationRefNoSearchPopup").dxPopup("instance").show();
+                    }
+                }
+            });
+
+        }
+    }
+
+
+    // 입력용 제조번호 로우 더블클릭
+    function DeviationRefNoSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_ref_no").val(selectedItems.data.lot_no);
+
+        var popup = $("#DeviationReg #DeviationRefNoSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 공정 팝업 띄우기
+    function DeviationRefProcessCdSearch() {
+        if ($("#DeviationRegDetailForm #deviation_ref_item_cd").val().length <= 0) {
+            alert("관련 제품을 먼저 선택해주세요");
+
+            return;
+        } else {
+
+
+            $.ajax({
+                type: 'POST',
+                url: '/Dep/DeviationRefProcessCdSearch',
+                data: {
+                    deviation_ref_item_cd: $("#DeviationRegDetailForm #deviation_ref_item_cd").val()
+                },
+                success: function (result) {
+
+
+                    if (result <= 0) {
+                        alert("해당하는 공정이 존재하지 않습니다.");
+                        $("#DeviationRegDetailForm #deviation_ref_process_cd").val("");
+                        $("#DeviationRegDetailForm #deviation_ref_process_nm").val("");
+
+                        return;
+
+                    } else {
+
+                        var deviation_ref_process = [
+                            { dataField: "process_cd", caption: "공정코드" },
+                            { dataField: "process_nm", caption: "공정명" }
+                        ];
+
+                        createPopup("DeviationRefProcessCdSearch", "공정 조회", result, deviation_ref_process, "process_cd");
+
+                        $("#DeviationReg #DeviationRefProcessCdSearchPopup").dxPopup("instance").show();
+                    }
+                }
+            });
+
+        }
+    }
+
+
+    // 입력용 공정 로우 더블클릭
+    function DeviationRefProcessCdSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_ref_process_cd").val(selectedItems.data.process_cd);
+        $("#DeviationRegDetailForm #deviation_ref_process_nm").val(selectedItems.data.process_nm);
+
+        var popup = $("#DeviationReg #DeviationRefProcessCdSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 항목 팝업 띄우기
+    function DeviationRefTestItemSearch() {
+        $("#DeviationReg #DeviationRefTestItemSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 항목 팝업 로우 더블클릭
+    function DeviationRefTestItemSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_ref_test_item").val(selectedItems.data.testitem_cd);
+        $("#DeviationRegDetailForm #ref_test_item_nm").val(selectedItems.data.testitem_nm);
+
+        var popup = $("#DeviationReg #DeviationRefTestItemSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 장치 팝업 띄우기
+    function DeviationRefEquipSearch() {
+        $("#DeviationReg #DeviationRefEquipSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 장치 팝업 로우 더블클릭
+    function DeviationRefEquipSearchRowDblClick(selectedItems) {
+        $("#DeviationRegDetailForm #deviation_ref_equip_cd").val(selectedItems.data.equip_cd);
+        $("#DeviationRegDetailForm #deviation_ref_equip_nm").val(selectedItems.data.equip_nm);
+
+        var popup = $("#DeviationReg #DeviationRefEquipSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+// #endregion
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.17
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+</script>
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+    #DeviationReg div[id$="radio_div"] {
+        border: 1px solid #ced4da;
+        background-color: #e9ecef;
+        border-radius: 0.15rem;
+        opacity: 1;
+        height: 23px;
+        padding-top: 2px;
+    }
+
+        #DeviationReg div[id$="radio_div"] div {
+            padding-top: 2px;
+        }
+
+            #DeviationReg div[id$="radio_div"] div span {
+                padding: 0 10px;
+            }
+</style>
+
+<div id="DeviationReg" autoresize="Y">
+
+    <div id="S_DetectEmpSearchPopup"></div>
+    <div id="DetectEmpSearchPopup"></div>
+    <div id="DeviationDeptCdSearchPopup"></div>
+    <div id="DeviationConfrimEmpSearchPopup"></div>
+    <div id="DeviationPlaceSearchPopup"></div>
+    <div id="DeviationRefItemSearchPopup"></div>
+    <div id="DeviationRefNoSearchPopup"></div>
+    <div id="DeviationRefProcessCdSearchPopup"></div>
+    <div id="DeviationRefTestItemSearchPopup"></div>
+    <div id="DeviationRefEquipSearchPopup"></div>
+
+
+    <form id="editPlanFileSubmitForm" enctype="multipart/form-data" style="display: none;">
+    </form>
+
+    <div id="DeviationReg_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="DeviationRegSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">발견일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">발견자</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_detect_emp" id="s_detect_emp">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="s_detect_emp_search_btn" onclick="s_DetectEmpSearch()"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control" name="s_detect_emp_nm" id="s_detect_emp_nm" readonly />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행 상태</span>
+                        </div>
+                        <select class="form-control col-10" name="s_dep_status" id="s_dep_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.depStatus_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="DeviationRegLeftMain" class="col-8 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DeviationRegGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .KeyExpr("deviation_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("deviation_no").Caption("일탈번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("detect_date").Caption("발견일자").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("detect_emp_nm").Caption("발견자").Width("10%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_contents").Caption("일탈내용").Width("30%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("confirm_emp_nm").Caption("상급자").Width("10%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("deviation_status_nm").Caption("진행상태").Alignment(HorizontalAlignment.Center);
+
+                        c.Add().DataField("detect_emp_cd").Visible(false);
+                        c.Add().DataField("deviation_confirm_emp").Visible(false);
+                        c.Add().DataField("deviation_status").Visible(false);
+                        c.Add().DataField("deviation_place").Visible(false);
+                        c.Add().DataField("deviation_date").Visible(false);
+                        c.Add().DataField("detect_method").Visible(false);
+                        c.Add().DataField("deviation_doc").Visible(false);
+                        c.Add().DataField("deviation_type").Visible(false);
+                        c.Add().DataField("deviation_ref_no").Visible(false);
+                        c.Add().DataField("deviation_ref_item_cd").Visible(false);
+                        c.Add().DataField("deviation_ref_test_item").Visible(false);
+                        c.Add().DataField("deviation_ref_equip_cd").Visible(false);
+                        c.Add().DataField("ref_item_nm").Visible(false);
+                        c.Add().DataField("ref_test_item_nm").Visible(false);
+                        c.Add().DataField("deviation_ref_equip_nm").Visible(false);
+                        c.Add().DataField("deviation_place_nm").Visible(false);
+                    })
+                    .OnFocusedRowChanged("DeviationRegSelect")
+                )
+            </div>
+        </div>
+
+        <div id="DeviationRegRightMain_1" class="col-4">
+            <div class="box mb-0">
+                <form id="DeviationRegDetailForm">
+                    <div class="divName margin-bottom">
+                        <p>일탈 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일탈 번호</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="deviation_no" id="deviation_no" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일탈 제목</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="deviation_title" id="deviation_title">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일 자<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control datepicker required" name="detect_date" id="detect_date" value="@DateTime.Today.ToShortDateString()" disabled required />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">장 소<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_place" id="deviation_place" readonly required>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_place_search_btn" onclick="DeviationPlaceSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_place_nm" id="deviation_place_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">작성자<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="detect_emp_cd" id="detect_emp_cd" readonly required>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="detect_emp_search_btn" onclick="DetectEmpSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="detect_emp_nm" id="detect_emp_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일탈 내용<star>*</star></label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control required" name="deviation_contents" id="deviation_contents" cols="100" rows="5" style="height: 60px; resize: vertical;" required />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">원인 조사</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="detect_method" id="detect_method" cols="100" rows="5" style="height: 60px; resize: vertical;" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">초기 조치내용</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="deviation_early_respond" id="deviation_early_respond" cols="100" rows="5" style="height: 60px; resize: vertical;" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">특이사항</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" name="deviation_request_remark" id="deviation_request_remark" cols="100" rows="5" style="height: 60px; resize: vertical;" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일탈 문서</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="deviation_doc" id="deviation_doc" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">일탈 타입<star>*</star></label>
+                        <div id="deviation_radio_div" class="input-group col-4">
+                            <div class="col-6">
+                                <input type="radio" name="deviation_type" id="type_h" disabled>
+                                <span for="deviation_type">중</span>
+                            </div>
+
+                            <div class="col-6">
+                                <input type="radio" name="deviation_type" id="type_l" disabled>
+                                <span for="deviation_type">경</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">발생 부서</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_dept_cd" id="deviation_dept_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_dept_cd_search_btn" onclick="DeviationDeptCdSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_dept_nm" id="deviation_dept_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">관련 제품</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_item_cd" id="deviation_ref_item_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_ref_item_search_btn" onclick="DeviationRefItemSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="ref_item_nm" id="ref_item_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">관련 번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_no" id="deviation_ref_no" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_ref_no_search_btn" onclick="DeviationRefNoSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">해당 공정</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_process_cd" id="deviation_ref_process_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_ref_process_cd_search_btn" onclick="DeviationRefProcessCdSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_process_nm" id="deviation_ref_process_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">관련 항목</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_test_item" id="deviation_ref_test_item" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_ref_test_item_search_btn" @*onclick="DeviationRefTestItemSearch()*@><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="ref_test_item_nm" id="ref_test_item_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">관련 장치</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_equip_cd" id="deviation_ref_equip_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_ref_equip_search_btn" onclick="DeviationRefEquipSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_ref_equip_nm" id="deviation_ref_equip_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">CAPA담당</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_confirm_emp" id="deviation_confirm_emp" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="deviation_confirm_emp_search_btn" onclick="DeviationConfrimEmpSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="confirm_emp_nm" id="confirm_emp_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">진행 상태</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="deviation_status_nm" id="deviation_status_nm" readonly />
+                        </div>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>

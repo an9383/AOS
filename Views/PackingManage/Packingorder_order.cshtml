@@ -1,0 +1,434 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewBag.Title = "Packingorder_order";
+
+    var PackingOrders = @Html.Raw(Json.Encode(ViewBag.PackingOrders.Data));
+    var Items = @Html.Raw(Json.Encode(ViewBag.Items.Data));
+    var Packingorder_orderAuth = @Html.Raw(Json.Encode(ViewBag.Packingorder_orderAuth.Data));
+}
+
+@*포장지시*@
+
+    <script id="Packingorder_orderJs">
+
+        // 이동 페이지 정보
+        var packingOrderPageInfo = [
+            {
+                tabName: "자재 불출 지시",
+                tabId: "Packingorder_Request",
+                url: "/PackingManage/Packingorder_Request"
+
+            }, {
+                tabName: "포장기록서 승인",
+                tabId: "OrderGuide2",
+                url: "/PackingManage/OrderGuide2"
+            }
+        ]
+
+        $(function () {
+            setDatePicker("#Packingorder_order .datepicker");
+
+            if ((@PackingOrders).length > 0) {
+                $("#PackingOrderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@PackingOrders));
+                $("#PackingOrderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingOrderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var columns = [
+                { dataField: "item_cd", caption: "품목코드" },
+                { dataField: "item_nm", caption: "품목명" }
+            ];
+
+            createPopup("PackingOrderItem", "품목조회", @Items, columns);
+
+            var Packingorder_orderAuth = JSON.parse(@Packingorder_orderAuth)[0];
+
+            if (Packingorder_orderAuth.form_query != "Y") {
+                $("#Packingorder_orderSearch").remove();
+            }
+
+            $("#PackingOrderForm input").prop("readonly", true);
+
+        });
+
+        function PackingOrderSelectItem() {
+            $("#PackingOrderItemPopup").dxPopup("instance").show();
+        }
+
+        function PackingOrderItemRowDblClick(selectedItems) {
+
+            $("#Packingorder_orderSearchForm input[name=s_item]").val(selectedItems.data.item_cd);
+            $("#PackingOrderItemPopup").dxPopup("instance").hide();
+
+        }
+
+        function PackingOrderSelctPackingOrder() {
+
+            $("#PackingOrderForm")[0].reset();
+
+            var grid = $("#PackingOrderGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingOrderGrid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/SelectPackingOrderDetail',
+                data: {
+                    sdate: $("#Packingorder_orderSearchForm input[name=sdate]").val(),
+                    edate: $("#Packingorder_orderSearchForm input[name=edate]").val(),
+                    order_no: data.order_no
+                },
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingOrderDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#PackingOrderDetailGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#PackingOrderDetailGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#PackingOrderDetailGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#PackingOrderDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                }
+            })
+
+        }
+
+        function Packingorder_orderSearch() {
+
+            var formData = $("#Packingorder_orderSearchForm").serialize();
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/SelectPackingOrder',
+                data: formData,
+                dataType: 'json',
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingOrderGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#PackingOrderGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#PackingOrderGrid").dxDataGrid("instance").option("dataSource", json);
+                }
+            })
+
+        }
+
+        function PackingOrderSelctPackingOrderDetail() {
+
+            var grid = $("#PackingOrderDetailGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingOrderDetailGrid", grid.option("focusedRowKey"));
+
+            $("#PackingOrderForm input[name=packing_order_no]").val(data.packing_order_no);
+            $("#PackingOrderForm input[name=order_date]").val(data.order_date);
+            $("#PackingOrderForm input[name=sale_item_cd]").val(data.sale_item_cd);
+            $("#PackingOrderForm input[name=sale_item_nm]").val(data.sale_item_nm);
+            $("#PackingOrderForm input[name=order_qty]").val(data.order_qty);
+            $("#PackingOrderForm input[name=order_no]").val(data.order_no);
+            $("#PackingOrderForm input[name=lot_no]").val(data.lot_no);
+            $("#PackingOrderForm input[name=order_bigo]").val(data.order_bigo);
+            $("#PackingOrderForm input[name=start_date]").val(data.start_date);
+
+        }
+
+        // 자재 불출 지시 페이지 열기
+        function PackingOrderOpenOtherPage1() {
+
+            var param = {
+                sdate: $("#PackingOrderForm input[name=order_date]").val(),
+                edate: $("#PackingOrderForm input[name=order_date]").val(),
+                packing_order_no: $("#PackingOrderForm input[name=packing_order_no]").val(),
+                item_cd: $("#PackingOrderForm input[name=sale_item_cd]").val()
+            };
+
+            packingOrderPageInfo[0].param = param;
+
+            openOtherPage(packingOrderPageInfo[0]);
+        }
+
+        // 포장기록서 승인 페이지 열기
+        function PackingOrderOpenOtherPage2() {
+
+            var param = {
+                packing_order_no: $("#PackingOrderForm input[name=packing_order_no]").val(),
+                order_no: $("#PackingOrderForm input[name=order_no]").val()
+            };
+
+            packingOrderPageInfo[1].param = param;
+
+            openOtherPage(packingOrderPageInfo[1]);
+        }
+
+        function Packingorder_orderExcel() {
+            gridExportToExcel("Packingorder_orderGrid", "포장지시_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+        function Packingorder_orderPrint() {
+
+            var btnType;
+            btnType = $(event.target).closest('.dx-button').attr('id');
+
+            var packing_order_no = $("#PackingOrderForm input[name=packing_order_no]").val();
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "PackingManage", RptFileName: "Material_Report" },
+                objSp: { SpName: "SP_Packingorder_Order", gubun: "Material_Report", reportParam: "packing_order_no:" + packing_order_no },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "Header,Material_Report" }
+            });
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+        }
+
+        // 포장지시 있을경우 로우 배경색 변경
+        function PackingOrderHighlightRow(e) {
+            if (e.rowType === "data" && e.data.packing_order_cnt > 0) {
+                e.rowElement[0].style.backgroundColor = 'lightgreen';  
+            }
+        }
+
+    </script>
+
+<div id="Packingorder_order" autoresize="Y">
+
+    <div id="PackingOrderItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class=" col-8">
+
+            <form id="Packingorder_orderSearchForm">
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()">
+                        <input type="text" class="form-control datepicker" name="edate" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_item">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="PackingOrderSelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Preview;Print"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box mb-1">
+
+                <div class="divName">
+                    <p>제조지시</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(400)
+                    .KeyExpr("order_no")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("order_no").Caption("제조지시번호");
+                        columns.Add().DataField("lot_no").Caption("제조번호");
+                        //columns.Add().DataField("order_type_nm").Caption("지시구분");
+                        columns.Add().DataField("item_cd").Caption("제품코드");
+                        columns.Add().DataField("item_nm").Caption("제품명");
+                        columns.Add().DataField("order_batch_size").Caption("지시수량");
+                        columns.Add().DataField("item_packunit").Caption("지시단위");
+                        //columns.Add().Caption("단위")
+                        //    .Lookup(lookup => lookup
+                        //        .DataSource(d => d.WebApi()
+                        //            .RouteName("Comm")
+                        //            .LoadAction("GetCommon")
+                        //            .LoadParams(new
+                        //            {
+                        //                pGubun = "공통코드"
+                        //                , pDiv = "N"
+                        //                , pStrWhere = "CM012"
+                        //                , pTableName = "unit"
+                        //            }
+                        //            ).Key("keyfield"))
+                        //        .ValueExpr("keyfield")
+                        //        .DisplayExpr("displayfield")
+                        //    ).DataField("order_batch_size_unit")
+                        //    .DataType(GridColumnDataType.String);
+                        columns.Add().DataField("planned_date").Caption("지시일자");
+                        columns.Add().DataField("lot_date").Caption("제조일자");
+                        columns.Add().DataField("valid_date").Caption("사용기한");
+                        columns.Add().DataField("order_status_nm").Caption("상태");
+                        columns.Add().DataField("packing_order_cnt").Caption("포장지시건수");
+                    })
+                    .OnFocusedRowChanged("PackingOrderSelctPackingOrder")
+                    .OnRowPrepared("PackingOrderHighlightRow")
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>포장지시</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="PackingOrderForm">
+
+                        <div class="input-wrapper">
+
+                            <label class="col-1">포장지시번호</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="packing_order_no" readonly="readonly">
+                            </div>
+
+                            <label class="col-1">지시일자</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="order_date" readonly="readonly">
+                            </div>
+
+                            <label class="col-1">제품</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-4" name="sale_item_cd" readonly="readonly">
+                                <input type="text" class="form-control col-8" name="sale_item_nm" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-1">지시수량</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="order_qty" readonly="readonly">
+                            </div>
+
+                            <label class="col-1">제조지시번호</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="order_no" readonly="readonly">
+                            </div>
+
+                            <label class="col-1">제조번호</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="lot_no" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-1">비고</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="order_bigo" readonly="readonly">
+                            </div>
+
+                            <label class="col-1">제조일자</label>
+                            <div class="input-group col-1">
+                                <input type="text" class="form-control col-12" name="start_date" readonly="readonly">
+                            </div>
+
+                            <button type="button" class="btn btn-secondary" onclick="PackingOrderOpenOtherPage1()">자재 불출 지시</button>
+                            <button type="button" class="btn btn-secondary" onclick="PackingOrderOpenOtherPage2()">포장기록서 승인</button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderDetailGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .KeyExpr("packing_order_no")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        columns.Add().DataField("packing_order_work_date").Caption("지시일자");
+                        columns.Add().DataField("sale_item_cd").Caption("제품코드");
+                        columns.Add().DataField("sale_item_nm").Caption("제품명");
+                        columns.Add().DataField("item_packunit").Caption("단위");
+                        columns.Add().DataField("lot_no").Caption("제조번호");
+                        columns.Add().DataField("order_qty").Caption("지시수량");
+                        columns.Add().DataField("packing_order_qty_unit").Caption("단위");
+                        columns.Add().DataField("material_status_nm").Caption("자재불출상태");
+                        columns.Add().DataField("publish_sign_status").Caption("발행승인상태");
+                        columns.Add().DataField("packing_order_status").Caption("포장작업상태");
+                        //columns.Add().DataField("complete_sign_status").Caption("완료승인상태");
+                        columns.Add().DataField("order_bigo").Caption("비고");
+                    })
+                 .OnFocusedRowChanged("PackingOrderSelctPackingOrderDetail")
+                 )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

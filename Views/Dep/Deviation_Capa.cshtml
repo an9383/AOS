@@ -1,0 +1,1027 @@
+﻿@*시정 및 예방조치*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+
+    var Deviation_CapaData = @Html.Raw(Json.Encode(ViewBag.Deviation_CapaData.Data));
+    var Deviation_CapaAuth = @Html.Raw(Json.Encode(ViewBag.Deviation_CapaAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+
+<script type="text/javascript" id="Deviation_CapaJs">
+    // SP 구문, gubun 변수
+    var toDay = new Date();
+    var _CRUDGubun = "";
+    var _signCheck = "";
+
+
+    $(document).ready(function () {
+        Deviation_Capa_contentResize();
+        Deviation_CapaCommonEditCheck(false);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+
+        $("#Deviation_Capa_SearchParentCode #s_start_date").val(getFormatDate(sDate));
+        $("#Deviation_Capa_SearchParentCode #s_end_date").val(getFormatDate(toDay));
+
+
+        if (@Html.Raw(Json.Encode(ViewBag.Deviation_CapaData.Data)) != "") {
+            $("#Deviation_CapaGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@Deviation_CapaData));
+            $("#Deviation_CapaGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#Deviation_CapaGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            Deviation_CapaSelect(JSON.parse(@Deviation_CapaData)[0]);
+        }
+
+
+        var popupColumns = {
+            "employee": [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ]
+        };
+
+        createPopup("dcDespatchChargeEmpSearch", "처리담당자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+        createPopup("dcDespatchEmpSearch", "처리자 조회", @empPopupJson, popupColumns.employee, "emp_cd");
+
+
+        // CRUD체크
+        var Deviation_CapaAuth = JSON.parse(@Deviation_CapaAuth)[0];
+        if (Deviation_CapaAuth.form_query != "Y") {
+            $("#Deviation_CapaSearch").remove();
+        }
+        if (Deviation_CapaAuth.form_insert != "Y") {
+            $("#Deviation_CapaInput").remove();
+        }
+        if (Deviation_CapaAuth.form_edit != "Y") {
+            $("#Deviation_CapaEdit").remove();
+        }
+        if (Deviation_CapaAuth.form_delete != "Y") {
+            $("#Deviation_CapaDelete").remove();
+        }
+
+        $("#Deviation_CapaInput").dxButton().parent().parent().addClass("display-none");
+        $("#Deviation_CapaPrint").dxButton().parent().parent().addClass("display-none");
+        $("#Deviation_CapaExcel").dxButton().parent().parent().addClass("display-none");
+        $("#Deviation_CapaPreview").dxButton().parent().parent().addClass("display-none");
+
+        setDatePicker("#Deviation_Capa .datepicker");
+
+    })
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function Deviation_CapaCommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#Deviation_CapaSave").dxButton().parent().parent().removeClass("display-none");
+            $("#Deviation_CapaUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#Deviation_CapaSearch").dxButton().parent().parent().addClass("display-none");
+            $("#Deviation_CapaEdit").dxButton().parent().parent().addClass("display-none");
+            $("#Deviation_CapaDelete").dxButton().parent().parent().addClass("display-none");
+            //$("#Deviation_Capa_Input").dxButton().parent().parent().addClass("display-none");
+
+            $("#Deviation_CapaDetailForm #despatch_emp_cd").css("background", "#f6c4db");
+
+            $("#Deviation_CapaGrid").dxDataGrid("option", "disabled", true);
+            $("#Deviation_CapaDetailForm :disabled").attr('disabled', false);
+
+            //_CRUDGubun = true;
+        }
+        if (!nowEdit) {
+            $("#Deviation_CapaSave").dxButton().parent().parent().addClass("display-none");
+            $("#Deviation_CapaUndo").dxButton().parent().parent().addClass("display-none");
+            $("#Deviation_CapaPreview").dxButton().parent().parent().addClass("display-none");
+            $("#Deviation_CapaSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#Deviation_CapaEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#Deviation_CapaDelete").dxButton().parent().parent().removeClass("display-none");
+            //$("#Deviation_Capa_Input").dxButton().parent().parent().removeClass("display-none");
+
+            $("#Deviation_CapaDetailForm #despatch_emp_cd").css("background", "");
+
+            $("#Deviation_CapaGrid").dxDataGrid("option", "disabled", false);
+
+            //$("#Deviation_CapaDetailForm :enabled").attr('disabled', true);
+            $("#Deviation_CapaDetailForm :enabled").attr('disabled', true);
+
+            _CRUDGubun = "";
+        }
+    }
+
+
+    // 조회버튼 기능
+    function Deviation_CapaSearch() {
+        Deviation_CapaCommonEditCheck(false);
+
+        $("#Deviation_CapaDown_Left #Deviation_CapaDeviationForm")[0].reset();
+        $("#Deviation_CapaDown_Right #Deviation_CapaDetailForm")[0].reset();
+        $("#Deviation_CapaDetailForm #despatch_date").val("");
+
+        gridReset("Deviation_CapaGrid");
+        gridReset("Deviation_CapaSignGrid");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/Deviation_CapaSearch',
+            data: {
+                sDate: $("#Deviation_Capa_SearchParentCode #s_start_date").val(),
+                eDate: $("#Deviation_Capa_SearchParentCode #s_end_date").val(),
+                emp_cd: $("#Deviation_Capa_SearchParentCode #s_despatch_charge_emp").val(),
+                status: $("#Deviation_Capa_SearchParentCode #s_deviation_capa_status").val()
+            },
+            success: function (result) {
+                if (result == "") return;
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#Deviation_CapaGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#Deviation_CapaGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#Deviation_CapaGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+
+                _CRUDGubun = "";
+                Deviation_CapaSelect(json[0]);
+            }
+        });
+    }
+
+
+    //입력버튼 기능
+    function Deviation_CapaInput() {
+
+    }
+
+
+    // 수정버튼 기능
+    function Deviation_CapaEdit() {
+        var grid = $("#Deviation_CapaGrid").dxDataGrid("instance");
+        _CRUDGubun = "U";
+
+        if (grid.totalCount() <= 0) {
+            alert("수정할 항목이 없습니다");
+
+            return;
+        } else {
+            if ($("#Deviation_CapaDetailForm #deviation_capa_status").val() == "2") {
+
+                _signCheck = "Check";
+
+                var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#Deviation_CapaSignPopupTemplate"));
+                popup.show();
+
+            } else {
+
+                Deviation_CapaCommonEditCheck(true);
+                $("#Deviation_CapaDetailForm #despatch_date").val("@DateTime.Today.ToShortDateString()");
+                $("#Deviation_CapaDetailForm :disabled").attr('disabled', false);
+                $("#Deviation_CapaDetailForm #deviation_capa_status :enabled").attr("disabled", true);
+                _CRUDGubun = "U";
+
+            }
+
+        }
+    }
+
+
+    // 취소버튼 기능
+    function Deviation_CapaUndo() {
+        Deviation_CapaCommonEditCheck(false);
+        $("#Deviation_CapaDetailForm :enabled").attr('disabled', true);
+
+        Deviation_CapaSelect({ rowIndex: "0" });
+
+    }
+
+
+    // 저장버튼 기능
+    function Deviation_CapaSave() {
+        var input_arr = $("#Deviation_CapaDetailForm [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var data = new FormData($("#Deviation_CapaLeftDownDiv_1 #Deviation_CapaDetailForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/Deviation_CapaSave',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result)
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    Deviation_CapaCommonEditCheck(false);
+                    $("#Deviation_CapaDetailForm :enabled").attr('disabled', true);
+
+                    Deviation_CapaSearch();
+
+                } else {
+                    alert("실패하였습니다.");
+                }
+            }
+        })
+
+
+    }
+
+
+    // 삭제버튼 기능
+    function Deviation_CapaDelete() {
+        var grid = $("#Deviation_CapaGrid").dxDataGrid("instance");
+        _CRUDGubun = "D";
+
+        if (grid.totalCount() <= 0) {
+            alert("삭제할 항목이 없습니다");
+
+            return;
+        } else {
+            if ($("#Deviation_CapaDetailForm #deviation_capa_status").val() == "2") {
+
+                _signCheck = "Check";
+
+                var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#Deviation_CapaSignPopupTemplate"));
+                popup.show();
+
+            } else {
+                Deviation_CapaDeleteExcute();
+
+            }
+
+        }
+
+    }
+
+
+    // 프린트버튼 기능
+    function Deviation_CapaPrint() {
+
+    }
+
+
+    // 엑셀버튼 기능
+    function Deviation_CapaExcel() {
+
+        }
+
+
+    // 미리보기버튼 기능
+    function Deviation_CapaPreview() {
+
+    }
+
+
+    function Deviation_CapaDeleteExcute() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/Deviation_CapaDelete',
+            data: {
+                deviation_capa_id: $("#Deviation_CapaDetailForm #deviation_capa_id").val()
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result)
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    Deviation_CapaSearch();
+
+                } else {
+                    alert("실패하였습니다.");
+                }
+            }
+        })
+    }
+
+    // #endregion
+
+
+    // #region 그리드 선택 시
+    // 메인 그리드 선택 시
+    function Deviation_CapaSelect() {
+        Deviation_CapaCommonEditCheck(false);
+        $("#Deviation_CapaDown_Left #Deviation_CapaDeviationForm")[0].reset();
+        $("#Deviation_CapaDown_Right #Deviation_CapaDetailForm")[0].reset();
+
+        var data;
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#Deviation_CapaGrid").dxDataGrid("instance");
+
+            if (grid.option("focusedRowIndex") >= 0) {
+
+                data = getGridRowByKey("Deviation_CapaGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#Deviation_CapaDetailForm #request_contents").val(data.request_contents);
+        $("#Deviation_CapaDetailForm #despatch_date").val(data.despatch_date);
+        $("#Deviation_CapaDetailForm #despatch_emp_cd").val(data.despatch_emp_cd);
+        $("#Deviation_CapaDetailForm #despatch_emp_nm").val(data.despatch_emp_nm);
+        $("#Deviation_CapaDetailForm #despatch_contents").val(data.despatch_contents);
+        $("#Deviation_CapaDetailForm #deviation_capa_status").val(data.deviation_capa_status);
+        $("#Deviation_CapaDetailForm #deviation_capa_status_nm").val(data.deviation_capa_status_nm);
+        $("#Deviation_CapaDetailForm #deviation_capa_id").val(data.deviation_capa_id);
+
+        $("#Deviation_CapaDeviationForm #detect_date").val(data.detect_date);
+        $("#Deviation_CapaDeviationForm #deviation_place").val(data.deviation_place);
+        $("#Deviation_CapaDeviationForm #detect_emp_nm").val(data.detect_emp_nm);
+        $("#Deviation_CapaDeviationForm #deviation_level_nm").val(data.deviation_level_nm);
+        $("#Deviation_CapaDeviationForm #deviation_contents2").val(data.deviation_contents2);
+        $("#Deviation_CapaDeviationForm #detect_method").val(data.detect_method);
+        $("#Deviation_CapaDeviationForm #deviation_cause").val(data.deviation_cause);
+        $("#Deviation_CapaDeviationForm #deviation_no").val(data.deviation_no);
+
+
+        // 서명정보 조회
+        Deviation_CapaSignSearch(data.deviation_capa_id);
+    }
+
+    // #endregion 그리드 선택 시 END
+
+
+    //#region 서명 관련
+    // 서명조회
+    function Deviation_CapaSignSearch() {
+        gridReset("Deviation_CapaSignGrid");
+
+        var data;
+        if (arguments.length > 0) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#Deviation_CapaGrid").dxDataGrid("instance");
+
+            if (grid.option("focusedRowIndex") >= 0) {
+
+                data = getGridRowByKey("Deviation_CapaGrid", grid.option("focusedRowKey")).deviation_capa_id;
+
+            } else {
+                return;
+            }
+        }
+
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Dep/Deviation_CapaSignSearch',
+            data: {
+                deviation_capa_id: data,
+                sign_set_cd: "5003"
+            },
+            success: function (result) {
+
+                if (result <= 0) {
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+
+                $("#Deviation_CapaSignGrid").dxDataGrid("option", "dataSource", json);
+
+            }
+        });
+    }
+
+
+    // 서명 확인
+    function Deviation_CapaSignCheck(e) {
+
+        var grid = $("#Deviation_CapaGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("서명할 대상이 없습니다")
+
+            return;
+        }
+
+        if (e.data.sign_yn == "1") {
+            alert("이미 서명이 되어있습니다");
+
+            return;
+        }
+
+        if (_CRUDGubun == "U") {
+            alert("수정 중에는 서명을 할 수 없습니다");
+
+            return;
+        }
+
+        var _despatch_date = $("#Deviation_CapaDetailForm #despatch_date").val();
+        var _despatch_emp_cd = $("#Deviation_CapaDetailForm #despatch_emp_cd").val();
+        var _despatch_contents = $("#Deviation_CapaDetailForm #despatch_contents").val();
+
+        if (_despatch_date.length <= 0 || _despatch_emp_cd.length <= 0 || _despatch_contents.length <= 0) {
+            alert("필수 입력 자료를 모두 입력하십시요!!");
+
+            return;
+        }
+
+        var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#Deviation_CapaSignPopupTemplate"));
+        popup.show();
+
+    }
+
+
+    // 서명 권한 체크(id, pw)
+    async function Deviation_CapaSignSubmit() {
+        var data = new FormData($('#Deviation_CapaSignForm')[0]);
+        data.set("gubun", "S");
+        data.set("txt_ID", $("#Deviation_CapaSignForm input[name='txt_ID']").val());
+        data.set("txt_Pass", $("#Deviation_CapaSignForm input[name='txt_Pass']").val());
+
+        if (!await Deviation_CapaValidationCheck(data)) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            Deviation_CapaCommonEditCheck(false);
+
+            var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        if (!await Deviation_CapaAuthorityCheck($("input[name='emp_cd']").val())) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        await Deviation_CapaExecuteSign();
+
+    }
+
+
+    function Deviation_CapaValidationCheck(data) {
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    $("input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                    $("input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+                    $("input[name='emp_cd']").val(JSON.parse(result)[0].emp_cd);
+
+                    check = true;
+                }
+
+            }
+        });
+
+        return check;
+    }
+
+
+    function Deviation_CapaAuthorityCheck(emp_cd) {
+        var check = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Comm/AuthorityCheck',
+            data: {
+                emp_cd: emp_cd,
+                sign_set_cd: "5003",
+                sign_set_seq: "1"
+            },
+            async: false,
+            success: function (result) {
+
+                if (result) {
+
+                    check = true;
+                }
+            }
+        });
+
+        return check;
+    }
+
+
+    function Deviation_CapaExecuteSign() {
+
+        if (_signCheck != "Check") {
+
+            setTimeout(function () {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Dep/Deviation_CapaSignSave',
+                    data: {
+                        deviation_capa_id: $("#Deviation_CapaDetailForm #deviation_capa_id").val(),
+                        despatch_emp_cd: $("input[name='emp_cd']").val()
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.message != "") {
+                            alert(json.message);
+
+                            Deviation_CapaSearch();
+
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+
+                    }
+                });
+
+
+                _signGubun = "";
+
+                var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+        }
+        else {
+
+            setTimeout(function () {
+                var popup = $("#Deviation_CapaSignPopup").dxPopup("instance");
+                popup.hide();
+
+                if (_CRUDGubun == "U") {
+
+                    Deviation_CapaCommonEditCheck(true);
+                    $("#Deviation_CapaDetailForm #despatch_date").val("@DateTime.Today.ToShortDateString()");
+                    $("#Deviation_CapaDetailForm :disabled").attr('disabled', false);
+                    $("#Deviation_CapaDetailForm #deviation_capa_status :enabled").attr("disabled", true);
+                    _CRUDGubun = "U";
+
+                }
+                else if (_CRUDGubun == "D") {
+                    Deviation_CapaDeleteExcute();
+
+                }
+            }, 1000)
+
+        }
+    }
+
+
+    function clearSignInput() {
+        $('#Deviation_CapaSignForm')[0].reset();
+        $("input[name='dept_nm']").val("");
+        $("input[name='emp_nm']").val("");
+    }
+
+    // #endregion
+
+
+    // #region 팝업 관련
+    // 검색용 처리담당자 팝업 띄우기
+    function dcDespatchChargeEmpSearch() {
+        $("#Deviation_Capa #dcDespatchChargeEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 검색용 처리담당자 팝업 로우 더블클릭
+    function dcDespatchChargeEmpSearchRowDblClick(selectedItems) {
+        $("#Deviation_Capa_SearchParentCode #s_despatch_charge_emp").val(selectedItems.data.emp_cd);
+        $("#Deviation_Capa_SearchParentCode #s_despatch_charge_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#Deviation_Capa #dcDespatchChargeEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 입력용 처리자 팝업 띄우기
+    function dcDespatchEmpSearch() {
+        $("#Deviation_Capa #dcDespatchEmpSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 입력용 처리자 팝업 로우 더블클릭
+    function dcDespatchEmpSearchRowDblClick(selectedItems) {
+        $("#Deviation_CapaDetailForm #despatch_emp_cd").val(selectedItems.data.emp_cd);
+        $("#Deviation_CapaDetailForm #despatch_emp_nm").val(selectedItems.data.emp_nm);
+
+        var popup = $("#Deviation_Capa #dcDespatchEmpSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+    // #endregion
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.17
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+    function Deviation_Capa_contentResize() {
+        var topPoint = document.getElementById("Deviation_Capa_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint + 1) - 386
+
+        document.getElementById("Deviation_CapaGrid").style.height = content_max_height + "px";
+    }
+
+</script>
+
+<div id="Deviation_Capa">
+
+    <div id="dcDespatchChargeEmpSearchPopup"></div>
+    <div id="dcDespatchEmpSearchPopup"></div>
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("Deviation_CapaSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("clearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("Deviation_CapaSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="Deviation_CapaSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-outline-secondary" onclick="Deviation_CapaSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <label class="col-3">부서</label>
+        <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+        <label class="col-3">성명</label>
+        <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        <input type="hidden" name="emp_cd" />
+    }
+
+    <div id="Deviation_Capa_Top" class="mainTop row">
+        <div class="col-8">
+            <form id="Deviation_Capa_SearchParentCode">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리기한</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리담당자</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_despatch_charge_emp" id="s_despatch_charge_emp">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="dc_despatch_charge_emp_search_btn" onclick="dcDespatchChargeEmpSearch()"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control" name="s_despatch_charge_emp_nm" id="s_despatch_charge_emp_nm" readonly />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리상태</span>
+                        </div>
+                        <select class="form-control col-8" name="s_deviation_capa_status" id="s_deviation_capa_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.deviation_capa_status_s).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+                
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!--위 Div -->
+        <div id="Deviation_CapaLeftUp" class="col-12 pb-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("Deviation_CapaGrid")
+                        .ShowBorders(true)
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(485)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .SearchPanel(s => s.Visible(true))
+                        .KeyExpr("deviation_capa_id")
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("capa_type_nm").Caption("구분").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("despatch_charge_emp_nm").Caption("담당자").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("despatch_limit").Caption("처리기한").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("deviation_no").Caption("일탈번호").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("detect_date").Caption("발견일자").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("detect_emp_nm").Caption("발견자").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("deviation_place_nm").Caption("발견장소").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("deviation_contents2").Caption("일탈내용정리").Width("20%").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("deviation_status_nm").Caption("진행상태").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("request_emp_nm").Caption("처리지시자").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("request_date").Caption("지시일자").Alignment(HorizontalAlignment.Center);
+                            c.Add().DataField("deviation_capa_status_nm").Caption("처리상태").Alignment(HorizontalAlignment.Center);
+
+                            c.Add().DataField("deviation_capa_id").Visible(false);
+                            c.Add().DataField("capa_type").Visible(false);
+                            c.Add().DataField("deviation_place").Visible(false);
+                            c.Add().DataField("detect_emp_cd").Visible(false);
+                            c.Add().DataField("request_emp_cd").Visible(false);
+                            c.Add().DataField("request_date").Visible(false);
+                            c.Add().DataField("despatch_charge_emp").Visible(false);
+                            c.Add().DataField("deviation_capa_status").Visible(false);
+                            c.Add().DataField("detect_method").Visible(false);
+                            c.Add().DataField("deviation_cause").Visible(false);
+                            c.Add().DataField("deviation_level").Visible(false);
+                            c.Add().DataField("deviation_level_nm").Visible(false);
+                            c.Add().DataField("deviation_status").Visible(false);
+                            c.Add().DataField("request_contents").Visible(false);
+                            c.Add().DataField("despatch_date").Visible(false);
+                            c.Add().DataField("despatch_emp_cd").Visible(false);
+                            c.Add().DataField("despatch_emp_nm").Visible(false);
+                            c.Add().DataField("despatch_contents").Visible(false);
+                            c.Add().DataField("despatch_dept_emp").Visible(false);
+                            c.Add().DataField("despatch_dept_emp_nm").Visible(false);
+                            c.Add().DataField("despatch_dept_time").Visible(false);
+                            c.Add().DataField("emp_sign").Visible(false);
+                        })
+                        .OnFocusedRowChanged("Deviation_CapaSelect")
+                    )
+            </div>
+        </div>
+
+
+        <!-- 아래 div -->
+        <div id="Deviation_CapaDown_Left" class="col-8 pr-0">
+            <div class="box mb-0" style="min-height: 362px;">
+                <form id="Deviation_CapaDeviationForm">
+                    <div class="divName margin-bottom">
+                        <p>일탈등록 정보</p>
+                    </div>
+
+                    <input type="hidden" id="deviation_no" />
+                    <div class="col-10">
+                        <div class="input-wrapper">
+                            <label class="col-2">발견 일자</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="detect_date" id="detect_date" readonly />
+                            </div>
+
+                            <label class="col-2">발견 장소</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="deviation_place" id="deviation_place" readonly />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">발견자</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="detect_emp_nm" id="detect_emp_nm" readonly />
+                            </div>
+
+                            <label class="col-2">심각도</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="deviation_level_nm" id="deviation_level_nm" readonly />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">일탈내용정리</label>
+                            <div class="input-group col-9">
+                                <textarea class="form-control" name="deviation_contents2" id="deviation_contents2" cols="100" rows="5" style="height: 80px; resize: vertical;" readonly />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">발견 방법</label>
+                            <div class="input-group col-9">
+                                <textarea class="form-control" name="detect_method" id="detect_method" cols="100" rows="5" style="height: 80px; resize: vertical;" readonly />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">발생원인</label>
+                            <div class="input-group col-9">
+                                <textarea class="form-control" name="deviation_cause" id="deviation_cause" cols="100" rows="5" style="height: 80px; resize: vertical;" readonly />
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+
+        <div id="Deviation_CapaDown_Right" class="col-4">
+            <div class="box mb-0">
+                <ul class="nav nav-tabs" id="Deviation_CapaLeftDownDiv">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('Deviation_CapaLeftDownDiv', 'Deviation_CapaLeftDownDiv', 1);">시정 및 예방조치</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('Deviation_CapaLeftDownDiv', 'Deviation_CapaLeftDownDiv', 2);">변경 승인</a>
+                    </li>
+                </ul>
+
+                <div id="Deviation_CapaLeftDownDiv">
+                    <div id="Deviation_CapaLeftDownDiv_1" class="m-1">
+                        <form id="Deviation_CapaDetailForm">
+                            <input type="hidden" name="deviation_capa_id" id="deviation_capa_id" />
+                            <input type="hidden" name="deviation_capa_status" id="deviation_capa_status" />
+
+                            <div class="input-wrapper">
+                                <label class="col-3">필요 작업</label>
+                                <div class="input-group col-8">
+                                    <textarea class="form-control" name="request_contents" id="request_contents" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">처리 일자<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <input type="text" class="form-control datepicker required" name="despatch_date" id="despatch_date" value="@DateTime.Today.ToShortDateString()" disabled required />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">처리자<star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="despatch_emp_cd" id="despatch_emp_cd" readonly required />
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="dc_despatch_emp_search_btn" onclick="dcDespatchEmpSearch()"><i class="fa fa-search"></i></button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="despatch_emp_nm" id="despatch_emp_nm" readonly />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">처리 내용<star>*</star></label>
+                                <div class="input-group col-8">
+                                    <textarea class="form-control required" name="despatch_contents" id="despatch_contents" cols="100" rows="5" style="height: 50px; resize: vertical;" required />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">진행 상태</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="deviation_capa_status_nm" id="deviation_capa_status_nm" readonly />
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="Deviation_CapaLeftDownDiv_2" class="display-none">
+                        <div id="Deviation_CapaSignDiv">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                .ID("Deviation_CapaSignGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .HoverStateEnabled(true)
+                                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .FocusedRowEnabled(true)
+                                .Height(136)
+                                .OnCellClick("Deviation_CapaSignCheck")
+                                .KeyExpr("sign_set_dt_id")
+                                .Columns(columns =>
+                                {
+                                    columns.Add().DataField("displayfield").Caption("구분");
+                                    columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                                    columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                                    columns.Add().DataField("sign_image").Caption("서명")
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+</div>
+

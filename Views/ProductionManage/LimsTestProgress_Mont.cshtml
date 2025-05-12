@@ -1,0 +1,376 @@
+﻿@*시험종류별 시험진행현황*@
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+
+@{ 
+    var LimsTestProgress_Mont_State = Html.Raw(Json.Encode(ViewBag.LimsTestProgress_Mont_State.Data));
+    var LimsTestProgress_Mont_result = Html.Raw(Json.Encode(ViewBag.LimsTestProgress_Mont_result.Data));
+    var LimsTestProgress_Mont_chart = Html.Raw(Json.Encode(ViewBag.LimsTestProgress_Mont_chart.Data));
+
+}
+
+
+<script id="LimsTestProgress_MontJs">
+
+    var time = 600;
+    var toDay = new Date();
+
+    // 새로고침 객체
+    var LimsTestProgress_Mont_intervalSet = {
+        LimsTestProgress_Mont_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(LimsTestProgress_Mont_intervalSet).length;
+                var _thisViewId = "LimsTestProgress_Mont";
+
+                var time = 5;
+                if ($("#LimsTestProgress_MontSearchForm #refresh_time").val() == 0) $("#LimsTestProgress_MontSearchForm #refresh_time").val(1);
+                time = $("#LimsTestProgress_MontSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "LimsTestProgress_Mont";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        LimsTestProgress_Mont_interval_0: function () {
+            LimsTestProgress_MontSearch();
+
+            LimsTestProgress_Mont_intervalSet.LimsTestProgress_Mont_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+
+    $(function () {
+        LimsTestProgress_Mont_Content_Resize();
+        LimsTestProgress_Mont_intervalSet.LimsTestProgress_Mont_intervalMaster.intervalExcute();
+
+        var today = new Date();
+        $("#LimsTestProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+        if ((@LimsTestProgress_Mont_State).length > 0) {
+
+            $("#LimsTestProgress_MontStateGrid").dxDataGrid("option", "dataSource", JSON.parse(@LimsTestProgress_Mont_State));
+        }
+
+        if ((@LimsTestProgress_Mont_result).length > 0) {
+
+            $("#LimsTestProgress_MontResultGrid").dxDataGrid("option", "dataSource", JSON.parse(@LimsTestProgress_Mont_result));
+        }
+
+        if ((@LimsTestProgress_Mont_chart).length > 0) {
+
+            $("#LimsTestProgress_Montchart").dxChart("option", "dataSource", JSON.parse(@LimsTestProgress_Mont_chart));
+        }
+
+    });
+
+
+
+
+    $("#LimsTestProgress_MontSearchForm input[name='workroom_type']").change(function () {
+
+        LimsTestProgress_MontSearch();
+    })
+
+
+    $("#LimsTestProgress_MontSearchForm #refresh_time").blur(function () {
+        LimsTestProgress_Mont_intervalSet.LimsTestProgress_Mont_intervalMaster.intervalDelete(0, 1);
+        LimsTestProgress_Mont_intervalSet.LimsTestProgress_Mont_intervalMaster.intervalExcute();
+    });
+
+
+    $("#LimsTestProgress_MontSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#LimsTestProgress_MontSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    function LimsTestProgress_MontSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: "/ProductionManage/LimsTestProgress_MontSearch",
+            async: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    return;
+                }
+
+                var jsonData = new Array();
+                for (let i = 0; i < result.length; i++) {
+
+                    if (result[i] != "" && result[i] != null) {
+                        jsonData[i] = JSON.parse(result[i]);
+                    }
+                    else {
+                        jsonData[i] = result[i];
+                    }
+
+                }
+
+
+                $("#LimsTestProgress_MontStateGrid").dxDataGrid("option", "dataSource", jsonData[0]);
+                $("#LimsTestProgress_MontResultGrid").dxDataGrid("option", "dataSource", jsonData[2]);
+                $("#LimsTestProgress_Montchart").dxChart("option", "dataSource", jsonData[1]);
+
+
+                var today = new Date();
+                $("#LimsTestProgress_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+            }
+        })
+    }
+
+
+    function LimsTestProgress_Mont_stateDataInsert(data) {
+        $("#LimsTestProgress_MontStateTable tr:eq(1) td:eq(0)").text(data[0].today_request_cnt);
+        $("#LimsTestProgress_MontStateTable tr:eq(1) td:eq(1)").text(data[0].today_testing_cnt);
+        $("#LimsTestProgress_MontStateTable tr:eq(1) td:eq(2)").text(data[0].today_complete_cnt);
+    }
+
+
+    function LimsTestProgress_Mont_stateDetailDataInsert(data) {
+
+        $("#LimsTestProgress_MontStateDetailGrid").dxDataGrid("option", "dataSource", data);
+
+    }
+
+
+    function LimsTestProgress_Mont_detailDataInsert(data) {
+
+        $("#LimsTestProgress_MontDetailGrid").dxDataGrid("option", "dataSource", data);
+
+    }
+
+
+    function LimsTestProgress_Mont_Content_Resize() {
+        var topPoint1 = document.getElementById("LimsTestProgress_MontStateGrid").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1) - 20
+
+        document.querySelector("#LimsTestProgress_Mont div.col-12 div.box:last-child").style.height = content_max_height + "px";
+        var chart = $("#LimsTestProgress_Montchart").dxChart("instance");
+        chart.option("size", { height: content_max_height });
+    }
+
+</script>
+
+<style>
+
+</style>
+
+<div id="LimsTestProgress_Mont">
+
+    <div id="LimsTestProgress_Mont_Top" class="mainTop row">
+
+        <div class="col-12">
+            <form id="@(pagePrefix)SearchForm"  onsubmit="return false;">
+
+                <div class="input-wrapper">
+                    <div class="col-8 input-group input-group-sm">
+
+                    </div>
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="600" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+
+            </form>
+        </div>
+
+    </div>
+
+    <div class="row mb-1">
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                <div class="divName mb-0">
+                    <p>시험 종류별 현황</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "StateGrid")
+                    .KeyExpr("row_num")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(false)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(300)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("test_type_nm").Caption("종류");
+                        columns.Add().DataField("tr").Caption("이번달 의뢰건수");
+                        columns.Add().DataField("ri").Caption("현재 진행건수");
+                        columns.Add().DataField("te").Caption("이번달 완료건수");
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                        {
+                            items.Add()
+                            .Column("test_type_nm")
+                            .DisplayFormat("합계:");
+
+                            items.Add()
+                            .Name("tr_sum")
+                            .Column("tr")
+                            .SummaryType(SummaryType.Sum)
+                            .ValueFormat("#,##0")
+                            .DisplayFormat("[{0} 건]");
+
+                            items.Add()
+                            .Name("ri_sum")
+                            .Column("ri")
+                            .SummaryType(SummaryType.Sum)
+                            .ValueFormat("#,##0")
+                            .DisplayFormat("[{0} 건]");
+
+                            items.Add()
+                            .Name("te_sum")
+                            .Column("te")
+                            .SummaryType(SummaryType.Sum)
+                            .ValueFormat("#,##0")
+                            .DisplayFormat("[{0} 건]");
+                        })
+                    )
+                )
+            </div>
+
+        </div>
+
+        <div class="col-8 pl-0">
+           
+            <div class="box mb-0" style="width:100%">
+                <div class="divName mb-0">
+                    <p>이번달 시험결과</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "ResultGrid")
+                    .KeyExpr("test_judge_no")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(false)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(300)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("item_nm").Caption("품목명");
+                        columns.Add().DataField("request_date").Caption("의뢰일");
+                        columns.Add().DataField("test_date").Caption("완료일");
+                        columns.Add().DataField("test_result_yn").Caption("판정");
+                        columns.Add().DataField("required_date").Caption("소요일");
+                    })
+
+                    .Summary(s => s
+                        .TotalItems(items =>
+                        {
+                            items.Add()
+                            .Column("item_nm")
+                            .DisplayFormat("시험결과 건수:");
+
+                            items.Add()
+                            .Name("request_date_count")
+                            .Column("request_date")
+                            .SummaryType(SummaryType.Count)
+                            .DisplayFormat("[{0} 건]");
+                        })
+                        .TotalItems(items =>
+                        {
+                            items.Add()
+                            .Column("test_result_yn")
+                            .DisplayFormat("평균 소요일:");
+
+                            items.Add()
+                            .Name("required_date_avg")
+                            .Column("required_date")
+                            .SummaryType(SummaryType.Avg)
+                            .ValueFormat("#,##0.00")
+                            .DisplayFormat("[{0} 일]");
+                        })
+                    )
+                )
+
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0" style="height: 400px;">
+                @(Html.DevExtreme().Chart()
+                    .ID("LimsTestProgress_Montchart")
+                    .Palette(VizPalette.Soft)
+                    .CommonSeriesSettings(s => s
+                        .ArgumentField("date")
+                        .ValueField("cnt")
+                        .Type(SeriesType.Line)
+                        .BarPadding(0.5)
+                    )
+                    .Legend(l => l
+                        .VerticalAlignment(VerticalEdge.Bottom)
+                        .HorizontalAlignment(HorizontalAlignment.Center)
+                    )
+                    .Title(t => t
+                        .Text("추세분석")
+                        .HorizontalAlignment(HorizontalAlignment.Center)
+                        .Font(f => f.Size(24).Weight(700))
+                    )
+                    .SeriesTemplate(st => st.NameField("gubun"))
+                    .Margin(m => m.Bottom(10).Left(10).Right(10))
+                    .Tooltip(t => t.Enabled(true))
+                    .Crosshair(c => c
+                        .Enabled(true)
+                        .HorizontalLine(h => h.Visible(false))
+                    )
+                )
+            </div>
+        </div>
+    </div>
+
+</div>

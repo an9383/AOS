@@ -1,0 +1,1033 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@using System.Web.Script.Serialization
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    //var qualityStatisticalAnalysisData = @Html.Raw(Json.Encode(ViewBag.qualityStatisticalAnalysisData.Data));
+
+    //var qualityStatisticalAnalysisPopup = @Html.Raw(Json.Encode(ViewBag.qualityStatisticalAnalysisPopup.Data));
+    //var itemCodePopupData = @Html.Raw(Json.Encode(ViewBag.itemCodePopupData.Data));
+
+    JavaScriptSerializer serializer = new JavaScriptSerializer();
+    serializer.MaxJsonLength = Int32.MaxValue;
+
+    var itemCodePopupData = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.itemCodePopupData)));
+
+    var venderProdPopupData = @Html.Raw(Json.Encode(ViewBag.venderProdPopupData.Data));
+    var testItemCodePopupData = @Html.Raw(Json.Encode(ViewBag.testItemCodePopupData.Data));
+
+    var srch = ViewData["srch"] as HACCP.Models.QualityControl.QualityStatisticalAnalysis.SrchParam;
+
+}
+
+@*시험통계 분석*@
+
+<script id="@(pagePrefix)Js">
+    //#region load 이벤트
+    $(function () {
+
+        QualityStatisticalAnalysisMenutab('QualityStatisticalAnalysisInnerTab', 'QualityStatisticalAnalysisInnerTabContent', 1);
+
+        var QualityStatisticalAnalysisPopupColumns = {
+            "itemCode": [{ dataField: "item_cd", caption: "품목코드" }, { dataField: "item_nm", caption: "품목명" }, { dataField: "item_top_nm", caption: "대표여부" }],
+            "venderProd": [{ dataField: "vender_cd", caption: "제조업체코드" }, { dataField: "vender_nm", caption: "제조업체명" }],
+            "testItemCode": [{ dataField: "testitem_cd", caption: "시험항목코드" }, { dataField: "testitem_nm", caption: "시험항목명" }, { dataField: "codetype_nm", caption: "그룹/코드" }, { dataField: "testitem_charge_nm", caption: "시험담당자" }, { dataField: "testitem_type", caption: "시험종류" }]
+        };
+
+        createPopup("QualityStatisticalAnalysis" + "ItemCode", "품목 조회", @itemCodePopupData, QualityStatisticalAnalysisPopupColumns.itemCode);
+        createPopup("QualityStatisticalAnalysis" + "VenderProd", "위탁제조업체 조회", @venderProdPopupData, QualityStatisticalAnalysisPopupColumns.venderProd);
+        createPopup("QualityStatisticalAnalysis" + "TestItemCode", "시험항목 조회", @testItemCodePopupData, QualityStatisticalAnalysisPopupColumns.testItemCode);
+
+    $('input[name=item_cd]+div>button, input[name=be_receipt_material_maker_cd]+div>button'
+        , $('#' + "QualityStatisticalAnalysisSearchForm")).click(function (event) {
+            QualityStatisticalAnalysisHelpPopUpSearch(event);
+        });
+
+    //$('input[name^=be_item_cd]+div>button'
+    //    + ',input[name=tester_response_emp]+div>button'
+    //    + ',input[name=tester_gcd]+div>button'
+    //    + ',input[name=tester_mcd]+div>button'
+    //    , $('#' + "QualityStatisticalAnalysisWriteForm")).click(function (event) {
+    //    QualityStatisticalAnalysisHelpPopUpSearch(event);
+    //    });
+
+    $('table button', $('#' + "QualityStatisticalAnalysisWriteForm")).click(function (event) {
+        QualityStatisticalAnalysisHelpPopUpSearch(event);
+        //alert("button clicked!!");
+    });
+
+    $('#QualityStatisticalAnalysis .datepicker').datepicker({
+        format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+        clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+        autoclose: true,
+        templates: {
+            leftArrow: '&laquo;',
+            rightArrow: '&raquo;'
+        }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+        todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+        weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+        language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+    });
+
+
+    //QualityStatisticalAnalysisEditCheck(false, 'N');
+    // 프로그램별 함수 정의
+    QualityStatisticalAnalysisSearch();
+
+    });
+    //#endregion
+
+    // 수정중인지 체크
+    function QualityStatisticalAnalysisEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "QualityStatisticalAnalysisToolbar"
+            , "QualityStatisticalAnalysisGrid"
+        );
+    }
+
+    // 탭 변경
+    function QualityStatisticalAnalysisMenutab(tabId, contentId, seq) {
+
+        //if (_qualityStatisticalAnalysisCRUDStatus === "U" && seq === 5) {
+        //    if ($("#QualityStatisticalAnalysisWriteForm input[name=tester_cd]").val() !== $("#QualityStatisticalAnalysisWriteForm input[name=tester_gcd]").val()) {
+        //        alert("기기코드와 그룹코드가 다릅니다!.\r\n수정할 수 없습니다.");
+        //        QualityStatisticalAnalysisMenutab('QualityStatisticalAnalysisInnerTab', 'QualityStatisticalAnalysisInnerTabContent', 1);      //첫번째 탭으로 이동시킨다.(기기코드와 그룹코드가 다르다는걸 보여주기 위함)
+        //        return;
+        //    }
+        //}
+
+        $("#" + contentId + ">div").hide();
+        $("#" + contentId + " #" + contentId + "_" + seq).show();
+
+        $("#" + tabId + " .nav-link").removeClass("active");
+        $("#" + tabId + " li:nth-child(" + seq + ")").children('a').addClass("active");
+
+        //console.log("seq :" + seq);
+        if (seq === 2) {
+            //$("#TestItemGrid").dxDataGrid("instance").repaint();
+        }
+    }
+
+    //#region 그리드event 관련
+    // 메인그리드 포커스 변경(미완성)
+    function QualityStatisticalAnalysisFocusChanged() {
+
+        QualityStatisticalAnalysisClearDeatil();
+
+        //폼바인딩
+        //console.log('test changed');
+        //UtilView.setDataGridFormBind("QualityStatisticalAnalysisGrid", "QualityStatisticalAnalysisWriteForm");
+        var gridName = "QualityStatisticalAnalysisGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        if (!grid.option("focusedRowKey")) return false;
+
+        var objSrchForm = $('#QualityStatisticalAnalysisSearchForm');
+        var gridData = getGridRowByKey("QualityStatisticalAnalysisGrid", grid.option("focusedRowKey"));
+        // 파라미터 설정
+        var srchObj = {
+            de_start_date: $('input[name=de_start_date]', objSrchForm).val(),
+            de_end_date: $('input[name=de_end_date]', objSrchForm).val()
+        };
+        var dtoObj = {
+            test_type: gridData.test_type,
+            item_cd: gridData.item_cd,
+            process_cd: gridData.process_cd
+        }
+
+        // ajax호출
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/QualityStatisticalAnalysisSelectTestItem',
+            data: {
+                srch: JSON.stringify(srchObj),
+                dto: JSON.stringify(dtoObj)
+            },
+            success: async function (result) {
+
+                var parentDiv = document.getElementById("QualityStatisticalAnalysisInnerTabContentTop");
+
+                while (parentDiv.hasChildNodes()) {
+                    parentDiv.removeChild(parentDiv.firstChild);
+                }
+
+                if (result.length > 0) {
+
+                    var jsonData = JSON.parse(result);
+
+                    $("#QualityStatisticalAnalysisTestItemGrid").dxDataGrid("option", "dataSource", jsonData);
+                    $("#QualityStatisticalAnalysisTestItemDetailGrid").dxDataGrid("option", "dataSource", []);
+                    //$("#QualityStatisticalAnalysisTab2TestItemGrid").dxDataGrid("option", "dataSource", JSON.parse(result));
+
+                    for (var i = 0; i < jsonData.length; i++) {
+
+                        var btn = document.createElement('input');
+                        btn.setAttribute('type', 'button');
+                        btn.setAttribute('value', jsonData[i].testitem_nm);
+                        btn.setAttribute('item_cd', jsonData[i].item_cd);
+                        btn.setAttribute('test_type', jsonData[i].test_type);
+                        btn.setAttribute('process_cd', (jsonData[i].process_cd ? jsonData[i].process_cd : ''));
+                        btn.setAttribute('testitem_cd', jsonData[i].testitem_cd);
+                        btn.classList.add('btn', 'btn-secondary', "margin-5");
+
+                        btn.style = "padding: 0 15px";
+
+                        btn.addEventListener("click", function (event) {
+                            QualityStatisticalAnalysisTestItemClick(event);
+                        });
+
+                        parentDiv.appendChild(btn);
+                    }
+
+                } else {
+                    $("#QualityStatisticalAnalysisTestItemGrid").dxDataGrid("option", "dataSource", []);
+                    $("#QualityStatisticalAnalysisTab2TestDataGrid").dxDataGrid("option", "dataSource", []);
+                    $("#QualityStatisticalAnalysisTab2Chart").dxChart("option", "dataSource", []);
+                    $("#QualityStatisticalAnalysisSummaryForm")[0].reset();
+                }
+            }
+        });
+    }
+
+    function QualityStatisticalAnalysisTestItemClick(e) {
+
+        var objSrchForm = $('#QualityStatisticalAnalysisSearchForm');
+        var objSummaryForm = $('#QualityStatisticalAnalysisSummaryForm');
+        var tgtGridName = "QualityStatisticalAnalysisTab2TestDataGrid";
+
+        if (e.rowIndex < 0) {
+            // 그리드 && 요약값 설정
+            $("#" + tgtGridName).dxDataGrid("option", "dataSource", []);
+            $("#" + objSummaryForm)[0].reset();
+            //$('input[name=lb_testitem_result_min]', objSummaryForm).val('');
+            //$('input[name=lb_testitem_result_max]', objSummaryForm).val('');
+            //$('input[name=lb_testitem_result_avg]', objSummaryForm).val('');
+            //$('input[name=lb_testitem_result_rsd]', objSummaryForm).val('');
+        } else {
+
+            // 파라미터 설정
+            var srchObj = {
+                de_start_date: $('input[name=de_start_date]', objSrchForm).val(),
+                de_end_date: $('input[name=de_end_date]', objSrchForm).val()
+            };
+            var dtoObj = {
+                test_type: e.target.getAttribute('test_type'),
+                item_cd: e.target.getAttribute('item_cd'),
+                process_cd: e.target.getAttribute('process_cd'),
+                testitem_cd: e.target.getAttribute('testitem_cd')
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/QualityControl/QualityStatisticalAnalysisSelectTestData',
+                data: {
+                    srch: JSON.stringify(srchObj),
+                    dto: JSON.stringify(dtoObj)
+                },
+                success: function (result) {
+                    if (Object.keys(result[0]).length > 0) {
+                        var resultData = result[0];
+                        var objFirstRow = JSON.parse(resultData, (key, value) => {
+                            if (typeof value === 'number') {
+                                return value.toFixed(4);
+                            }
+                            return value;
+                        });
+                        objFirstRow = objFirstRow[0];
+
+                        // 그리드 && 요약값 설정
+                        //console.log(objFirstRow);
+                        $("#" + tgtGridName).dxDataGrid("option", "dataSource", JSON.parse(resultData));
+                        $('input[name=lb_testitem_result_min]', objSummaryForm).val(objFirstRow.testitem_result_min);
+                        $('input[name=lb_testitem_result_max]', objSummaryForm).val(objFirstRow.testitem_result_max);
+                        $('input[name=lb_testitem_result_avg]', objSummaryForm).val(objFirstRow.testitem_result_avg);
+                        $('input[name=lb_testitem_result_rsd]', objSummaryForm).val(objFirstRow.testitem_result_rsd);
+
+                    } else {
+                        $("#" + tgtGridName).dxDataGrid("option", "dataSource", []);
+                        $("#" + objSummaryForm)[0].reset();
+                        //$(objForm)[0].reset();
+                    }
+
+                    // 차트의 데이터 소스 설정
+                    if (Object.keys(result[1]).length > 0) {
+                        var resultData = JSON.parse(result[1]);
+
+                        var tmpArr = new Array();
+
+                        for (var i = 0; i < resultData.length; i++) {
+                            if (resultData[i].type_gb === "시험결과") {
+                                tmpArr.push(resultData[i]);
+                            }
+                        }
+
+                        $("#QualityStatisticalAnalysisTab2Chart").dxChart("option", "dataSource", tmpArr);
+
+                    } else {
+                        $("#QualityStatisticalAnalysisTab2Chart").dxChart("option", "dataSource", []);
+                    }
+                }
+            });
+        }
+    }
+
+    // tab1(시헝항목) > testItem 그리드 더블클릭
+    function QualityStatisticalAnalysisTestItemGridDblClick(e) {
+        var objWriteForm = $('#QualityStatisticalAnalysisWriteForm');
+        var tgtGridName = "QualityStatisticalAnalysisTestItemGrid";
+        var chkFlag = false;
+        if (e.rowIndex < 0) {
+            alert("시험항목을 더이상 입력 할 수 없습니다!")
+            return;
+        } else {
+            var gridData = e.data;
+            $('input[name^=be_item_cd]', objWriteForm).each(function (index, item) {
+                if ($(item).val() == "") {
+                    $(item).val(gridData.testitem_cd);
+                    $(item).parent().next().next().children(":first").val(gridData.testitem_nm);
+                    chkFlag = true;
+                    return false;
+                }
+            });
+            if (!chkFlag)  alert("시헝항목을 더이상 입력 할 수 없습니다!");
+        }
+    }
+
+    // tab2(시험항목선택) > testItem 그리드 더블클릭
+    function QualityStatisticalAnalysisTab2TestItemGridDblClick(e) {
+        var objSrchForm = $('#QualityStatisticalAnalysisSearchForm');
+        var objSummaryForm = $('#QualityStatisticalAnalysisSummaryForm');
+        var tgtGridName = "QualityStatisticalAnalysisTab2TestDataGrid";
+
+        if (e.rowIndex < 0) {
+            // 그리드 && 요약값 설정
+            $("#" + tgtGridName).dxDataGrid("option", "dataSource", []);
+            $("#" + objSummaryForm)[0].reset();
+        } else {
+
+            var gridData = e.target;
+
+            // 파라미터 설정
+            var srchObj = {
+                de_start_date: $('input[name=de_start_date]', objSrchForm).val(),
+                de_end_date: $('input[name=de_end_date]', objSrchForm).val()
+            };
+            var dtoObj = {
+                test_type: gridData.test_type,
+                item_cd: gridData.item_cd,
+                process_cd: gridData.process_cd,
+                testitem_cd: gridData.testitem_cd
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/QualityControl/QualityStatisticalAnalysisSelectTestData',
+                data: {
+                    srch: JSON.stringify(srchObj),
+                    dto: JSON.stringify(dtoObj)
+                },
+                success: function (result) {
+                    if (Object.keys(result[0]).length > 0) {
+                        var resultData = result[0];
+                        var objFirstRow = JSON.parse(resultData, (key, value) => {
+                            if (typeof value === 'number') {
+                                return value.toFixed(4);
+                            }
+                            return value;
+                        });
+                        objFirstRow = objFirstRow[0];
+
+                        // 그리드 && 요약값 설정
+                        $("#" + tgtGridName).dxDataGrid("option", "dataSource", JSON.parse(resultData));
+                        $('input[name=lb_testitem_result_min]', objSummaryForm).val(objFirstRow.testitem_result_min);
+                        $('input[name=lb_testitem_result_max]', objSummaryForm).val(objFirstRow.testitem_result_max);
+                        $('input[name=lb_testitem_result_avg]', objSummaryForm).val(objFirstRow.testitem_result_avg);
+                        $('input[name=lb_testitem_result_rsd]', objSummaryForm).val(objFirstRow.testitem_result_rsd);
+
+                    } else {
+                        $("#" + tgtGridName).dxDataGrid("option", "dataSource", []);
+                        $("#" + objSummaryForm)[0].reset();
+                    }
+
+                    // 차트의 데이터 소스 설정
+                    if (Object.keys(result[1]).length > 0) {
+                        var resultData = result[1];
+                        $("#QualityStatisticalAnalysisTab2Chart").dxChart("option", "dataSource", JSON.parse(resultData));
+                    } else {
+                        $("#QualityStatisticalAnalysisTab2Chart").dxChart("option", "dataSource", []);
+                    }
+                }
+            });
+        }
+    }
+
+
+    // 디테일 초기화
+    function QualityStatisticalAnalysisClearDeatil() {
+        $("#QualityStatisticalAnalysisWriteForm")[0].reset();
+        $("#QualityStatisticalAnalysisWriteForm .datepicker").datepicker("update", "");
+        // 그리드 초기화
+        $("#QualityStatisticalAnalysisTestItemGrid").dxDataGrid("option", "dataSource", []);
+        $("#QualityStatisticalAnalysisTestItemDetailGrid").dxDataGrid("option", "dataSource", []);
+        //$("#QualityStatisticalAnalysisTab2TestItemGrid").dxDataGrid("option", "dataSource", []);
+        $("#QualityStatisticalAnalysisTab2TestDataGrid").dxDataGrid("option", "dataSource", []);
+
+        for (var i = 1; i <= 10; i++) {
+            $("#QualityStatisticalAnalysisTestItemDetailGrid").dxDataGrid("instance").columnOption(i + 2, "caption", "시험항목" + i);
+        }
+    }
+
+    //#endregion
+
+    //#region 팝업 관련
+    var QualityStatisticalAnalysisHelpPopUpCurInputName = "";
+
+    // 버튼에 따른 팝업 표시
+    function QualityStatisticalAnalysisHelpPopUpSearch(e) {
+        var popupId = "";
+        if ($(e.target.closest(".px-0")).length > 0) {
+            // <table> 형식의 팝업코드인경우
+            var tmpElement = e.target.closest(".px-0").previousElementSibling.firstChild;
+            QualityStatisticalAnalysisHelpPopUpCurInputName = tmpElement.name;
+            popupId = "QualityStatisticalAnalysisTestItemCode";
+
+        } else {
+            // 기본 팝업인경우
+            QualityStatisticalAnalysisHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+
+            switch (QualityStatisticalAnalysisHelpPopUpCurInputName) {
+                case "item_cd":
+                    popupId = "QualityStatisticalAnalysisItemCode";
+                    break;
+                case "be_receipt_material_maker_cd":
+                    popupId = "QualityStatisticalAnalysisVenderProd";
+                    break;
+                case "be_item_cd":
+                    popupId = "QualityStatisticalAnalysisTestItemCode";
+                    break;
+                //case "tester_response_emp":
+                //    popupId = "QualityStatisticalAnalysisEmp";
+                //    break;
+                //case "tester_mcd":
+                //    popupId = "StandardQualityStatisticalAnalysis";
+                //    break;
+                default:
+                    popupId = "";
+                    break;
+            }
+        }
+
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // 품목팝업 로우선택
+    function QualityStatisticalAnalysisItemCodeRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var inputName = QualityStatisticalAnalysisHelpPopUpCurInputName;
+
+        $("input[name=" + inputName + "]", $('#' + "QualityStatisticalAnalysisSearchForm")).val(data.item_nm);
+
+        $("#QualityStatisticalAnalysisItemCodePopup").dxPopup("instance").hide();
+    }
+
+    // 제조원팝업 로우선택
+    function QualityStatisticalAnalysisVenderProdRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var inputName = QualityStatisticalAnalysisHelpPopUpCurInputName;
+
+        $("input[name=be_receipt_material_maker_cd]", $('#' + "QualityStatisticalAnalysisSearchForm")).val(data.vender_cd);
+        $("input[name=te_receipt_lot_cust_nm]", $('#' + "QualityStatisticalAnalysisSearchForm")).val(data.vender_nm);
+
+        $("#QualityStatisticalAnalysisVenderProdPopup").dxPopup("instance").hide();
+    }
+
+
+    // 시험항목선택팝업 로우선택
+    function QualityStatisticalAnalysisTestItemCodeRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        var strIndex = QualityStatisticalAnalysisHelpPopUpCurInputName.lastIndexOf("_item_cd");
+        //debugger;
+        if (strIndex > -1) {
+            var inputsubfix = QualityStatisticalAnalysisHelpPopUpCurInputName.substring(strIndex);
+            var input_cd = "be" + inputsubfix;
+            var input_nm = "lb" + inputsubfix;
+            $("input[name=" + input_cd + "]", $('#' + "QualityStatisticalAnalysisWriteForm")).val(data.testitem_cd);
+            $("input[name=" + input_nm + "]", $('#' + "QualityStatisticalAnalysisWriteForm")).val(data.testitem_nm);
+        }
+        $("#QualityStatisticalAnalysisTestItemCodePopup").dxPopup("instance").hide();
+    }
+
+
+    //#endregion 팝업관련 END
+
+    //#region 툴바 클릭 이벤트 관련
+
+    // 조회
+    function QualityStatisticalAnalysisSearch() {
+
+        UtilView.dataGridSelect('QualityStatisticalAnalysisGrid', 'QualityStatisticalAnalysisSearchForm');
+        var form = $('#QualityStatisticalAnalysisSearchForm');
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/QualityStatisticalAnalysisSelect',
+            data: form.serialize(),
+            processData: true,
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result == "" ? null : result);
+                    var grid = $("#QualityStatisticalAnalysisGrid").dxDataGrid("instance");
+                    grid.option("dataSource", jsonData);
+
+                    if (grid.option("dataSource").length <= 0) {
+                        QualityStatisticalAnalysisClearDeatil();
+                        grid.option("focusedRowKey", "");
+                    }
+
+                    if (!grid.option("focusedRowKey")) {
+                        grid.option("focusedRowIndex", 0);
+                    } else {
+                        QualityStatisticalAnalysisFocusChanged();
+                    }
+
+                } catch (e) {
+                    $("#QualityStatisticalAnalysisGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+
+    }
+
+    // 입력
+    function QualityStatisticalAnalysisInput() { }
+
+    // 수정
+    function QualityStatisticalAnalysisEdit() { }
+
+    // 삭제
+    function QualityStatisticalAnalysisDelete() { }
+
+    // 저장
+    async function QualityStatisticalAnalysisSave() { }
+
+    // 취소
+    function QualityStatisticalAnalysisUndo() { }
+
+    // 엑셀 추출
+    function QualityStatisticalAnalysisExcel() {
+        var m;
+        try { m = UtilView.getCurMenuInfo('menuname'); } catch (e) { m = '이름없음' };
+        m += "_" + '@DateTime.Now.ToShortDateString()';
+        gridExportToExcel("QualityStatisticalAnalysisGrid", m);
+    }
+
+    //#endregion 툴바 클릭 이벤트 관련 END
+
+    //#region 프로그램별 function
+    // tab1 > 시험항목 detail
+    function QualityStatisticalAnalysisSelectItemDetail() {
+        //폼바인딩
+        //debugger;
+        var gridName = "QualityStatisticalAnalysisGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        if (!grid.option("focusedRowKey")) return false;
+
+        var objSrchForm = $('#QualityStatisticalAnalysisSearchForm');
+        var objWriteForm = $('#QualityStatisticalAnalysisWriteForm');
+        var gridData = getGridRowByKey(gridName, grid.option("focusedRowKey"));
+
+        // 파라미터 설정
+        var srchObj = {
+            de_start_date: $('input[name=de_start_date]', objSrchForm).val(),
+            de_end_date: $('input[name=de_end_date]', objSrchForm).val()
+        };
+        var dtoObj = {
+            test_type: gridData.test_type,
+            item_cd: gridData.item_cd,
+            process_cd: gridData.process_cd
+        }
+        var itemsObj = {
+            testitem_cd1: $('input[name=be_item_cd1]', objWriteForm).val(),
+            testitem_cd2: $('input[name=be_item_cd2]', objWriteForm).val(),
+            testitem_cd3: $('input[name=be_item_cd3]', objWriteForm).val(),
+            testitem_cd4: $('input[name=be_item_cd4]', objWriteForm).val(),
+            testitem_cd5: $('input[name=be_item_cd5]', objWriteForm).val(),
+            testitem_cd6: $('input[name=be_item_cd6]', objWriteForm).val(),
+            testitem_cd7: $('input[name=be_item_cd7]', objWriteForm).val(),
+            testitem_cd8: $('input[name=be_item_cd8]', objWriteForm).val(),
+            testitem_cd9: $('input[name=be_item_cd9]', objWriteForm).val(),
+            testitem_cd10: $('input[name=be_item_cd10]', objWriteForm).val()
+        }
+        // ajax호출
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/QualityStatisticalAnalysisSelectItemDetail',
+            data: {
+                srch: JSON.stringify(srchObj),
+                dto: JSON.stringify(dtoObj),
+                itemParam: JSON.stringify(itemsObj)
+            },
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var jsonData = JSON.parse(result);
+                    var grid = $("#QualityStatisticalAnalysisTestItemDetailGrid").dxDataGrid("instance");
+
+                    for (var i = 1; i <= 10; i++) {
+                        if ($('input[name=lb_item_cd' + i + ']', objWriteForm).val()) {
+                            grid.columnOption(i + 2, "caption", $('input[name=lb_item_cd' + i + ']', objWriteForm).val());
+                        } else {
+                            grid.columnOption(i + 2, "caption", "시험항목" + i);
+                        }
+                    }
+
+                    grid.option("dataSource", JSON.parse(result));
+                } else {
+                    grid.option("dataSource", []);
+                }
+            }
+        });
+    }
+
+    //#endregion
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="QualityStatisticalAnalysisVenderProdPopup"></div>
+    <div id="QualityStatisticalAnalysisItemCodePopup"></div>
+    <div id="QualityStatisticalAnalysisTestItemCodePopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">성적일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="de_start_date" value="@srch.de_start_date" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="de_end_date" value="@srch.de_end_date" autocomplete="off">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="le_s_test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조원</span>
+                        </div>
+                        <input type="text" class="form-control" name="be_receipt_material_maker_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="te_receipt_lot_cust_nm">
+                    </div>
+
+                    @*<button class="btn btn-secondary" type="button" onclick="QualityStatisticalAnalysisBarcodeLabel(0)">바코드 라벨 확인</button>
+                        <button class="btn btn-secondary" type="button" onclick="QualityStatisticalAnalysisBarcodeLabel(1)">바코드 라벨 발행</button>*@
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+        <div class="col-3 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("QualityStatisticalAnalysisGrid")
+                    .KeyExpr(new string[] { "item_cd", "process_cd" })
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .ColumnResizingMode(ColumnResizingMode.Widget)
+                    .AllowColumnReordering(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("test_standard_nm").Caption("규격");
+                        c.Add().DataField("process_nm").Caption("공정");
+                    })
+                    .OnFocusedRowChanged("QualityStatisticalAnalysisFocusChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-9 pl-0">
+            <div class="box mb-0">
+
+                <ul class="nav nav-tabs" id="QualityStatisticalAnalysisInnerTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="QualityStatisticalAnalysisMenutab('QualityStatisticalAnalysisInnerTab', 'QualityStatisticalAnalysisInnerTabContent', 1);">시험항목</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="QualityStatisticalAnalysisMenutab('QualityStatisticalAnalysisInnerTab', 'QualityStatisticalAnalysisInnerTabContent', 2);">시험항목 선택 (시험항목을 클릭하세요)</a>
+                    </li>
+                </ul>
+
+                <div class="flex-grow-1">
+                    <div id="QualityStatisticalAnalysisInnerTabContent" class="height-inherit">
+                        <div id="QualityStatisticalAnalysisInnerTabContent_1" class="row">
+                            <div class="col-3 pr-0">
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("QualityStatisticalAnalysisTestItemGrid")
+                                    .KeyExpr("testitem_cd")
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height(900)
+                                    .ShowBorders(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("testitem_cd").Caption("시험항목코드");
+                                        c.Add().DataField("testitem_nm").Caption("시험항목");
+                                    })
+                                    .OnRowDblClick("QualityStatisticalAnalysisTestItemGridDblClick")
+                                 )
+                            </div>
+                            <div class="col-9 pl-0">
+                                <div class="display-flex">
+                                    <div class="col-1 pr-0 margin-top"><button type="button" class="btn btn-sm btn-primary" id="sb_testitem" onclick="QualityStatisticalAnalysisSelectItemDetail()">조회</button> </div>
+                                    <div class="col-11 pl-0">
+                                        <div class="input-wrapper">
+                                            <form id="QualityStatisticalAnalysisWriteForm">
+                                                <table class="table table-sm table-borderless font-weight-bold mt-0 mb-0">
+                                                    <tr>
+                                                        <td class="align-middle text-right" width="40">항목1</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd1" size="5" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd1" readonly size="12" /></td>
+                                                        <td class="align-middle text-right" width="50">항목2</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd2" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd2" readonly size="12" /></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="align-middle text-right" width="40">항목3</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd3" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd3" readonly size="12" /></td>
+                                                        <td class="align-middle text-right" width="50">항목4</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd4" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd4" readonly size="12" /></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="align-middle text-right" width="40">항목5</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd5" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd5" readonly size="12" /></td>
+                                                        <td class="align-middle text-right" width="50">항목6</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd6" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd6" readonly size="12" /></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="align-middle text-right" width="40">항목7</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd7" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd7" readonly size="12" /></td>
+                                                        <td class="align-middle text-right" width="50">항목8</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd8" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd8" readonly size="12" /></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="align-middle text-right" width="40">항목9</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd9" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd9" readonly size="12" /></td>
+                                                        <td class="align-middle text-right" width="50">항목10</td>
+                                                        <td class="px-0"><input type="text" class="form-control" name="be_item_cd10" size="8" /></td>
+                                                        <td class="px-0" width="10">
+                                                            <button class="btn btn-outline-secondary" type="button">
+                                                                <i class="fa fa-search"></i>
+                                                            </button>
+                                                        </td>
+                                                        <td class="px-0"><input type="text" class="form-control bg-secondary text-light" name="lb_item_cd10" readonly size="12" /></td>
+                                                    </tr>
+                                                </table>
+                                            </form>
+                                        </div>
+
+                                    </div>
+                                </div>
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("QualityStatisticalAnalysisTestItemDetailGrid")
+                                        .KeyExpr("order_no")
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .Height(900)
+                                        .ShowBorders(true)
+                                        .FocusedRowEnabled(true)
+                                        //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .ColumnAutoWidth(true)
+                                        .AllowColumnResizing(true)
+                                        .ColumnResizingMode(ColumnResizingMode.Widget)
+                                        .AllowColumnReordering(true)
+                                        .ColumnChooser(cc => cc.Enabled(true))
+                                        .ShowColumnLines(true)
+                                        .HoverStateEnabled(true)
+                                        .Columns(c =>
+                                        {
+                                            c.Add().DataField("order_no").Caption("제조번호");
+                                            c.Add().DataField("start_date").Caption("제조일자");
+                                            c.Add().DataField("test_no").Caption("시험번호");
+                                            c.Add().DataField("testitem_result1").Caption("시험항목1");
+                                            c.Add().DataField("testitem_result2").Caption("시험항목2");
+                                            c.Add().DataField("testitem_result3").Caption("시험항목3");
+                                            c.Add().DataField("testitem_result4").Caption("시험항목4");
+                                            c.Add().DataField("testitem_result5").Caption("시험항목5");
+                                            c.Add().DataField("testitem_result6").Caption("시험항목6");
+                                            c.Add().DataField("testitem_result7").Caption("시험항목7");
+                                            c.Add().DataField("testitem_result8").Caption("시험항목8");
+                                            c.Add().DataField("testitem_result9").Caption("시험항목9");
+                                            c.Add().DataField("testitem_result10").Caption("시험항목10");
+                                        })
+                                    //.OnFocusedRowChanged("QualityStatisticalAnalysisFocusChanged")
+                                    )
+                                </div>
+                            </div>
+                        </div>
+                        <div id="QualityStatisticalAnalysisInnerTabContent_2">
+
+                            <div class="divName">
+                                <p>시험항목</p>
+                            </div>
+
+                            <div id="QualityStatisticalAnalysisInnerTabContentTop" class="border-bottom-default" style="height:42px; display:flex; overflow:auto;">
+                                <!-- vertical grid가 devextrem에서 지원안되 그냥 datagrid로함..-->
+                                @*@(Html.DevExtreme().DataGrid()
+                                    .ID("QualityStatisticalAnalysisTab2TestItemGrid")
+                                    .Width(300)
+                                    .KeyExpr("testitem_cd")
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    //.Height(100)
+                                    .ShowBorders(true)
+                                    .FocusedRowEnabled(true)
+                                    .FocusedRowIndex(0)
+                                    //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("testitem_nm").Caption("항목명");
+                                    })
+                                    //.OnFocusedRowChanged("QualityStatisticalAnalysisFocusChanged")
+                                    .OnRowDblClick("QualityStatisticalAnalysisTab2TestItemGridDblClick")
+                                )*@
+                            </div>
+                            <div class="pr-0">
+
+                                <div class="divName">
+                                    <p>분석데이터</p>
+                                </div>
+
+                                @*<ul class="nav nav-tabs text-sm-center" style="background-color:cornflowerblue !important;">
+                                    <li class="nav-item">
+                                        <a class="nav-link active">분석데이터</a>
+                                    </li>
+                                </ul>*@
+
+                                <div>
+                                    @(Html.DevExtreme().DataGrid()
+                                        .ID("QualityStatisticalAnalysisTab2TestDataGrid")
+                                        .KeyExpr("order_no")
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .Height(150)
+                                        .ShowBorders(true)
+                                        //.FocusedRowEnabled(true)
+                                        //.SearchPanel(searchPanel => searchPanel.Visible(true))
+                                        .ShowColumnLines(true)
+                                        .HoverStateEnabled(true)
+                                        .Columns(c =>
+                                        {
+                                            //c.Add().DataField("test_judge_no").Caption("시험번호");
+                                            c.Add().DataField("order_no").Caption("제조번호");
+                                            c.Add().DataField("start_date").Caption("제조일자");
+                                            c.Add().DataField("testitem_result").Caption("시험결과");
+                                        })
+                                    //.OnFocusedRowChanged("QualityStatisticalAnalysisFocusChanged")
+                                    )
+                                </div>
+                            </div>
+                            <div class="display-flex">
+                                <div class="col-10">
+                                    @(Html.DevExtreme().Chart()
+                                        .ID("QualityStatisticalAnalysisTab2Chart")
+                                        .Title(t=>
+                                        {
+                                            t.Text("시험항목");
+                                            t.HorizontalAlignment(HorizontalAlignment.Center);
+                                        })
+                                        .Size(c => c.Height(555))
+                                        .Legend( l => l
+                                            .HorizontalAlignment(HorizontalAlignment.Center)
+                                            .VerticalAlignment(VerticalEdge.Top)
+                                            )
+
+                                        .Series(s => s
+                                            .Add()
+                                            .ArgumentField("제조번호")
+                                            .ValueField("시험결과")
+                                            .Name("시험결과")
+                                            .Type(SeriesType.Line)
+                                            .Color("#0000ff")
+                                        )
+                                            //.Series(s => s
+                                            //    .Add()
+                                            //    .ArgumentField("제조번호")
+                                            //    .ValueField("시험결과")
+                                            //    .Name("최소기준")
+                                            //    .Type(SeriesType.Line)
+                                            //    .Color("#28a745")
+                                            //)
+                                            //.Series(s => s
+                                            //    .Add()
+                                            //    .ArgumentField("제조번호")
+                                            //    .ValueField("시험결과")
+                                            //    .Name("최대기준")
+                                            //    .Type(SeriesType.Line)
+                                            //    .Color("#0000ff")
+                                            //)
+
+                                            .Tooltip(t => t
+                                            .Enabled(true)
+                                            @*.Shared(true)
+                                            .CustomizeTooltip(
+                                                @<text>
+                                                    function(info) {
+                                                        return {
+                                                            html: "<div><div class='tooltip-header'>" +
+                                                            info.argumentText + "월</div>" +
+                                                            "<div class='tooltip-body'><div class='series-name'>" +
+                                                            info.points[0].seriesName +
+                                                            ": </div><div class='value-text'>" +
+                                                            info.points[0].valueText +
+                                                            " 건</div><div class='series-name'>" +
+                                                            info.points[1].seriesName +
+                                                            ": </div><div class='value-text'>" +
+                                                            info.points[1].valueText +
+                                                            " 건</div></div></div>"
+                                                        };
+                                                    }
+                                                </text>)*@
+                                            )
+                                        )
+                                </div>
+                                <div class="col-2 text-center">
+                                    <form id="QualityStatisticalAnalysisSummaryForm">
+                                        <div class="divTitle" style="letter-spacing:7px;">최 소 값</div>
+                                        <div class="mb-3"><input type="number" class="form-control bg-light text-right pr-0" name="lb_testitem_result_min" size="10" readonly /></div>
+                                        <div class="divTitle" style="letter-spacing:7px;">최 대 값</div>
+                                        <div class="mb-3"><input type="number" class="form-control bg-light text-right pr-0" name="lb_testitem_result_max" size="10" readonly /></div>
+                                        <div class="divTitle" style="letter-spacing:14px;">평    균</div>
+                                        <div class="mb-3"><input type="number" class="form-control bg-light text-right pr-0" name="lb_testitem_result_avg" size="10" readonly /></div>
+                                        <div class="divTitle" style="letter-spacing:3px;">표 준 편 차</div>
+                                        <div class="mb-3"><input type="number" class="form-control bg-light text-right pr-0" name="lb_testitem_result_rsd" size="10" readonly /></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>

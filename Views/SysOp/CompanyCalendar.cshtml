@@ -1,0 +1,374 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "CompanyCalendar";
+
+    var schedule = @Html.Raw(Json.Encode(ViewBag.schedule.Data));
+    var CompanyCalendarAuth = @Html.Raw(Json.Encode(ViewBag.CompanyCalendarAuth.Data));
+}
+
+@*Calendar 관리*@
+
+<style type="text/css">
+    .cal_top {
+        text-align: center;
+        font-size: 30px;
+    }
+
+    .cal {
+        text-align: center;
+    }
+
+    table.calendar {
+        border: 1px solid black;
+        display: inline-table;
+        text-align: left;
+    }
+
+        table.calendar td {
+            vertical-align: top;
+            border: 1px solid skyblue;
+            width: 14%;
+            padding: 8px 0 8px 8px;
+        }
+</style>
+
+<script id="CompanyCalendarJs">
+
+    var _companyCalendarAuth;
+    var _calendarData;
+
+    $(function () {
+
+        if ((@schedule).length > 0) {
+            _calendarData = JSON.parse(@schedule);
+        }
+        else {
+            _calendarData = "";
+        }
+
+        showCalendar(_calendarData);
+
+        if ((@CompanyCalendarAuth).length > 0) {
+            _companyCalendarAuth = JSON.parse(@CompanyCalendarAuth)[0];
+        }
+        else {
+            _companyCalendarAuth = "";
+        }
+
+        console.log(_companyCalendarAuth);
+
+        //if (_companyCalendarAuth.form_insert != "Y") {
+        //    $("#CompanyCalendarInput").remove();
+        //}
+
+    });
+
+    // 달력 그리는 메소드
+    function showCalendar(calendarData) {
+
+        var cnt = 0;
+
+        var setTableHTML = "";
+        setTableHTML += '<table class="calendar w-100">';
+        setTableHTML += '<tr><th class="text-danger">SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th class="text-info">SAT</th></tr>';
+        for (var i = 0; i < 6; i++) {
+            setTableHTML += '<tr height="100">';
+            for (var j = 0; j < 7; j++) {
+                setTableHTML += '<td style="text-overflow:ellipsis;overflow:hidden;white-space:nowrap" onclick="calendarClick('+(cnt)+')">';
+                setTableHTML += '    <div class="cal-day" id="day' + (cnt + 1) + '">' + calendarData[cnt].calendar_day + " " + calendarData[cnt].anniversary_nm + '</div>';
+                setTableHTML += '    <hr/ >';
+                setTableHTML += '    <div class="cal-schedule">';
+                setTableHTML += '       <label>구분:</label>';
+                setTableHTML += '       <select class="form-control col-8" id="selectBox'+(cnt+1)+'">';
+                setTableHTML += '           <option value="A">평일</option>';
+                setTableHTML += '           <option value="B">휴일</option>';
+                setTableHTML += '           <option value="C">반일</option>';
+                setTableHTML += '       </select><br>';
+                setTableHTML += '       <p class="margin-bottom-8">출근: ' + (calendarData[cnt].attend_time ? calendarData[cnt].attend_time : "") +'</p>';
+                setTableHTML += '       <p class="margin-bottom-8">퇴근: ' + (calendarData[cnt].leave_time ? calendarData[cnt].leave_time : "") +'</p>';
+                setTableHTML += '    </div>';
+                setTableHTML += '</td>';
+                cnt++;
+            }
+            setTableHTML += '</tr>';
+        }
+
+        setTableHTML += '</table>';
+        $("#cal_tab").html(setTableHTML);
+
+        // 주말 표시
+        for (var i = 1; i <= 42; i++) {
+            if (i % 7 === 0) {
+                $("#selectBox" + i).val("B");
+                $("#day" + i).addClass("text-info");
+            } else if (i % 7 === 1) {
+                $("#selectBox" + i).val("B");
+                $("#day" + i).addClass("text-danger");
+            } else if (calendarData[i - 1].anniversary_nm != "" && calendarData[i - 1].anniversary_nm != null) {
+                $("#selectBox" + i).val("B");
+                $("#day" + i).addClass("text-danger");
+            } else if (calendarData[i - 1].calendar_type === "B") {
+                $("#selectBox" + i).val("B");
+                $("#day" + i).addClass("text-danger");
+            }
+        }
+
+        $(".calendar select").attr("disabled", true);
+
+    }
+
+    // calendar 검색
+    function selectCompanyCalndar() {
+
+        var form = $('#companyCalendarForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectCalendar',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                showCalendar(JSON.parse(result));
+            }
+        })
+    }
+
+
+    function CompanyCalendarSearch() {
+        selectCompanyCalndar();
+    }
+
+    // calendar 생성 (월 단위)
+    function CompanyCalendarInput() {
+
+        var calendarInputconfirm = confirm($("#CompanyCalendar input[name=year]").val() + "년 " + $("#CompanyCalendar input[name=month]").val() + "월 달력이 생성됩니다.");
+
+        if (!calendarInputconfirm) {
+            return;
+        }
+
+        var form = $('#companyCalendarForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/InputCalendar',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                } catch (e) {
+
+                    selectCompanyCalndar();
+                }
+            }
+        })
+    }
+
+    // 달력 클릭
+    function calendarClick(cnt) {
+
+        if (_companyCalendarAuth.form_edit != "Y") {
+            return;
+        }
+
+        var popup = $("#CompanyCalendarEditPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#CompanyCalendarEditPopupTemplate"));
+
+        popup.show();
+
+        $("#ItemGuideInputForm select[name=calendar_type]").val(_calendarData[cnt].calendar_type);
+        $("#ItemGuideInputForm input[name=attend_time]").val(_calendarData[cnt].attend_time);
+        $("#ItemGuideInputForm input[name=leave_time]").val(_calendarData[cnt].leave_time);
+        $("#ItemGuideInputForm input[name=cnt]").val(cnt);
+
+        console.log(_calendarData[cnt]);
+    }
+
+    // 수정 사항 저장
+    function CompanyCalendarSave() {
+
+        var data = _calendarData[$("#ItemGuideInputForm input[name=cnt]").val()];
+
+        data.calendar_type = $("#ItemGuideInputForm select[name=calendar_type]").val();
+        data.attend_time = $("#ItemGuideInputForm input[name=attend_time]").val();
+        data.leave_time = $("#ItemGuideInputForm input[name=leave_time]").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/EditCalendar',
+            data: data,
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                } catch (e) {
+
+                    $("#CompanyCalendarEditPopup").dxPopup("instance").hide();
+                    selectCompanyCalndar();
+                }
+            }
+        })
+    }
+
+</script>
+
+<div id="CompanyCalendar" autoresize="Y">
+
+    @* === 수정 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("CompanyCalendarEditPopup")
+        .Width(480)
+        .Height(200)
+        .ShowTitle(true)
+        .Title("입력")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("CompanyCalendarEditPopupTemplate"))
+    {
+        <form id="ItemGuideInputForm">
+            <div class="input-wrapper">
+                <label class="col-3">구분</label>
+                <div class="input-group col-8">
+                    <select class="form-control col-12" name="calendar_type" onchange="selectCompanyCalndar()">
+                        <option value="A">평일</option>
+                        <option value="B">휴일</option>
+                        <option value="C">반일</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-3">출근</label>
+                <div class="input-group col-8">
+                    <input type="time" class="form-control col-12" name="attend_time">
+                </div>
+            </div>
+
+            <div class="input-wrapper">
+
+                <label class="col-3">퇴근</label>
+                <div class="input-group col-8">
+                    <input type="time" class="form-control col-12" name="leave_time">
+                </div>
+                <input type="number" name="cnt" hidden="hidden">
+
+            </div>
+
+        </form>
+
+        @(Html.DevExtreme().Toolbar()
+            .ID("CompanyCalendarToolbar")
+            .Items(items =>
+            {
+                items.Add()
+                    .Widget(w => w
+                    .Button()
+                    .Type(ButtonType.Default)
+                    .StylingMode(ButtonStylingMode.Contained)
+                    .ID("CompanyCalendarSave")
+                    .Icon("save")
+                    .Text("저장")
+                    .OnClick("CompanyCalendarSave")
+                    )
+                    .Location(ToolbarItemLocation.After);
+            })
+            )
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="companyCalendarForm">
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">종류</span>
+                        </div>
+                        <select class="form-control" name="calendarCd" onchange="selectCompanyCalndar()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.calendarCd).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">연 월</span>
+                        </div>
+
+                        <input type="number" class="form-control col-5" name="year" min="1" max="9999" value="@DateTime.Now.Year" onchange="selectCompanyCalndar()" />
+                        <div class="input-group-append"><span class="input-group-text">년</span></div>
+                        <input type="number" class="form-control col-5" name="month" min="1" max="12" value="@DateTime.Now.Month" onchange="selectCompanyCalndar()" />
+                        <div class="input-group-append"><span class="input-group-text">월</span></div>
+
+                    </div>
+
+                    @*<label class="col-1">연 월</label>
+                        <input type="number" class="form-control col-6" name="year" min="1" max="9999" value="@DateTime.Now.Year" onchange="selectCompanyCalndar()"><label>&nbsp;년&nbsp;</label>
+                        <input type="number" class="form-control col-6" name="month" min="1" max="12" value="@DateTime.Now.Month" onchange="selectCompanyCalndar()"><label>&nbsp;월&nbsp;</label>*@
+
+                </div>
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input"); }
+        </div>
+
+    </div>
+
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box w-100">
+
+                <div id="cal_tab" class="cal w-100">
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

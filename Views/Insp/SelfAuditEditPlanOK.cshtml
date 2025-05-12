@@ -1,0 +1,2028 @@
+﻿@*자율점검 조치 계획 승인*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views  
+
+@{
+    Layout = null;
+
+    var SelfAuditEditPlanOKData = @Html.Raw(Json.Encode(ViewBag.SelfAuditEditPlanOKData.Data));
+    var SelfAuditEditPlanOKAuth = @Html.Raw(Json.Encode(ViewBag.SelfAuditEditPlanOKAuth.Data));
+
+    var empPopupJson = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+    var deptPopupJosn = Html.Raw(Json.Encode(ViewBag.deptPopupData.Data));
+}
+
+
+<script type="text/javascript" id="SelfAuditEditPlanOKJs">
+    // SP 구문, gubun 변수
+    var toDay = new Date();
+    var _CRUDGubun = "";
+    var _signGubun = "";
+    var sign_type = "";
+    var sign_seq = "";
+    var c_commnt_Gubun = "";
+    var m_commnt_Gubun = "";
+
+    $(document).ready(function () {
+        SelfAuditEditPlanOK_ContentResize();
+        EditPlanOKCommonEditCheck(false);
+
+        var sDate = new Date();
+        sDate.setMonth(sDate.getMonth() - 1);
+
+        $("#SelfAuditEditPlanOKSearchForm #audit_step").val("5");
+        $("#SelfAuditEditPlanOKSearchForm #audit_status").val("2");
+
+
+        if (@Html.Raw(Json.Encode(ViewBag.SelfAuditEditPlanOKData.Data)) != "") {
+            $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@SelfAuditEditPlanOKData));
+            $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+
+        var columns = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+        var columns1 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("EditPlanOKAuditorSearch", "점검책임자조회", @empPopupJson, columns, "emp_cd");
+        createPopup("SelfAuditCaOEmp", "지시자조회", @empPopupJson, columns, "emp_cd");
+        createPopup("SelfAuditCaDept", "부서조회", @deptPopupJosn, columns1, "dept_cd");
+        createPopup("SelfAuditCaDeptEmp", "부서장조회", @empPopupJson, columns, "emp_cd");
+
+
+
+        // CRUD체크
+        var SelfAuditEditPlanOKAuth = JSON.parse(@SelfAuditEditPlanOKAuth)[0];
+        if (SelfAuditEditPlanOKAuth.form_query != "Y") {
+            $("#SelfAuditEditPlanOKSearch").remove();
+        }
+        if (SelfAuditEditPlanOKAuth.form_insert != "Y") {
+            $("#SelfAuditEditPlanOKInput").remove();
+        }
+        if (SelfAuditEditPlanOKAuth.form_edit != "Y") {
+            $("#SelfAuditEditPlanOKEdit").remove();
+        }
+        if (SelfAuditEditPlanOKAuth.form_delete != "Y") {
+            $("#SelfAuditEditPlanOKDelete").remove();
+        }
+
+        $("#SelfAuditEditPlanOKEdit").dxButton().parent().parent().addClass("display-none");
+        $("#SelfAuditEditPlanOKExcel").dxButton().parent().parent().addClass("display-none");
+
+        setDatePicker("#SelfAuditEditPlanOK .datepicker");
+
+    })
+
+    // #region 버튼 관련
+    // 수정, 입력 중인지 체크
+    function EditPlanOKCommonEditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#SelfAuditEditPlanOKSave").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKSearch").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKInput").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKDelete").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKPrint").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKPreview").dxButton().parent().parent().addClass("display-none");
+
+            $("#RevisionForm #self_audit_ca_o_emp").css("background", "#f6c4db");
+
+            _CRUDGubun = "IU";
+        }
+        if (!nowEdit) {
+            $("#SelfAuditEditPlanOKSave").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKUndo").dxButton().parent().parent().addClass("display-none");
+            $("#SelfAuditEditPlanOKSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKInput").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKPrint").dxButton().parent().parent().removeClass("display-none");
+            $("#SelfAuditEditPlanOKPreview").dxButton().parent().parent().removeClass("display-none");
+
+            $("#RevisionForm #self_audit_ca_o_emp").css("background", "");
+
+            _CRUDGubun = "";
+        }
+    }
+
+
+    // 조회버튼 기능
+    function SelfAuditEditPlanOKSearch() {
+        AllResetForm();
+        gridReset("SelfAuditEditPlanOKGrid");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/EditPlanOKSearch',
+            data: {
+                sDate: $("#SelfAuditEditPlanOKSearchForm #s_start_date").val(),
+                eDate: $("#SelfAuditEditPlanOKSearchForm #s_end_date").val(),
+                emp_cd: $("#SelfAuditEditPlanOKSearchForm #auditor_cd").val(),
+                step: $("#SelfAuditEditPlanOKSearchForm #audit_step").val(),
+                status: $("#SelfAuditEditPlanOKSearchForm #audit_status").val()
+            },
+            async: false,
+            success: function (result) {
+                if (result == "") return;
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                EditPlanOKListSelect(json[0]);
+            }
+        })
+    }
+
+
+    // 입력버튼 기능
+    function SelfAuditEditPlanOKInput() {
+        EditPlanOKCommonEditCheck(true);
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() <= 0) {
+            alert("입력할 항목이 없습니다");
+
+            EditPlanOKCommonEditCheck(false);
+            return;
+        }
+
+        var tap_no = $("#SelfAuditEditPlanOKMenuDiv2 > div").not('.display-none').attr("id").slice(-1);
+
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #RevisionForm")[0].reset();
+
+        if (tap_no == 1) {
+
+            var signGrid = $("#SelfAuditEditPlanOKSignGrid").dxDataGrid("instance");
+            if (signGrid.totalCount() > 0) {
+                if (signGrid.getDataSource().items()[1].sign_yn == "1") {
+
+                    EditPlanOKCommonEditCheck(false);
+                    _CRUDGubun = "IU";
+                    sign_seq = "2";
+                    _signGubun = "Check";
+
+                    var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+                    popup.option("contentTemplate", $("#SelfAuditEditPlanOKSignPopupTemplate"));
+                    popup.show();
+
+                } else {
+                    CRUDRevisionGrid(true);
+                }
+            }
+
+
+        } else if (tap_no == 2) {
+            alert("점검결과는 조회만 가능합니다");
+            EditPlanOKCommonEditCheck(false);
+
+            return;
+        }
+
+    }
+
+
+    // 수정버튼 기능
+    function SelfAuditEditPlanOKEdit() {
+
+    }
+
+
+    // 취소버튼 기능
+    function SelfAuditEditPlanOKUndo() {
+        EditPlanOKCommonEditCheck(false);
+        CRUDRevisionGrid(false);
+
+        EditPlanOKRevisionSelect({ rowIndex: "0" });
+    }
+
+
+    // 저장버튼 기능
+    function SelfAuditEditPlanOKSave() {
+
+        var input_arr = $("#SelfAuditEditPlanOKMenuDiv2_1 [required]");
+
+        for (var i = 0; i < input_arr.length; i++) {
+
+            if (input_arr[i].value.length <= 0) {
+
+                alert("필수 입력 자료를 모두 입력하십시요!!");
+
+                return;
+            }
+        }
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/SelfAuditEditPlanOKSave',
+            data: {
+                self_audit_year: data.self_audit_year,
+                self_audit_no: data.self_audit_no,
+                self_audit_ca_o_contents: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").val(),
+                self_audit_ca_o_date: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").val(),
+                self_audit_ca_o_emp: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp").val(),
+                self_audit_ca_plan_contents: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_contents").val(),
+                self_audit_ca_dept_emp: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp").val(),
+                self_audit_ca_plan_limit: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").val(),
+                self_audit_ca_dept: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept").val(),
+                self_audit_ca_id: $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_id").val()
+            },
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    EditPlanOKRevisionSearch();
+                } else {
+                    alert("실패하였습니다.");
+
+                }
+            }
+        })
+        EditPlanOKCommonEditCheck(false);
+        CRUDRevisionGrid(false);
+
+    }
+
+
+    // 삭제버튼 기능
+    function SelfAuditEditPlanOKDelete() {
+
+        var tap_no = $("#SelfAuditEditPlanOKMenuDiv2 > div").not('.display-none').attr("id").slice(-1);
+
+        if (tap_no == 2) {
+            alert("점검결과는 조회만 가능합니다.");
+        } else if (tap_no == 1) {
+
+            var revisionGrid = $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance");
+            if (revisionGrid.totalCount() <= 0) {
+                alert("삭제할 항목이 없습니다");
+                return;
+            } else {
+                var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+                var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+                var revisionData = getGridRowByKey("SelfAuditEditPlanOKRevisionGrid", revisionGrid.option("focusedRowKey"));
+
+                if (revisionData.self_audit_ca_status != "1") {
+                    alert("수정조치가 진행되어 삭제 할 수 없습니다");
+
+                    return;
+                }
+
+
+
+                if (confirm("해당 항목을 삭제하시겠습니까?")) {
+                    var signGrid = $("#SelfAuditEditPlanOKSignGrid").dxDataGrid("instance");
+                    if (signGrid.totalCount() > 0) {
+                        if (signGrid.getDataSource().items()[1].sign_yn == "1") {
+
+                            EditPlanOKCommonEditCheck(false);
+                            _signGubun = "Check";
+                            sign_seq = "2";
+                            _CRUDGubun = "D";
+
+                            var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+                            popup.option("contentTemplate", $("#SelfAuditEditPlanOKSignPopupTemplate"));
+                            popup.show();
+
+                        } else {
+                            revisionDelete();
+                        }
+                    }
+
+                }
+
+            }
+
+
+        }
+
+    }
+
+
+    // 프린트버튼 기능
+    function SelfAuditEditPlanOKPrint() {
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var mainGrid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+        if (mainGrid.totalCount() > 0) {
+            var mainData = getGridRowByKey("SelfAuditEditPlanOKGrid", mainGrid.option("focusedRowKey"));
+            var subParam = "title=자율 점검 조치 계획서;"
+                + "self_audit_plan=수행 계획;"
+                + "self_audit_revision_doc=관련 문서 계정 계획;"
+                + "para_check1=□ 자율점검계획, ■ 조치계획, □ 기타";
+
+
+            var fileGrid = $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance");
+            if (fileGrid.totalCount() > 0) {
+
+                for (var i = 0; i < fileGrid.getDataSource().items().length; i++) {
+                    if (fileGrid.getDataSource().items()[i].upload_step == mainData.self_audit_step) {
+
+                        subParam += ";para_check4=□ 없음, ■ 있음";
+
+                    } else {
+                        subParam += ";para_check4=■ 없음, □ 있음";
+                    }
+                }
+            } else {
+                subParam += ";para_check4=■ 없음, □ 있음";
+            }
+
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "SelfAudit", RptFileName: "SelfAuditRT" },
+                objSp: {
+                    SpName: "SP_SelfAuditEditPlanOK", gubun: "SR",
+                    reportParam: "self_audit_year:" + mainData.self_audit_year
+                        + ";self_audit_no:" + mainData.self_audit_no
+                        + ";self_audit_step:" + mainData.self_audit_step
+                },
+                objEtcInfo: {
+                    subParam: subParam
+                }
+            });
+
+
+            // 레포트테스트(생성객체확인)
+            //report.testObj();
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+
+        }
+    }
+
+
+    // 엑셀버튼 기능
+    function SelfAuditEditPlanOKExcel() {
+
+    }
+
+
+    function SelfAuditEditPlanOK_CRUDBtn_Reset(check) {
+        if (check) {
+            $("#SelfAuditEditPlanOKInput").dxButton("instance").option("disabled", false);
+            $("#SelfAuditEditPlanOKEdit").dxButton("instance").option("disabled", false);
+            $("#SelfAuditEditPlanOKDelete").dxButton("instance").option("disabled", false);
+
+        }
+        if (!check) {
+            $("#SelfAuditEditPlanOKInput").dxButton("instance").option("disabled", true);
+            $("#SelfAuditEditPlanOKEdit").dxButton("instance").option("disabled", true);
+            $("#SelfAuditEditPlanOKDelete").dxButton("instance").option("disabled", true);
+
+        }
+    }
+
+    // #endregion
+
+
+    // 메인 그리드 선택 시 처리
+    async function EditPlanOKListSelect() {
+        //$("#SelfAuditEditPlanOKMenuDiv2_1 #RevisionForm")[0].reset();
+        $("#SelfAuditEditPlanOKMenuDiv2_2 #editPlanOKResultForm")[0].reset();
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+                data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+            } else {
+                return;
+            }
+        }
+
+        // 서명 정보 조회
+        await EditPlanOKDisplayESInfo(data);
+
+
+        // 수정조치 정보 조회
+        await EditPlanOKRevisionSearch(data);
+
+
+        // 점검결과 정보 조회
+        await EditPlanOKResultSearch(data);
+
+
+        //// 첨부파일 정보 조회
+        await EditPlanOKFileSearch(data);
+
+    }
+
+
+    // #region 팝업 관련
+    // 검색용 사원 팝업 띄우기
+    function PlanOkAuditorSearchBtn() {
+        $("#SelfAuditEditPlanOK #EditPlanOKAuditorSearchPopup").dxPopup("instance").show();
+    }
+
+
+    // 지시자 팝업 띄우기
+    function SelfAuditCaOEmpBtn() {
+        $("#SelfAuditEditPlanOK #SelfAuditCaOEmpPopup").dxPopup("instance").show();
+    }
+
+
+    // 부서 팝업 띄우기
+    function SelfAuditCaDeptBtn() {
+        $("#SelfAuditEditPlanOK #SelfAuditCaDeptPopup").dxPopup("instance").show();
+    }
+
+
+    // 부서장 팝업 띄우기
+    function SelfAuditCaDeptEmpBtn() {
+        $("#SelfAuditEditPlanOK #SelfAuditCaDeptEmpPopup").dxPopup("instance").show();
+    }
+
+
+    // 검색용 사원 팝업 로우 더블클릭
+    function EditPlanOKAuditorSearchRowDblClick(selectedItems) {
+        $("#SelfAuditEditPlanOKSearchForm #auditor_cd").val(selectedItems.data.emp_cd);
+        $("#SelfAuditEditPlanOKSearchForm #auditor_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditEditPlanOK #EditPlanOKAuditorSearchPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 지시자 팝업 로우 더블클릭
+    function SelfAuditCaOEmpRowDblClick(selectedItems) {
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp").val(selectedItems.data.emp_cd);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditEditPlanOK #SelfAuditCaOEmpPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 부서 팝업 로우 더블클릭
+    function SelfAuditCaDeptRowDblClick(selectedItems) {
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept").val(selectedItems.data.dept_cd);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_nm").val(selectedItems.data.dept_nm);
+
+
+        var popup = $("#SelfAuditEditPlanOK #SelfAuditCaDeptPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+
+    // 부서장 팝업 로우 더블클릭
+    function SelfAuditCaDeptEmpRowDblClick(selectedItems) {
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp").val(selectedItems.data.emp_cd);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp_nm").val(selectedItems.data.emp_nm);
+
+
+        var popup = $("#SelfAuditEditPlanOK #SelfAuditCaDeptEmpPopup").dxPopup("instance");
+
+        popup.hide();
+    }
+
+    // #endregion
+
+
+    // #region 서명 관련
+    //작성자 서명 정보 조회
+    function EditPlanOKDisplayESInfo() {
+        gridReset("SelfAuditEditPlanOKSignGrid");
+
+        var data
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+                data = getGridRowByKey('SelfAuditEditPlanOKGrid', grid.option("focusedRowKey"));
+            } else {
+                return;
+            }
+
+        } else {
+            data = arguments[0];
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/EditPlanOKDisplayESInfo',
+            data: {
+                audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no,
+                sign_set_cd: '5206'
+            },
+            success: function (result) {
+                var json = JSON.parse(result);
+
+
+                if (json == "") {
+                    gridReset("SelfAuditEditPlanOKSignGrid");
+
+                    return;
+                }
+
+
+                $("#SelfAuditEditPlanOKSignGrid").dxDataGrid("option", "dataSource", json);
+                $("#SelfAuditEditPlanOKCommentDiv #c_comment").val(json[1].sign_comment);
+                $("#SelfAuditEditPlanOKCommentDiv #m_comment").val(json[2].sign_comment);
+            }
+        });
+
+    }
+
+
+    // 서명 확인
+    function SelfAuditEditPlanOKSign_Check(e) {
+        if (e.data.sign_set_dt_seq == "1") {
+            EditPlanOKSignCheck_w(e.data);
+        } else if (e.data.sign_set_dt_seq == "2") {
+            EditPlanOKSignCheck_c(e.data);
+        } else {
+            EditPlanOKSignCheck_m(e.data);
+        }
+    }
+
+    function EditPlanOKSignCheck_w(_data) {
+        _signGubun = "ES";
+        sign_seq = "1";
+        sign_type = "cw";
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        if (_CRUDGubun == "IU") {
+            alert("수정 상태에선 서명할 수 없습니다");
+
+            return;
+        }else {
+            if (grid.totalCount() <= 0) {
+                alert("전자서명 대상이 없습니다");
+
+                return;
+            } else {
+                if (_data.next_sign_yn == "1") {
+                    alert("검토자의 서명이 되어있습니다");
+
+                    return;
+                } else {
+                    if (_data.sign_yn == "1") {
+                        if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                            _signGubun = "DEL_ES";
+                        } else {
+                            return;
+                        }
+                    } else {
+                        //상태값 체크 (5.수정조치/ 2.승인의뢰)일 경우에만 전자서명이 가능하다. 상태 진행 전에는 전자서명 불가
+                        if (!(gridData.self_audit_step == "5" && gridData.self_audit_step_status == "2")) {
+
+                            alert("진행단계와 진행상태를 확인하세요");
+
+                            return;
+                        }
+                    }
+                }
+
+            }
+        }
+
+        var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditEditPlanOKSignPopupTemplate"));
+        popup.show();
+    }
+
+
+    function EditPlanOKSignCheck_c(_data) {
+        _signGubun = "ES";
+        sign_seq = "2";
+        sign_type = "cc";
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        if (_CRUDGubun == "IU") {
+            alert("수정 상태에선 서명할 수 없습니다");
+
+            return;
+        } else {
+            if (_data.prev_sign_yn == "0") {
+                alert("작성자 승인 후 작성이 가능합니다.");
+
+                return;
+            }
+
+            if (grid.totalCount() <= 0 || gridData.hasOwnProperty("items")) {
+                alert("전자서명 대상이 없습니다");
+
+                return;
+            } else {
+                // 승인되어 있을 경우
+                if (_data.sign_yn == "1") {
+                    if (_data.next_yn == "0") {
+                        if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                            _signGubun = "DEL_ES";
+                        } else {
+
+                            return;
+                        }
+                    } else {
+                        alert("승인자의 서명이 되어있습니다");
+
+                        return;
+                    }
+
+                } else {
+
+                    if (!(gridData.self_audit_step == "5" && gridData.self_audit_step_status == "2")) {
+                        alert("진행단계와 진행상태를 확인하세요");
+
+                        return;
+                    }
+                }
+
+            }
+
+        }
+
+        var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditEditPlanOKSignPopupTemplate"));
+        popup.show();
+    }
+
+
+    function EditPlanOKSignCheck_m(_data) {
+        _signGubun = "ES";
+        sign_seq = "3";
+        sign_type = "c";
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        if (_CRUDGubun == "IU") {
+            alert("수정 상태에선 서명할 수 없습니다");
+
+            return;
+        } else {
+            if (_data.prev_sign_yn == "0") {
+                alert("검토자 승인 후 작성이 가능합니다.");
+
+                return;
+            }
+
+
+            if (grid.totalCount() <= 0 || gridData.hasOwnProperty("items")) {
+                alert("전자서명 대상이 없습니다");
+
+                return;
+            } else {
+                // 승인되어 있을 경우
+                if (_data.sign_yn == "1") {
+                    if (gridData.self_audit_step == "5" && gridData.self_audit_step_status == "3") {
+                        if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+
+                            _signGubun = "DEL_ES";
+                        } else {
+
+                            return;
+                        }
+                    } else {
+                        alert("진행단계와 진행상태를 확인하세요");
+
+                        return;
+                    }
+                } else {
+                    if (!(gridData.self_audit_step == "5" && gridData.self_audit_step_status == "2")) {
+                        alert("진행단계와 진행상태를 확인하세요");
+
+                        return;
+                    }
+                }
+            }
+
+        }
+
+        var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#SelfAuditEditPlanOKSignPopupTemplate"));
+        popup.show();
+    }
+
+
+    // 서명 권한 체크(id, pw)
+    async function SelfAuditEditPlanOKSignSubmit(){
+        var data = new FormData($('#SelfAuditEditPlanOKSignForm')[0]);
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        data.set("gubun", "S");
+
+
+        if (!await SelfAuditEditPlanOKValidationCheck(data)) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            EditPlanOKCommonEditCheck(false);
+
+            var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }
+
+        if (!await SelfAuditEditPlanOKAuthorityCheck($("input[name='emp_cd']").val())) {
+            alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+
+            var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+            popup.hide();
+
+            return;
+        }  
+
+        await SelfAuditEditPlanOKExecuteSign();
+
+    }
+
+
+    function SelfAuditEditPlanOKValidationCheck(data) {
+        var check = false;
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    $("input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                    $("input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+                    $("input[name='emp_cd']").val(JSON.parse(result)[0].emp_cd);
+
+                    check = true;
+                }
+
+               
+            }
+        });
+
+        return check;
+    }
+
+
+
+    function SelfAuditEditPlanOKAuthorityCheck(emp_cd) {
+        var check = false;
+
+        $.ajax({
+            type: 'GET',
+            url: '/Comm/AuthorityCheck',
+            data: {
+                emp_cd: emp_cd,
+                sign_set_cd: "5206",
+                sign_set_seq: sign_seq
+            },
+            async: false,
+            success: function (result) {
+
+                if (result) {
+                    sign_set_seq = "";
+
+                    check = true;
+                }
+            }
+        });
+
+        return check;
+    }
+
+
+
+    function SelfAuditEditPlanOKExecuteSign() {
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+
+        if (_signGubun != "Check") {
+            setTimeout(function () {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Insp/EditPlanOKSign_CRUD',
+                    data: {
+                        gubun: _signGubun,
+                        audit_year: gridData.self_audit_year,
+                        audit_no: gridData.self_audit_no,
+                        emp_cd: $("input[name='emp_cd']").val(),
+                        type: sign_type
+                    },
+                    success: function (result) {
+
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (json.message != "") {
+                            alert(json.message);
+
+                            SelfAuditEditPlanOKSearch();
+                        } else {
+                            alert("실패하였습니다.");
+                        }
+
+                    }
+                });
+
+                _signGubun = "";
+
+                var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+        } else {
+            setTimeout(function () {
+
+                var popup = $("#SelfAuditEditPlanOKSignPopup").dxPopup("instance");
+                popup.hide();
+
+                _signGubun = "";
+                if (_CRUDGubun == "IU") {
+
+                    EditPlanOKCommonEditCheck(true);
+                    CRUDRevisionGrid(true);
+                }
+                else if (_CRUDGubun == "D") {
+                    _CRUDGubun = "";
+
+                    var signGrid = $("#SelfAuditEditPlanOKSignGrid").dxDataGrid("instance");
+                    if (signGrid.totalCount() > 0) {
+                        if (signGrid.getDataSource().items()[1].sign_emp_cd != $("input[name='emp_cd']").val()) {
+                            alert("승인자의 서명이 필요합니다");
+                        } else {
+                            revisionDelete();
+                        }
+                    }
+
+                    return;
+                }
+
+            }, 1000);
+        }
+    }
+
+
+    // 검토자 의견 입력/수정
+    function EditPlanOKCommentInsert_c() {
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("의견을 작성할 대상 항목이 없습니다.");
+
+            return;
+        }
+
+        if (c_commnt_Gubun == "") {
+            $("#SelfAuditEditPlanOKCommentDiv #c_comment").attr("readonly", false);
+            $("#SelfAuditEditPlanOKCommentDiv #c_comment").focus();
+
+            c_commnt_Gubun = "I";
+
+            return;
+        }
+
+        if (c_commnt_Gubun == "I") {
+            var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/EditPlanOKCommentInsert_c',
+                data: {
+                    self_audit_year: data.self_audit_year,
+                    audit_no: data.self_audit_no,
+                    c_comment: $("#SelfAuditEditPlanOKCommentDiv #c_comment").val()
+                },
+                success: function (result) {
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        EditPlanOKDisplayESInfo();
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            });
+
+            $("#SelfAuditEditPlanOKCommentDiv #c_comment").attr("readonly", true);
+
+            c_commnt_Gubun = "";
+
+            return;
+        }
+    }
+
+
+    // 승인자 의견 입력/수정
+    function EditPlanOKCommentInsert_m() {
+
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) {
+            alert("의견을 작성할 대상 항목이 없습니다.");
+
+            return;
+        }
+
+        if (m_commnt_Gubun == "") {
+            $("#SelfAuditEditPlanOKCommentDiv #m_comment").attr("readonly", false);
+            $("#SelfAuditEditPlanOKCommentDiv #m_comment").focus();
+
+            m_commnt_Gubun = "I";
+
+            return;
+        }
+
+        if (m_commnt_Gubun == "I") {
+            var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/EditPlanOKCommentInsert_m',
+                data: {
+                    self_audit_year: data.self_audit_year,
+                    audit_no: data.self_audit_no,
+                    c_comment: $("#SelfAuditEditPlanOKCommentDiv #m_comment").val()
+                },
+                success: function (result) {
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        EditPlanOKDisplayESInfo();
+                    } else {
+                        alert("실패하였습니다.");
+                    }
+                }
+            });
+
+            $("#SelfAuditEditPlanOKCommentDiv #m_comment").attr("readonly", true);
+
+            m_commnt_Gubun = "";
+
+            return;
+        }
+    }
+
+    function clearSignInput() {
+        $('#SelfAuditEditPlanOKSignForm')[0].reset();
+        $("input[name='dept_nm']").val("");
+        $("input[name='emp_nm']").val("");
+    }
+    // #endregion
+
+
+    //#region 수정조치관련
+    function EditPlanOKRevisionSearch() {
+        gridReset("SelfAuditEditPlanOKRevisionGrid");
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            } else {
+
+                return;
+
+            }
+        } else {
+            data = arguments[0];
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/EditPlanOKRevisionSearch',
+            data: {
+                self_audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                EditPlanOKRevisionSelect(json[0]);
+            }
+        })
+
+    }
+
+
+    function EditPlanOKRevisionSelect() {
+        //$("#SelfAuditEditPlanOKMenuDiv2_1 #RevisionForm")[0].reset();
+        //$("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").val("");
+        //$("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").val("");
+        //$("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").val("");
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+            data = arguments[0];
+        } else {
+            var grid = $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+                data = getGridRowByKey("SelfAuditEditPlanOKRevisionGrid", grid.option("focusedRowKey"));
+            } else {
+                return;
+            }
+        }
+
+
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp").val(data.self_audit_ca_o_emp);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp_nm").val(data.self_audit_ca_o_emp_nm);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").val(data.self_audit_ca_o_date);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").val(data.self_audit_ca_o_contents);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept").val(data.self_audit_ca_dept);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_nm").val(data.self_audit_ca_dept_nm);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp").val(data.self_audit_ca_dept_emp);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp_nm").val(data.self_audit_ca_dept_emp_nm);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_contents").val(data.self_audit_ca_plan_contents);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").val(data.self_audit_ca_plan_limit);
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").val(data.self_audit_ca_plan_limit_end);
+    }
+
+
+    function CRUDRevisionGrid(check) {
+
+        if (check) {
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp_btn").attr("disabled", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_btn").attr("disabled", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp_btn").attr("disabled", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").attr("disabled", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").attr("readonly", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_contents").attr("readonly", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").attr("disabled", false);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").attr("disabled", false);
+
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").val("");
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").val("");
+
+
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp").css("background-color", "#FCC5C0");
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").css("background-color", "#FCC5C0");
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").css("background-color", "#FCC5C0");
+
+        } else {
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp_btn").attr("disabled", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_btn").attr("disabled", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_dept_emp_btn").attr("disabled", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").attr("disabled", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").attr("readonly", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_contents").attr("readonly", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").attr("disabled", true);
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").attr("disabled", true);
+
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_emp").css("background-color", "");
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").css("background-color", "");
+            $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_contents").css("background-color", "");
+        }
+
+    }
+
+
+    function revisionDelete() {
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+        var revisionGrid = $("#SelfAuditEditPlanOKRevisionGrid").dxDataGrid("instance");
+        var revisionData = getGridRowByKey("SelfAuditEditPlanOKRevisionGrid", revisionGrid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/SelfAuditEditPlanOKDelete',
+            data: {
+                self_audit_year: data.self_audit_year,
+                self_audit_no: data.self_audit_no,
+                self_audit_ca_id: revisionData.self_audit_ca_id
+            },
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (json.message != "") {
+                    alert(json.message);
+
+                    EditPlanOKRevisionSearch();
+                } else {
+                    alert("실패하였습니다.");
+
+                }
+            }
+        })
+    }
+    //#endregion
+
+
+    // #region 점검결과 관련
+    function EditPlanOKResultSearch() {
+        gridReset("SelfAuditEditPlanOKResultGrid");
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/EditPlanOKResultSearch',
+            data: {
+                self_audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditEditPlanOKResultGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditEditPlanOKResultGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditEditPlanOKResultGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                EditPlanOKResultSelect(json[0]);
+            }
+        })
+
+    }
+
+
+    function EditPlanOKResultSelect() {
+
+        var data;
+
+        if (arguments[0].rowIndex == null) {
+
+            data = arguments[0];
+
+        } else {
+            var grid = $("#SelfAuditEditPlanOKResultGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("SelfAuditEditPlanOKResultGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        }
+
+
+        $("#editPlanOKResultForm #self_audit_plan_object").val(data.self_audit_plan_object);
+        $("#editPlanOKResultForm #self_audit_date").val(data.self_audit_date);
+        $("#editPlanOKResultForm #self_audit_result").val(data.self_audit_result);
+        $("#editPlanOKResultForm #self_audit_status").val(data.self_audit_status);
+    }
+
+    // #endregion
+
+
+
+    // #region 파일첨부 관련
+    //파일 조회
+    function EditPlanOKFileSearch() {
+        gridReset("SelfAuditEditPlanOKFileGrid");
+
+
+        var data;
+
+        if (arguments.length <= 0) {
+            var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() > 0) {
+
+                data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            } else {
+                return;
+            }
+        } else {
+
+            data = arguments[0];
+
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Insp/EditPlanOKFileSearch',
+            data: {
+                self_audit_year: data.self_audit_year,
+                audit_no: data.self_audit_no
+            },
+            async: false,
+            success: function (result) {
+                if (result <= 0) {
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance").option("dataSource", json);
+                $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+
+    // 파일 첨부
+    function EditPlanOKFileAdd() {
+
+        $("#SelfAuditEditPlanOKMenuDiv2_3 #fileData").click();
+    }
+
+    $("#SelfAuditEditPlanOKMenuDiv2_3 #fileData").change(function () {
+        var formData = new FormData($("#SelfAuditEditPlanOK #EditPlanOKFileSubmitForm")[0]);
+        var grid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+
+            var data = getGridRowByKey("SelfAuditEditPlanOKGrid", grid.option("focusedRowKey"));
+
+            formData.append("uploadfile", $("#SelfAuditEditPlanOKMenuDiv2_3 #fileData")[0].files[0]);
+            formData.append("audit_no", data.self_audit_no);
+            formData.append("audit_step_cd", data.self_audit_step);
+            formData.append("self_audit_year", data.self_audit_year);
+
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/EditPlanOKFileAdd',
+                contentType: false,
+                processData: false,
+                data: formData,
+                success: function (result) {
+
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        $("#SelfAuditEditPlanOKMenuDiv2_3 #fileData").val("");
+                        EditPlanOKFileSearch();
+                    } else {
+                        alert("저장에 실패하였습니다.");
+                    }
+                }
+            });
+        }
+    })
+
+    // 파일 삭제
+    function EditPlanOKFileDelete() {
+        // 첨부파일 그리드
+        var fileGrid = $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance");
+        // 점검리스트 그리드
+        var mainGrid = $("#SelfAuditEditPlanOKGrid").dxDataGrid("instance");
+        var mainData = getGridRowByKey("SelfAuditEditPlanOKGrid", mainGrid.option("focusedRowKey"));
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("삭제할 문서가 없습니다.");
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("SelfAuditEditPlanOKFileGrid", fileGrid.option("focusedRowKey"));
+
+        if (confirm("삭제하시겠습니까?")) {
+            $.ajax({
+                type: 'POST',
+                url: '/Insp/EditPlanOKFileDelete',
+                data: {
+                    audit_year: mainData.self_audit_year,
+                    audit_no: mainData.self_audit_no,
+                    audit_file: fileData.self_audit_file,
+                    file_id: fileData.file_id
+                },
+                success: function (result) {
+
+                    var json = JSON.parse(result)
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (json.message != "") {
+                        alert(json.message);
+
+                        EditPlanOKFileSearch();
+                    } else {
+                        alert("삭제에 실패하였습니다.");
+                    }
+                }
+            });
+        }
+    }
+
+    // 파일열기
+    function EditPlanOKFileOpen() {
+        var fileGrid = $("#SelfAuditEditPlanOKFileGrid").dxDataGrid("instance");
+
+        if (fileGrid.totalCount() <= 0) {
+            alert("첨부된 문서가 없습니다.")
+
+            return;
+        }
+
+        var fileData = getGridRowByKey("SelfAuditEditPlanOKFileGrid", fileGrid.option("focusedRowKey"));
+        document.location.assign('/Insp/EditPlanOKFileOpen?file_id=' + fileData.file_id);
+
+    }
+    // #endregion
+
+
+    function getFormatDate(date) {
+        var year = date.getFullYear();              //yyyy
+        var month = (1 + date.getMonth());          //M
+        month = month >= 10 ? month : '0' + month;  //month 두자리로 저장
+        var day = date.getDate();                   //d
+        day = day >= 10 ? day : '0' + day;          //day 두자리로 저장
+        return year + '-' + month + '-' + day;       //'-' 추가하여 yyyy-mm-dd 형태 생성 가능
+    }
+
+
+    function AllResetForm() {
+        gridReset("SelfAuditEditPlanOKRevisionGrid");
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #RevisionForm")[0].reset();
+
+        gridReset("SelfAuditEditPlanOKResultGrid");
+        $("#SelfAuditEditPlanOKMenuDiv2_2 #editPlanOKResultForm")[0].reset();
+
+        gridReset("SelfAuditEditPlanOKSignGrid");
+
+        gridReset("SelfAuditEditPlanOKFileGrid");
+
+        $("#SelfAuditEditPlanOKCommentDiv #c_comment").val("");//검토자 의견
+        $("#SelfAuditEditPlanOKCommentDiv #m_comment").val("");//승인자 의견
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_o_date").val("");//지시일자
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit").val("");//진행예정일 시작
+        $("#SelfAuditEditPlanOKMenuDiv2_1 #self_audit_ca_plan_limit_end").val("");//진행예정일 종료
+
+    }
+
+
+    /* 수정 history
+    *
+    * 순번 수정자  수정내용                                                                       수정일자
+    * ------------------------------------------------------------------------------------------------------
+    * 1.   박가희  focusedRowIndex를 0으로 주게되면,                                              2020.12.17
+    *              데이터가 없을 경우에도 포커스 데이터가 남아있어서 해당 로직은 사용하지 않음으로 변경
+    */
+    function gridReset(gridName) {
+
+        $("#" + gridName).dxDataGrid("instance").option("dataSource", []);
+        //$("#" + gridName).dxDataGrid("instance").option("focusedRowIndex", 0);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowEnabled", false);
+        $("#" + gridName).dxDataGrid("instance").option("focusedRowKey", "");
+    }
+
+
+    function SelfAuditEditPlanOK_ContentResize() {
+        var topPoint1 = document.getElementById("SelfAuditEditPlanOK_Top").getBoundingClientRect().bottom;
+        var content_max_height = window.innerHeight - (topPoint1 + 1) - 20
+        //console.log(content_max_height);
+
+        document.getElementById("SelfAuditEditPlanOKGrid").style.height = content_max_height + "px";
+    }
+
+</script>
+
+
+<style>
+
+    ul.nav.nav-tabs.box {
+        box-shadow: none;
+    }
+
+    #SelfAuditEditPlanOKCommentDiv div.input-group-append {
+        width: 50px;
+        height: auto !important;
+    }
+
+    #SelfAuditEditPlanOKCommentDiv div.input-group-append > button {
+        width: 100%;
+        height: 100%;
+    }
+/*
+    #SelfAuditEditPlanDetailForm ~ div {
+        margin-top: 5.2%;
+    }*/
+</style>
+
+
+<div id="SelfAuditEditPlanOK">
+    <div id="EditPlanOKAuditorSearchPopup"></div>
+    <div id="SelfAuditCaOEmpPopup"></div>
+    <div id="SelfAuditCaDeptPopup"></div>
+    <div id="SelfAuditCaDeptEmpPopup"></div>
+
+
+
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("SelfAuditEditPlanOKSignPopup")
+        .Width(500)
+        .Height(420)
+        .ShowTitle(true)
+        .Title("작업자 인증")
+        .OnHidden("clearSignInput")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("SelfAuditEditPlanOKSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="SelfAuditEditPlanOKSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-outline-secondary" onclick="SelfAuditEditPlanOKSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <label class="col-3">부서</label>
+        <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+        <label class="col-3">성명</label>
+        <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+        <input type="hidden" name="emp_cd" />
+    }
+
+    <form id="editPlanOKFileSubmitForm" enctype="multipart/form-data" style="display: none;">
+    </form>
+
+    <div id="SelfAuditEditPlanOK_Top" class="mainTop row">
+
+        <div class="col-8">
+            <form id="SelfAuditEditPlanOKSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">점검일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_start_date" id="s_start_date" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="s_end_date" id="s_end_date" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">점검책임자</span>
+                        </div>
+                        <input type="text" class="form-control" name="auditor_cd" id="auditor_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="deptEmp_search_btn" onclick="PlanOkAuditorSearchBtn()"><i class="fa fa-search"></i></button>
+                        </div>
+                        <input type="text" class="form-control" name="auditor_nm" id="auditor_nm" readonly />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">단계</span>
+                        </div>
+                        <select class="form-control col-10" name="audit_step" id="audit_step">
+                            @foreach (DataRow row in ((DataTable)ViewBag.auditStep).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control col-10" name="audit_status" id="audit_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.auditStepStatus).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*"); }
+
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="SelfAuditEditPlanOKLeftMain_1" class="col-8 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("SelfAuditEditPlanOKGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(853)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(s => s.Visible(true))
+                    .KeyExpr("self_audit_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("self_audit_no").Caption("계획서 번호");
+                        c.Add().DataField("self_audit_object").Caption("제목").Width("40%");
+                        c.Add().DataField("self_audit_date").Caption("진행시작일").Width("12%");
+                        c.Add().DataField("self_audit_step_nm").Caption("단계").Width("12%");
+                        c.Add().DataField("self_audit_step_status_nm").Caption("상태").Width("10%");
+                        c.Add().DataField("self_audit_director_nm").Caption("점검책임자").Width("10%");
+
+                        c.Add().DataField("self_audit_year").Visible(false);
+                        c.Add().DataField("self_audit_director").Visible(false);
+                        c.Add().DataField("self_audit_step").Visible(false);
+                        c.Add().DataField("self_audit_step_status").Visible(false);
+                        c.Add().DataField("self_audit_doc_revision_result").Visible(false);
+                        c.Add().DataField("self_audit_ca_doc_result_contents").Visible(false);
+                        c.Add().DataField("self_audit_result_special_detail").Visible(false);
+                        c.Add().DataField("self_audit_ca_result_special_detail").Visible(false);
+                        c.Add().DataField("self_audit_purpose_detail").Visible(false);
+                        c.Add().DataField("self_audit_plan_detail").Visible(false);
+                        c.Add().DataField("self_audit_doc_revision_plan").Visible(false);
+                        c.Add().DataField("self_audit_special_detail").Visible(false);
+                        c.Add().DataField("self_audit_w_emp_cd").Visible(false);
+                        c.Add().DataField("self_audit_w_emp_nm").Visible(false);
+                        c.Add().DataField("self_audit_w_date").Visible(false);
+                        c.Add().DataField("self_audit_purpose").Visible(false);
+                        c.Add().DataField("self_audit_purpose_nm").Visible(false);
+                        c.Add().DataField("self_audit_purpose_detail").Visible(false);
+                        c.Add().DataField("self_audit_date_end").Visible(false);
+                        c.Add().DataField("self_audit_date").Visible(false);
+                        c.Add().DataField("self_audit_check_gb").Visible(false);
+                    })
+                    .OnFocusedRowChanged("EditPlanOKListSelect")
+                )
+            </div>
+        </div>
+
+        <div id="SelfAuditEditPlanOKRightMain" class="col-4">
+            <div class="box mb-0">
+                <div class="divName mb-0">
+                    <p>계획 승인</p>
+                </div>
+                <div id="SelfAuditEditPlanOKSignDiv">
+                    <div>
+                        @(Html.DevExtreme().DataGrid()
+                                .ID("SelfAuditEditPlanOKSignGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .HoverStateEnabled(true)
+                                .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .FocusedRowEnabled(true)
+                                .Height(137)
+                                .OnCellClick("SelfAuditEditPlanOKSign_Check")
+                                .KeyExpr("sign_set_dt_id")
+                                .Columns(columns =>
+                                {
+                                    columns.Add().DataField("displayfield").Caption("구분");
+                                    columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                                    columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                                    columns.Add().DataField("sign_image").Caption("서명")
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                            )
+                    </div>
+                </div>
+
+
+
+                <div class="divName mb-0">
+                    <p>검토의견</p>
+                </div>
+
+                <div id="SelfAuditEditPlanOKCommentDiv" class="m-1">
+                    <div class="input-wrapper">
+                        <label class="col-3">검토자 의견</label>
+                        <div class="input-group col-8">
+                            <textarea id="c_comment" name="c_comment" class="form-control" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly></textarea>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="comment_insert_btn_c" onclick="EditPlanOKCommentInsert_c()"><i class="fa fa-pencil-square-o fa-2x"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">승인자 의견</label>
+                        <div class="input-group col-8">
+                            <textarea id="m_comment" name="m_comment" class="form-control" cols="100" rows="5" style="height: 50px; resize: vertical;" readonly></textarea>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="comment_insert_btn_m" onclick="EditPlanOKCommentInsert_m()"><i class="fa fa-pencil-square-o fa-2x"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <ul class="nav nav-tabs" id="SelfAuditEditPlanOKMenuDiv2">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('SelfAuditEditPlanOKMenuDiv2', 'SelfAuditEditPlanOKMenuDiv2', 1); EditPlanOKRevisionSearch(); SelfAuditEditPlanOK_CRUDBtn_Reset(true); ">수정조치</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('SelfAuditEditPlanOKMenuDiv2', 'SelfAuditEditPlanOKMenuDiv2', 2); EditPlanOKResultSearch(); SelfAuditEditPlanOK_CRUDBtn_Reset(true); ">점검결과</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('SelfAuditEditPlanOKMenuDiv2', 'SelfAuditEditPlanOKMenuDiv2', 3); EditPlanOKFileSearch(); SelfAuditEditPlanOK_CRUDBtn_Reset(false); ">첨부파일</a>
+                    </li>
+                </ul>
+
+                <div id="SelfAuditEditPlanOKMenuDiv2">
+                    <div id="SelfAuditEditPlanOKMenuDiv2_1">
+                        <div id="revisionGridDiv">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                        .ID("SelfAuditEditPlanOKRevisionGrid")
+                                        .ShowBorders(true)
+                                        .Selection(s => s.Mode(SelectionMode.Single))
+                                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                        .Height(282)
+                                        .ShowColumnLines(true)
+                                        .HoverStateEnabled(true)
+                                        .ColumnAutoWidth(true)
+                                        .KeyExpr("self_audit_ca_id")
+                                        .Columns(c =>
+                                        {
+                                            c.Add().DataField("self_audit_ca_o_date").Caption("지시일자").Width("30%");
+                                            c.Add().DataField("self_audit_ca_dept_nm").Caption("부서").Width("40%");
+                                            c.Add().DataField("self_audit_ca_status_nm").Caption("상태").Width("30%");
+
+                                            c.Add().DataField("self_audit_ca_id").Visible(false);
+                                            c.Add().DataField("self_audit_ca_type").Visible(false);
+                                            c.Add().DataField("self_audit_ca_type_nm").Visible(false);
+                                            c.Add().DataField("self_audit_ca_o_emp").Visible(false);
+                                            c.Add().DataField("self_audit_ca_o_emp_nm").Visible(false);
+                                            c.Add().DataField("self_audit_ca_o_contents").Visible(false);
+                                            c.Add().DataField("self_audit_ca_dept").Visible(false);
+                                            c.Add().DataField("self_audit_ca_dept_emp").Visible(false);
+                                            c.Add().DataField("self_audit_ca_dept_emp_nm").Visible(false);
+                                            c.Add().DataField("self_audit_ca_plan_contents").Visible(false);
+                                            c.Add().DataField("self_audit_ca_plan_limit").Visible(false);
+                                            c.Add().DataField("self_audit_ca_plan_limit_end").Visible(false);
+                                            c.Add().DataField("self_audit_ca_status").Visible(false);
+                                            c.Add().DataField("db_check").Visible(false);
+                                        })
+                                        .OnFocusedRowChanged("EditPlanOKRevisionSelect")
+                                    )
+                            </div>
+
+
+                            <form id="RevisionForm" class="m-1">
+                                <div class="input-wrapper">
+                                    <label class="col-3">지시자<star>*</star></label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_o_emp" id="self_audit_ca_o_emp" readonly required>
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="self_audit_ca_o_emp_btn" onclick="SelfAuditCaOEmpBtn()" disabled><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_o_emp_nm" id="self_audit_ca_o_emp_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">지시일자<star>*</star></label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker required" name="self_audit_ca_o_date" id="self_audit_ca_o_date" disabled required />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">부서별 지시사항<star>*</star></label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control required" name="self_audit_ca_o_contents" id="self_audit_ca_o_contents" cols="100" rows="5" style="height: 40px; resize: vertical;" readonly required />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">부서</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_dept" id="self_audit_ca_dept" readonly>
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="self_audit_ca_dept_btn" onclick="SelfAuditCaDeptBtn()" disabled><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_dept_nm" id="self_audit_ca_dept_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">부서장</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_dept_emp" id="self_audit_ca_dept_emp" readonly>
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="self_audit_ca_dept_emp_btn" onclick="SelfAuditCaDeptEmpBtn()" disabled><i class="fa fa-search"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control" name="self_audit_ca_dept_emp_nm" id="self_audit_ca_dept_emp_nm" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">수정계획</label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control" name="self_audit_ca_plan_contents" id="self_audit_ca_plan_contents" cols="100" rows="5" style="height: 40px; resize: vertical;" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">진행 예정일</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker" name="self_audit_ca_plan_limit" id="self_audit_ca_plan_limit" value="@DateTime.Today.ToShortDateString()" disabled />
+                                        <div class="input-group-append">
+                                            <label class="col-1 form-text"> ~ </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker" name="self_audit_ca_plan_limit_end" id="self_audit_ca_plan_limit_end" value="@DateTime.Today.ToShortDateString()" disabled />
+
+                                    </div>
+                                </div>
+
+                            </form>
+                        </div>
+                    </div>
+
+
+                    <div class="display-none" id="SelfAuditEditPlanOKMenuDiv2_2">
+                        <div id="resultDetailDiv">
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("SelfAuditEditPlanOKResultGrid")
+                                    .ShowBorders(true)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height(347)
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .ColumnAutoWidth(true)
+                                    .KeyExpr("self_audit_auditor")
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("self_audit_dept_nm").Caption("부서명").Width("40%");
+                                        c.Add().DataField("self_audit_auditor_nm").Caption("점검자");
+                                        c.Add().DataField("self_audit_status_nm").Caption("상태");
+
+
+                                        c.Add().DataField("self_audit_dept_cd").Visible(false);
+                                        c.Add().DataField("self_audit_auditor").Visible(false);
+                                        c.Add().DataField("self_audit_date").Visible(false);
+                                        c.Add().DataField("self_audit_result").Visible(false);
+                                        c.Add().DataField("self_audit_status").Visible(false);
+                                        c.Add().DataField("self_audit_plan_object").Visible(false);
+                                    })
+                                    .OnFocusedRowChanged("EditPlanOKResultSelect")
+                                )
+                            </div>
+
+                            <form id="editPlanOKResultForm" class="m-1">
+                                <div class="input-wrapper">
+                                    <label class="col-3">부서별 점검내용</label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control" name="self_audit_plan_object" id="self_audit_plan_object" cols="100" rows="5" style="height: 45px; resize: vertical;" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">점검일자</label>
+                                    <div class="input-group col-4">
+                                        <input type="text" class="form-control datepicker" name="self_audit_date" id="self_audit_date" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">점검결과</label>
+                                    <div class="input-group col-8">
+                                        <textarea class="form-control" name="self_audit_result" id="self_audit_result" cols="100" rows="5" style="height: 45px; resize: vertical;" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="input-wrapper">
+                                    <label class="col-3">상태</label>
+                                    <div class="input-group col-4">
+                                        <select class="form-control" name="self_audit_status" id="self_audit_status" disabled>
+                                            @foreach (DataRow row in ((DataTable)ViewBag.auditStatus).Rows)
+                                            {
+                                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                            </form>
+
+                        </div>
+                    </div>
+
+                    <div class="display-none" id="SelfAuditEditPlanOKMenuDiv2_3">
+                        <div id="fileInfo">
+                            <div align="right" id="btnDiv" class="m-1">
+                                <button class="btn btn-secondary" id="file_Insert" onclick="EditPlanOKFileAdd()">첨부</button>
+                                <button class="btn btn-secondary" id="file_Open" onclick="EditPlanOKFileOpen()">다운로드</button>
+                                <button class="btn btn-secondary" id="file_Delete" onclick="EditPlanOKFileDelete()">삭제</button>
+                                <input type="file" id="fileData" style="display: none;" />
+                            </div>
+                            <div>
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("SelfAuditEditPlanOKFileGrid")
+                                    .ShowBorders(true)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                    .Height(468)
+                                    .ShowColumnLines(true)
+                                    .HoverStateEnabled(true)
+                                    .ColumnAutoWidth(true)
+                                    .KeyExpr("file_id")
+                                    .Columns(c =>
+                                    {
+                                        c.Add().DataField("doc_name").Caption("문서명").Width("55%");
+                                        c.Add().DataField("upload_step_nm").Caption("첨부단계").Width("25%");
+                                        c.Add().DataField("upload_emp_nm").Caption("첨부자").Width("20%");
+
+                                        c.Add().DataField("self_audit_file").Visible(false);
+                                        c.Add().DataField("file_id").Visible(false);
+                                    })
+                                )
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+        </div>
+    </div>
+</div>

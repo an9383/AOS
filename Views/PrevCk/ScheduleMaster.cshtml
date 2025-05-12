@@ -1,0 +1,813 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ScheduleMaster";
+
+    var scheduleMasterObjlist = @Html.Raw(Json.Encode(ViewBag.scheduleMasterObjlist.Data));
+    var scheduleMasterDept = @Html.Raw(Json.Encode(ViewBag.scheduleMasterDept.Data));
+    var scheduleMasterEmp = @Html.Raw(Json.Encode(ViewBag.scheduleMasterEmp.Data));
+}
+<script id="ScheduleMasterJs">
+
+    var ScheduleMaster_dbState = "init";
+    var ScheduleMaster_isEditing = false;
+
+    var ScheduleMaster_focusedRow = null;
+
+    $(function () {
+        setDatePicker("#ScheduleMaster .datepicker");
+
+        var columns1 = [
+            { dataField: "standard_cd", caption: "스케줄코드" },
+            { dataField: "standard_nm", caption: "스케줄코드명" }
+        ];
+
+        var columns2 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var columns3 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("ScheduleMasterObj", "구분 조회", @scheduleMasterObjlist, columns1, "standard_cd"); //대상코드 팝업
+        createPopup("ScheduleMasterEmp", "사원 조회", @scheduleMasterEmp, columns2, "emp_cd", 700, 800); //담당자 팝업
+        createPopup("ScheduleMasterDept", "부서 조회", @scheduleMasterDept, columns3, "dept_cd"); //담당부서 팝업
+
+        ScheduleMasterEditCheck(false);
+        ScheduleMasterSearch();
+
+    });
+
+    // 수정중인지 체크
+    function ScheduleMasterEditCheck(nowEdit) {
+        ScheduleMaster_isEditing = nowEdit;
+
+        if (nowEdit) {
+
+            $("#ScheduleMasterSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleMasterUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleMasterSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleMasterInput").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleMasterEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleMasterDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ScheduleMasterForm_Right :disabled").attr('disabled', false);
+            $("#ScheduleMaster_Grid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+
+            $("#ScheduleMasterSave").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleMasterUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ScheduleMasterSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleMasterInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleMasterEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ScheduleMasterDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ScheduleMasterForm_Right :enabled").attr('disabled', true);
+            $("#ScheduleMaster_Grid").dxDataGrid("option", "disabled", false);
+
+        }
+    }
+
+    //CRUD, 데이터 매핑
+    function FormClear() {
+        $("#ScheduleMasterForm_Right #obj_type").val("");
+        $("#ScheduleMasterForm_Right #work_type").val("");
+        $("#ScheduleMasterForm_Right #schedule_type").val("");
+        $("#ScheduleMasterForm_Right #obj_cd").val("");
+        $("#ScheduleMasterForm_Right #obj_nm").val("");
+        $("#ScheduleMasterForm_Right #schedule_period").val(0);
+        $("#ScheduleMasterForm_Right #start_date").val("");
+        $("#ScheduleMasterForm_Right #responsibility_worker").val("");
+        $("#ScheduleMasterForm_Right #responsibility_worker_nm").val("");
+        $("#ScheduleMasterForm_Right #auto_create_yn").val("");
+        $("#ScheduleMasterForm_Right #regist_yn").val("");
+        $("#ScheduleMasterForm_Right #schedule_master_id").val("");
+        $("#ScheduleMasterForm_Right #standard_nm").val("");
+        $("#ScheduleMasterForm_Right #dept_cd").val("");
+        $("#ScheduleMasterForm_Right #dept_nm").val("");
+        $("#ScheduleMasterForm_Right #period_type").val("");
+    }
+
+    //조회
+    function ScheduleMasterSearch() {
+        // 초기화영역
+        $('#ScheduleMaster_Grid').dxDataGrid("option", "dataSource", []);
+        $('#ScheduleMaster_Grid').dxDataGrid("option", "focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/PrevCk/ScheduleMaster_GridSelect',
+            data: {
+                obj_type: $("#ScheduleMasterForm #T_obj_type").val(),
+                work_type: $("#ScheduleMasterForm #T_work_type").val(),
+                schedule_type: $("#ScheduleMasterForm #T_schedule_type").val(),
+                obj_cd: $("#ScheduleMasterForm #T_obj_cd").val()
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    if (result.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    //console.log(JSON.parse(JSON.stringify(result)));
+                    $("#ScheduleMaster_Grid").dxDataGrid("option", "dataSource", json);
+                    $("#ScheduleMaster_Grid").dxDataGrid("option", "focusedRowEnabled", true);
+                    $("#ScheduleMaster_Grid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                    //ScheduleMatser_SetDetailData();
+                } else {
+                    $("#ScheduleMaster_Grid").dxDataGrid("option", "focusedRowEnabled", false);
+                    FormClear();
+                    //ScheduleMaster_focusedRow = null;
+                    //ScheduleMatser_SetDetailData();
+                }
+
+            }
+        })
+        ScheduleMaster_dbState = "search";
+    }
+
+    //입력
+    function ScheduleMasterInput() {
+        ScheduleMaster_dbState = "insert";
+
+        ScheduleMasterEditCheck(true);
+        FormClear();
+
+        $("#ScheduleMasterForm_Right #start_date").val("@DateTime.Today.ToString("yyyy-MM-dd")");
+        $("#ScheduleMasterForm_Right #work_type").val(@ViewBag.workType);
+        $("#ScheduleMasterForm_Right #obj_type").focus();
+    }
+
+    //수정
+    function ScheduleMasterEdit() {
+        ScheduleMaster_dbState = "edit";
+
+        ScheduleMasterEditCheck(true);
+        //$("#ScheduleMasterForm_Right #period_type").focus();
+    }
+
+    //삭제
+    function ScheduleMasterDelete() {
+        if (ScheduleMaster_focusedRow != null) {
+            var ok = confirm("삭제하시겠습니까?");
+            if (ok) {
+                ScheduleMaster_GridDelete();
+            }
+        }
+
+    }
+
+    //저장
+    function ScheduleMasterSave() {
+
+        //var cols = [
+        //    { name: "obj_type", text: "대상구분", type: "select" },
+        //    { name: "obj_cd", text: "대상코드", type: "input" },
+        //    { name: "schedule_type", text: "주기구분", type: "select" },
+        //    { name: "period_type", text: "주기", type: "select" },
+        //    { name: "start_date", text: "시작일자", type: "input" },
+        //    { name: "auto_create_yn", text: "자동생성", type: "radio" },
+        //    { name: "regist_yn", text: "작업기록", type: "radio" }
+        //];
+
+        //var isValid = validationCk("ScheduleMasterForm_Right", cols);
+
+        //if (!isValid) return;
+
+        if (UtilView.checkValidForm("ScheduleMasterForm_Right")) {
+
+            var form = $('#ScheduleMasterForm_Right')[0];
+            var data = new FormData(form);
+            var check = false;
+
+            if (ScheduleMaster_dbState == "insert") {
+                check = ScheduleMaster_GridInsert(data);
+            } else if (ScheduleMaster_dbState == "edit") {
+                check = ScheduleMaster_GridUpdate(data);
+            }
+
+        }
+
+    }
+
+    //취소
+    function ScheduleMasterUndo() {
+        ScheduleMaster_dbState = "search";
+        ScheduleMasterSearch();
+        ScheduleMasterEditCheck(false);
+    }
+
+    //프린트
+    function ScheduleMasterPrint() {
+
+    }
+
+    //엑셀
+    function ScheduleMasterExcel() {
+        gridExportToExcel("ScheduleMaster_Grid", "ScheduleMasterData");
+    }
+
+    //예방점검 대상 등록 - DB
+    function ScheduleMaster_GridInsert(data) {
+        var check = false;
+
+        if (data != null && data != undefined) {
+            $.ajax({
+                type: 'POST',
+                url: '/PrevCk/ScheduleMaster_GridInsert',
+                data: data,
+                async: false,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        if (result.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        check = true;
+                        alert("저장되었습니다.");
+                        //alert(json.messege);//번호
+                    }
+                    ScheduleMasterSearch();
+
+                    ScheduleMaster_dbState = "search";
+                    ScheduleMasterEditCheck(false);
+                }
+            })
+        }
+
+        return check;
+
+    }
+
+    //예방점검 대상 수정 - DB
+    function ScheduleMaster_GridUpdate(data) {
+        var check = false;
+
+        if (data != null && data != undefined) {
+            $.ajax({
+                type: 'POST',
+                url: '/PrevCk/ScheduleMaster_GridUpdate',
+                data: data,
+                async: false,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        if (result.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        check = true;
+                        //alert(json.messege);//수정되었습니다!!
+                        alert("수정되었습니다.");
+                    }
+                    ScheduleMasterSearch();
+
+                    ScheduleMaster_dbState = "search";
+                    ScheduleMasterEditCheck(false);
+                }
+            })
+        }
+        return check;
+
+    }
+
+    //예방점검 대상 삭제 - DB
+    function ScheduleMaster_GridDelete() {
+
+        if (ScheduleMaster_focusedRow != null) {
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/PrevCk/ScheduleMaster_GridDelete',
+                data: {
+                    obj_type: $("#ScheduleMasterForm_Right #obj_type").val(),
+                    work_type: $("#ScheduleMasterForm_Right #work_type").val(),
+                    schedule_type: $("#ScheduleMasterForm_Right #schedule_type").val(),
+                    obj_cd: $("#ScheduleMasterForm_Right #obj_cd").val(),
+                    schedule_master_id: $("#ScheduleMasterForm_Right #schedule_master_id").val()
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        if (result.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        //alert(json.messege); //삭제되었습니다.!!
+                        alert("삭제되었습니다.");
+                    } else {
+                        alert("삭제되지 않았습니다.");
+                    }
+
+                    ScheduleMasterSearch();
+                }
+            })
+        }
+    }
+
+    //좌측 그리드 데이터 우측 폼에 디테일 표시
+    function ScheduleMatser_SetDetailData() {
+        if (ScheduleMaster_focusedRow != null) {
+            //console.log(ScheduleMaster_focusedRow.data);
+            $("#ScheduleMasterForm_Right #obj_type").val(ScheduleMaster_focusedRow.data.obj_type);
+            $("#ScheduleMasterForm_Right #work_type").val(ScheduleMaster_focusedRow.data.work_type);
+            $("#ScheduleMasterForm_Right #schedule_type").val(ScheduleMaster_focusedRow.data.schedule_type);
+            $("#ScheduleMasterForm_Right #obj_cd").val(ScheduleMaster_focusedRow.data.obj_cd);
+            $("#ScheduleMasterForm_Right #obj_nm").val(ScheduleMaster_focusedRow.data.obj_nm);
+            $("#ScheduleMasterForm_Right #schedule_period").val(ScheduleMaster_focusedRow.data.schedule_period);
+            $("#ScheduleMasterForm_Right #start_date").val(ScheduleMaster_focusedRow.data.start_date);
+            $("#ScheduleMasterForm_Right #responsibility_worker").val(ScheduleMaster_focusedRow.data.responsibility_worker);
+            $("#ScheduleMasterForm_Right #responsibility_worker_nm").val(ScheduleMaster_focusedRow.data.responsibility_worker_nm);
+            $('#ScheduleMasterForm_Right input[name="auto_create_yn"][value=' + ScheduleMaster_focusedRow.data.auto_create_yn + ']').prop("checked", true);
+            $('#ScheduleMasterForm_Right input[name="regist_yn"][value=' + ScheduleMaster_focusedRow.data.regist_yn + ']').prop("checked", true);
+            $("#ScheduleMasterForm_Right #schedule_master_id").val(ScheduleMaster_focusedRow.data.schedule_master_id);
+            $("#ScheduleMasterForm_Right #standard_nm").val(ScheduleMaster_focusedRow.data.standard_nm);
+            $("#ScheduleMasterForm_Right #dept_cd").val(ScheduleMaster_focusedRow.data.dept_cd);
+            $("#ScheduleMasterForm_Right #dept_nm").val(ScheduleMaster_focusedRow.data.dept_nm);
+            $("#ScheduleMasterForm_Right #period_type").val(ScheduleMaster_focusedRow.data.period_type);
+        } else {
+            //$("#ScheduleMasterForm_Right")[0].reset();
+
+            $("#ScheduleMasterForm_Right #obj_type").val("");
+            $("#ScheduleMasterForm_Right #work_type").val("");
+            $("#ScheduleMasterForm_Right #schedule_type").val("");
+            $("#ScheduleMasterForm_Right #obj_cd").val("");
+            $("#ScheduleMasterForm_Right #obj_nm").val("");
+            $("#ScheduleMasterForm_Right #schedule_period").val(0);
+            $("#ScheduleMasterForm_Right #start_date").val("");
+            $("#ScheduleMasterForm_Right #responsibility_worker").val("");
+            $("#ScheduleMasterForm_Right #responsibility_worker_nm").val("");
+            $("#ScheduleMasterForm_Right #auto_create_yn").val("");
+            $("#ScheduleMasterForm_Right #regist_yn").val("");
+            $("#ScheduleMasterForm_Right #schedule_master_id").val("");
+            $("#ScheduleMasterForm_Right #standard_nm").val("");
+            $("#ScheduleMasterForm_Right #dept_cd").val("");
+            $("#ScheduleMasterForm_Right #dept_nm").val("");
+            $("#ScheduleMasterForm_Right #period_type").val("");
+        }
+    }
+
+
+    //금일 스케줄 생성
+    function CreateSchedule() {
+        if (ScheduleMaster_dbState == "search") {
+            var ok = confirm("금일 스케줄을 생성하시겠습니까?");
+
+            if (ok) {
+                $.ajax({
+                    type: 'POST',
+                    async: false,
+                    url: '/PrevCk/ScheduleMaster_CreateSchedule',
+                    data: {
+                        schedule_master_id: $("#ScheduleMasterForm_Right #schedule_master_id").val()
+                    },
+                    success: function (result) {
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+
+                            if (result.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            //alert(json.messege);
+                            alert("생성되었습니다");
+                        } else {
+                            alert("처리되지 않았습니다.");
+                        }
+
+                    }
+                })
+
+            }
+        }
+    }
+
+    // 그리드 이벤트
+    //예방점검 대상 리스트 포커스 변경시
+    function ScheduleMasterFocuschanged(e) {
+
+        if (!e.row || !e.row.data) {
+            ScheduleMaster_focusedRow = null;
+        } else {
+            ScheduleMaster_focusedRow = e.row;
+        }
+        ScheduleMatser_SetDetailData();
+
+    }
+
+    //대상구분 조회 팝업
+    function ScheduleMaster_ObjCdSearch() {
+        var popup = $("#ScheduleMasterObjPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //대상구분 팝업 선택
+    function ScheduleMasterObjRowDblClick(e) {
+        $("#ScheduleMasterForm_Right #obj_cd").val(e.data.standard_cd);
+        $("#ScheduleMasterForm_Right #standard_nm").val(e.data.standard_nm);
+
+        var popup = $("#ScheduleMasterObjPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //담당부서 조회 팝업
+    function ScheduleMaster_DeptSearch() {
+        var popup = $("#ScheduleMasterDeptPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //담당부서 팝업 선택
+    function ScheduleMasterDeptRowDblClick(e) {
+        $("#ScheduleMasterForm_Right #dept_cd").val(e.data.dept_cd);
+        $("#ScheduleMasterForm_Right #dept_nm").val(e.data.dept_nm);
+
+        var popup = $("#ScheduleMasterDeptPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //담당자 조회 팝업
+    function ScheduleMaster_EmpSearch() {
+        var popup = $("#ScheduleMasterEmpPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //담당자 팝업 선택
+    function ScheduleMasterEmpRowDblClick(e) {
+        $("#ScheduleMasterForm_Right #responsibility_worker").val(e.data.emp_cd);
+        $("#ScheduleMasterForm_Right #responsibility_worker_nm").val(e.data.emp_nm);
+
+        var popup = $("#ScheduleMasterEmpPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+</script>
+
+
+<div id="ScheduleMaster" autoresize="Y">
+    @*<h4 class="divTitle">예방점검 대상 등록</h4>*@
+
+    <div id="ScheduleMasterEmpPopup"></div>
+    <div id="ScheduleMasterDeptPopup"></div>
+    <div id="ScheduleMasterObjPopup"></div>
+
+    <div id="ScheduleMasterTop" class="mainTop row">
+        <div class="col-8">
+            <form id="ScheduleMasterForm">
+                <div class="input-wrapper">
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">대상</span>
+                        </div>
+                        <select class="form-control" name="T_obj_type" id="T_obj_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.obj_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">작업</span>
+                        </div>
+                        <select class="form-control" name="T_work_type" id="T_work_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.work_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-2 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">주기</span>
+                        </div>
+                        <select class="form-control" name="T_schedule_type" id="T_schedule_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.schedule_type).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검색</span>
+                        </div>
+                        <input type="text" class="form-control" name="T_obj_cd" id="T_obj_cd" />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Excel;Save;Undo"); }
+
+            @*@(Html.DevExtreme().Toolbar()
+                    .ID("ScheduleMaster_Toolbar")
+                     .Items(items =>
+                     {
+                            items.Add()
+                            .Template(new TemplateName("ScheduleMaster_ToolbarContent"))
+                            .Location(ToolbarItemLocation.Before);
+                     })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                                  .Button()
+                                  .Type(ButtonType.Default)
+                                  .StylingMode(ButtonStylingMode.Contained)
+                                  .ID("ScheduleMasterSearch")
+                                  .Icon("search")
+                                  .Text("조회")
+                                  .OnClick("ScheduleMasterSearch")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleMasterInput")
+                              .Icon("plus")
+                              .Text("입력")
+                              .OnClick("ScheduleMasterInput")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleMasterEdit")
+                              .Icon("edit")
+                              .Text("수정")
+                              .OnClick("ScheduleMasterEdit")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleMasterDelete")
+                              .Icon("trash")
+                              .Text("삭제")
+                              .OnClick("ScheduleMasterDelete")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleMasterSave")
+                              .Icon("save")
+                              .Text("저장")
+                              .OnClick("ScheduleMasterSave")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                      .Items(items =>
+                      {
+                          items.Add()
+                              .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ScheduleMasterUndo")
+                              .Icon("undo")
+                              .Text("취소")
+                              .OnClick("ScheduleMasterUndo")
+                              )
+                              .Location(ToolbarItemLocation.After);
+                      })
+                )*@
+        </div>
+    </div><!-- ScheduleMasterTop -->
+
+    <div class="row">
+        <div class="col-8">
+            <div id="ScheduleMaster_Left" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                            .ID("ScheduleMaster_Grid")
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                            .Height(900)
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .ColumnAutoWidth(true)
+                            .FocusedRowEnabled(true)
+                            .FocusedRowIndex(0)
+                            .KeyExpr("schedule_master_id")
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("schedule_master_id").Caption("번호");
+                                c.Add().DataField("obj_type_nm").Caption("대상구분");
+                                c.Add().DataField("obj_cd").Caption("코드");
+                                c.Add().DataField("standard_nm").Caption("대상");
+                                c.Add().DataField("work_type_nm").Caption("작업구분");
+                                c.Add().DataField("schedule_type_nm").Caption("주기구분");
+                                c.Add().DataField("schedule_period").Caption("주기");
+                                c.Add().DataField("period_type_nm").Caption("주기타입");
+                                c.Add().DataField("regist_yn").Caption("작업기록");
+                                c.Add().DataField("auto_create_yn").Caption("자동생성");
+                                c.Add().DataField("responsibility_worker_nm").Caption("담당자");
+                            })
+                            .OnFocusedRowChanged("ScheduleMasterFocuschanged")
+                            .OnToolbarPreparing("HideToolbarButton")
+                        )
+            </div>
+        </div>
+
+        <div class="col-4">
+            <div class="box">
+                <form id="ScheduleMasterForm_Right">
+                    <div class="divName">
+                        <p id="title_label">설정정보</p>
+                    </div>
+                    <input type="number" name="schedule_master_id" id="schedule_master_id" class="display-none" />
+
+                    <div class="input-wrapper">
+                        <label class="col-3">대상구분</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="obj_type" id="obj_type" value="">
+                                @foreach (DataRow row in ((DataTable)ViewBag.obj_type_1).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">대상코드</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="obj_cd" id="obj_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ScheduleMaster_ObjCdSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="standard_nm" id="standard_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="obj_nm" id="obj_nm" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">작업구분</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="work_type" id="work_type" value="">
+                                @foreach (DataRow row in ((DataTable)ViewBag.work_type_1).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">주기구분</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="schedule_type" id="schedule_type" value="">
+                                @foreach (DataRow row in ((DataTable)ViewBag.schedule_type_1).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">주기</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="schedule_period" id="schedule_period" />
+                        </div>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="period_type" id="period_type" value="">
+                                @foreach (DataRow row in ((DataTable)ViewBag.period_type).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">시작일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker required" id="start_date" name="start_date" value="@DateTime.Today.ToShortDateString()" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">담당부서</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="dept_cd" id="dept_cd" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ScheduleMaster_DeptSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control" name="dept_nm" id="dept_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">담당자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="responsibility_worker" id="responsibility_worker" readonly>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ScheduleMaster_EmpSearch()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control" name="responsibility_worker_nm" id="responsibility_worker_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">자동생성</label>
+                        <div class="input-group col-5">
+                            <div class="radioDiv form-control">
+                                <label><input type="radio" class="required" name="auto_create_yn" value="Y" />자동 </label>
+                                <label><input type="radio" class="required" name="auto_create_yn" value="N" />수동 </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">작업기록</label>
+                        <div class="input-group col-5">
+                            <div class="radioDiv form-control">
+                                <label><input type="radio" class="required" name="regist_yn" value="Y" />작업기록 </label>
+                                <label><input type="radio" class="required" name="regist_yn" value="N" />기록안함 </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="input-wrapper">
+                    <label class="col-9"></label>
+                    <div class="input-group col-2">
+                        <button class="btn btn-secondary" type="button" onclick="CreateSchedule()">금일 스케줄 생성</button>
+                    </div>
+                </div>
+
+                @*<div class="input-wrapper" style="padding:20px;display:block;text-align:right;">
+                    </div>*@
+            </div>
+        </div>
+    </div>
+</div>

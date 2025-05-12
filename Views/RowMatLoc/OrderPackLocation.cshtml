@@ -1,0 +1,334 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewData["Title"] = "OrderPackLocation";
+}
+
+@{
+    var OrderPackLocationData = @Html.Raw(Json.Encode(ViewBag.OrderPackLocationData.Data));
+    var OrderPackLocationAuth = @Html.Raw(Json.Encode(ViewBag.OrderPackLocationAuth.Data));
+}
+
+<script type="text/javascript" id="OrderPackLocationJs">
+
+    // SP 구문, gubun 변수
+    var OrderPackLocation_Gubun = "";
+
+    // 메뉴 권한
+    var _OrderPackLocationAuth;
+
+    $(function () {
+
+        if (@OrderPackLocationData !== "") {
+
+            // 좌측 그리드 객체 생성
+            $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@OrderPackLocationData));
+            $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 사용자 권한
+        _OrderPackLocationAuth = JSON.parse(@OrderPackLocationAuth)[0];
+
+        if (_OrderPackLocationAuth.form_query != "Y") {
+            $("#OrderPackLocationSearch").remove();
+        }
+
+        setDatePicker("#OrderPackLocation .datepicker");
+
+        // 아래 그리드 툴팁 div 삭제
+        if (document.getElementById("OrderPackLocation_DownGrid") &&
+            typeof document.getElementById("OrderPackLocation_DownGrid").getElementsByClassName("dx-datagrid-header-panel")[0] !== "undefined") {
+
+            document.getElementById("OrderPackLocation_DownGrid").getElementsByClassName("dx-datagrid-header-panel")[0].remove();
+        }
+    });
+
+    // 조회버튼 기능
+    function OrderPackLocationSearch() {
+
+        var formData = new FormData($("#OrderPackLocation_form")[0]);
+
+        //초기화
+        $("#OrderPackLocation_DownGrid").dxDataGrid("instance").option("dataSource", []);
+
+        // 선택 된 텝 조회
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/OrderPackLocation_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("dataSource", []);
+                    //$("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if ($("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("dataSource").length > 0) {
+                    $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                }
+
+                $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        });
+    }
+
+    function OrderPackLocationExcel(gridName, ExcelName) {
+        gridExportToExcel("OrderPackLocation_DownGrid", "자재 불출지시");
+    }
+
+    // 위 그리드 포커스 체인지
+    function OrderPackLocation_Up_changed() {
+
+        if ($("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+
+            return;
+        }
+
+        var grid = $("#OrderPackLocation_UpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('OrderPackLocation_UpGrid', grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatLoc/OrderPackList_Select',
+            data: {
+                order_no: gridData.order_no
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#OrderPackLocation_DownGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#OrderPackLocation_DownGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+
+                $("#OrderPackLocation_DownGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#OrderPackLocation_DownGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                //$("#OrderMaterialLocation_DownGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+            }
+        });
+    }
+
+    // 프린트
+    function OrderPackLocationPrint() {
+
+        if ($("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var grid = $("#OrderPackLocation_UpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('OrderPackLocation_UpGrid', grid.option("focusedRowKey"));
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        // param
+        var reportParam = "packing_order_no:" + gridData.order_no;
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "RowMatLoc", RptFileName: "InputOrderRecord" },
+            objSp: { SpName: "SP_PackingMain", gubun: "R", reportParam: reportParam },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "HeaderT,InputOrderT" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+    // 자재 Pickinglist 프린트
+    function pickinglist_print() {
+
+        if ($("#OrderPackLocation_UpGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("프린트 대상이 없습니다.");
+            return;
+        }
+
+        var grid = $("#OrderPackLocation_UpGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('OrderPackLocation_UpGrid', grid.option("focusedRowKey"));
+
+        // param
+        var reportParam = "order_no:" + gridData.order_no;
+        var subParam = "item_nm2=" + gridData.item_cd + " " + gridData.item_nm;
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "RowMatLoc", RptFileName: "PickingRabel_Pack" },
+            objSp: { SpName: "SP_OrderPackLocation", gubun: "RPT", reportParam: reportParam },
+            objEtcInfo: { subParam: subParam }
+        });
+
+        report.print();
+
+    }
+
+</script>
+
+
+<div id="OrderPackLocation" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="OrderPackLocation_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+
+                        <input type="text" class="form-control datepicker text-center" name="s_sdate" value="@DateTime.Today.AddDays(-30).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="s_edate" value="@DateTime.Today.ToShortDateString()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="s_out_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_out_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Print;Preview");}
+        </div>
+
+    </div>
+
+    <div class="row pb-1">
+
+        <div class="col-12">
+
+            <!-- 위 그리드 -->
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>자재 불출지시</p>
+
+                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="pickinglist_print()" style="float:right; margin-right:10px; margin-top:-5px;">피킹리스트 출력</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("OrderPackLocation_UpGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("order_no")
+                    .Height(400)
+                    .ShowColumnLines(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_no").Caption("포장지시번호");
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("item_packunit").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("order_qty").Caption("지시수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("input_order_date").Caption("지시일자");
+                        c.Add().DataField("input_order_status_nm").Caption("상태");
+                    })
+                    .OnFocusedRowChanged("OrderPackLocation_Up_changed")
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <!-- 아래 그리드 -->
+            <div class="box mb-0">
+
+                <div class="divName margin-bottom">
+                    <p>자재 불출 목록</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("OrderPackLocation_DownGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("자재코드");
+                        c.Add().DataField("item_nm").Caption("자재명");
+                        c.Add().DataField("data_type").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("order_qty").Caption("지시량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("location").Caption("위치");
+                    })
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

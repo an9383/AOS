@@ -1,0 +1,572 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "ItemManage";
+}
+
+@{
+    var ItemSearchData = @Html.Raw(Json.Encode(ViewBag.ItemSearchData.Data));
+    var ItemSearchAuth = @Html.Raw(Json.Encode(ViewBag.ItemSearchAuth.Data));
+
+    var WorkroomData_IM = @Html.Raw(Json.Encode(ViewBag.WorkroomData.Data));
+}
+
+<script type="text/javascript" id="ItemManageJs">
+
+    // SP 구문, gubun 변수
+    var ItemManage_Gubun = "";
+
+    // 메뉴 권한
+    var _ItemSearchAuth;
+
+    $(function () {
+
+        if (@ItemSearchData !== "") {
+            // 좌측 그리드 객체 생성
+            $("#ItemManage_LeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ItemSearchData));
+            $("#ItemManage_LeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#ItemManage_LeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 수정중인지 체크
+        ItemManageEditCheck(false);
+
+        // 사용자 권한
+        _ItemSearchAuth = JSON.parse(@ItemSearchAuth)[0];
+
+        if (_ItemSearchAuth.form_edit != "Y") {
+            $("#ItemManageEdit").remove();
+        }
+
+        // 창고 드랍박스
+        var WorkroomData_IM = JSON.parse(@WorkroomData_IM);
+        $("#IM_WorkRoomDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: WorkroomData_IM, key: "workroom_cd" }));
+    });
+
+    // 수정중인지 체크
+    function ItemManageEditCheck(nowEdit) {
+
+        // DropBox Disabled
+        $("#IM_WorkRoomDropBox").dxDropDownBox("option", "disabled", true);
+        $("#IM_ZoneDropBox").dxDropDownBox("option", "disabled", true);
+        $("#IM_CellDropBox").dxDropDownBox("option", "disabled", true);
+
+        /*
+         * 체크박스 Disabled
+         */
+        var gird = $("#ItemManageRightGrid").dxDataGrid("instance");
+
+        var selection = {
+            mode: "none"
+        }
+        gird.option("selection", selection);
+
+        // 수정중일 때
+        if (nowEdit) {
+
+            $("#ItemManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemManageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ItemManageExcel").dxButton().parent().parent().addClass("display-none");
+
+            /*
+             * 체크박스 Disabled
+             */
+            var gird = $("#ItemManageRightGrid").dxDataGrid("instance");
+
+            var selection = {
+                mode: "multiple",
+                showCheckBoxesMode: "always"
+            }
+            gird.option("selection", selection);
+
+            //좌측 그리드 disabled
+            $("#ItemManage_LeftGrid").dxDataGrid("option", "disabled", true);
+
+            // DropBox abled
+            $("#IM_WorkRoomDropBox").dxDropDownBox("option", "disabled", false);
+            $("#IM_ZoneDropBox").dxDropDownBox("option", "disabled", false);
+            $("#IM_CellDropBox").dxDropDownBox("option", "disabled", false);
+        }
+        if (!nowEdit) {
+            $("#ItemManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#ItemManageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ItemManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ItemManageExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ItemManage_LeftGrid").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+
+    // 포커스 체인지 (좌측 그리드 -> 우측 위 그리드 출력)
+    function ItemManage_Left_changed() {
+
+        var grid = $("#ItemManage_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ItemManage_LeftGrid', grid.option("focusedRowKey"));
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/ItemManage_Loc_Select',
+            data: {
+                item_gubun: gridData.item_gubun,
+                item_stock_id: gridData.item_stock_id
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#ItemManageRightGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ItemManageRightGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                $("#ItemManageRightGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ItemManageRightGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ItemManageRightGrid").dxDataGrid("instance").option("focusedRowIndex", 0);                
+            }
+        });
+    }
+
+    //하단 그리드 -> 상단 창고, 구역, 셀 명
+    function ItemManage_Down_changed(e) {
+        var data = e.row.data;
+
+        if (!data) {
+            return;
+        }        
+
+        $("#IM_WorkRoomDropBox").dxDropDownBox("instance").option("value", data.workroom_cd);   //창고
+        $("#IM_ZoneDropBox").dxDropDownBox("instance").option("value", data.zone_cd);       //구역
+        $("#IM_CellDropBox").dxDropDownBox("instance").option("value", data.cell_cd);       //셀
+    }
+
+    /* 드랍박스 이벤트 */
+    function IM_WorkRoom_DropBoxChanged(e) {
+
+        // 구역, 셀 드랍박스 초기화
+        $("#IM_ZoneDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#IM_ZoneDropBox").dxDropDownBox("instance").reset();
+        $("#IM_CellDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#IM_CellDropBox").dxDropDownBox("instance").reset();
+        // form Data 초기화
+        $('input[name = im_zone_cd]').val('');
+        $('input[name = im_cell_cd]').val('');
+
+        if (e.value === null || e.value.length <= 0 || (e.value.length > 0 && e.value[0] === "")) {
+
+            $("#IM_ZoneDropBox").dxDropDownBox("instance").repaint();
+            $("#IM_CellDropBox").dxDropDownBox("instance").repaint();
+
+            if (e.value !== null && e.value.length > 0 && e.value[0] === "")
+                $("#IM_WorkRoomDropBox").dxDropDownBox("instance").close();
+
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/ItemManage_Zone_Select',
+            data: {
+                workroom_cd: e.value[0],
+            },
+            success: function (result) {
+
+                $("#IM_ZoneDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: JSON.parse(result), key: "zone_cd" }));
+
+                $("#IM_ZoneDropBox").dxDropDownBox("instance").repaint();
+                // 창고 드랍박스 닫기
+                $("#IM_WorkRoomDropBox").dxDropDownBox("instance").close();
+                // 창고 form 데이터 설정
+                $('input[name = im_workroom_cd]').val(e.value[0]);
+
+
+            }
+        });
+
+    }
+
+    function IM_Zone_DropBoxChanged(e) {
+
+        // 셀 드랍박스 초기화
+        $("#IM_CellDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#IM_CellDropBox").dxDropDownBox("instance").reset();
+
+        // form Data 초기화
+        $('input[name = im_cell_cd]').val('');
+
+        if (e.value === null || e.value.length <= 0 || (e.value.length > 0 && e.value[0] === "")) {
+            $("#IM_CellDropBox").dxDropDownBox("instance").repaint();
+
+            if (e.value !== null && e.value.length > 0 && e.value[0] === "")
+                $("#IM_ZoneDropBox").dxDropDownBox("instance").close();
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/ItemManage_Cell_Select',
+            data: {
+                zone_cd: e.value[0],
+            },
+            success: function (result) {
+
+                $("#IM_CellDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: JSON.parse(result), key: "cell_cd" }));
+
+                $("#IM_CellDropBox").dxDropDownBox("instance").repaint();
+                // 구역 드랍박스 닫기
+                $("#IM_ZoneDropBox").dxDropDownBox("instance").close();
+                // 창고 form 데이터 설정
+                $('input[name = im_zone_cd]').val(e.value[0]);
+
+            }
+        });
+
+    }
+
+    function IM_Cell_DropBoxChanged(e) {
+
+        if (e.value !== null && e.value.length > 0) {
+
+            // 셀 드랍박스 닫기
+            $("#IM_CellDropBox").dxDropDownBox("instance").close();
+            // 창고 form 데이터 설정
+            $('input[name = im_cell_cd]').val(e.value[0]);
+        }
+    }
+
+    function fn_ItemManage_refresh() {
+
+        $("#IM_WorkRoomDropBox").dxDropDownBox("instance").reset();
+        $("#IM_ZoneDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#IM_ZoneDropBox").dxDropDownBox("instance").reset();
+        $("#IM_CellDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#IM_CellDropBox").dxDropDownBox("instance").reset();
+
+        // form Data 초기화
+        $('input[name = im_workroom_cd]').val('');
+        $('input[name = im_zone_cd]').val('');
+        $('input[name = im_cell_cd]').val('');
+    }
+
+    /* 드랍박스 이벤트 종료 */
+
+    /* CRUD */
+    // 수정 버튼
+    function ItemManageEdit() {
+
+        // 버튼 상태값 체크 및 셋팅
+        ItemManageEditCheck(true);
+        // 구분 값
+        ItemManage_Gubun = "U";
+    }
+
+    // 취소 버튼
+    function ItemManageUndo() {
+
+        fn_ItemManage_refresh();
+
+        // 버튼 상태값 체크 및 셋팅
+        ItemManageEditCheck(false);
+        // 구분 값
+        ItemManage_Gubun = "S";
+    }
+
+    // 저장 버튼
+    function ItemManageSave(e) {
+
+        var formData = new FormData($("#ItemManage_Form")[0]);
+
+        var dataGrid = $("#ItemManageRightGrid").dxDataGrid("instance");
+        var selectedKeys = dataGrid.getSelectedRowKeys();
+
+        //일반(0)/보관(1) 구분 값 셋팅
+        var leftGrid = $("#ItemManage_LeftGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('ItemManage_LeftGrid', leftGrid.option("focusedRowKey"));
+
+        if (selectedKeys.length === 0) {
+            alert("선택된 값이 없습니다.");
+            return;
+        }
+
+        formData.set("selectedKeys", selectedKeys);
+        formData.set("workroom_cd", $('input[name = im_workroom_cd]').val());
+        formData.set("zone_cd", $('input[name = im_zone_cd]').val());
+        formData.set("cell_cd", $('input[name = im_cell_cd]').val());
+        formData.set("item_gubun", gridData.item_gubun);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/ItemManageCRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                //alert(json.message);
+                alert("저장되었습니다.");
+
+                fn_ItemManage_refresh();
+                ItemManageEditCheck(false);
+                //fn_StackManageMSearch();
+                ItemManage_Left_changed();
+            }
+        })
+
+        return;
+
+    }
+
+    // 엑셀 다운로드
+    function ItemManageExcel(gridName, ExcelName) {
+        gridExportToExcel("ItemManage_LeftGrid", "완제품 적치 등록");
+    }
+
+</script>
+
+
+<div id="ItemManage" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8"></div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Edit;Save;Undo;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- 좌측 그리드 -->
+        <div class="col-4 pr-0">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemManage_LeftGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_stock_id")
+                    .Height(900)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("item_lot_size").Caption("단위").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("prod_return_ck").Caption("구분").Alignment(HorizontalAlignment.Center);
+                    })
+                    .OnFocusedRowChanged("ItemManage_Left_changed")
+                )
+
+
+            </div>
+        </div>
+
+        <div class="col-8">
+
+            <div class="box mb-0">
+                <div class="divName margin-bottom">
+                    <p>완제품 적치</p>
+                </div>
+
+                <!-- 우측 위 그리드 -->
+                <form id="ItemManage_Form">
+
+                    <div class="input-wrapper" style="height:50px;">
+                        <label class="col-1">창고</label>
+                        <div class="col-3" style="display:inline-block; margin-left: -5%;">
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("IM_WorkRoomDropBox")
+                                    .Name("workroom_nm")
+                                    .ValueExpr("workroom_cd")
+                                    .DisplayExpr("workroom_nm")
+                                    .Placeholder("창고를 선택하시오")
+                                    //.ShowClearButton(true)
+                                    .OnValueChanged("IM_WorkRoom_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("IM_WorkRoomDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("IM_WorkRoomDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("IM_workroomDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("workroom_cd").Caption("창고코드").Width(70);
+                                        columns.Add().DataField("workroom_nm").Caption("창고명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Width(130);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    .Width(200)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+
+                        </div>
+
+                        <label class="col-1">구역</label>
+                        <div class="col-3" style="display:inline-block; margin-left: -5%;">
+
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("IM_ZoneDropBox")
+                                    .Name("zone_nm")
+                                    .ValueExpr("zone_cd")
+                                    .DisplayExpr("zone_nm")
+                                    .Placeholder("구역을 선택하시오")
+                                    //.ShowClearButton(true)
+                                    .OnValueChanged("IM_Zone_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("IM_ZoneDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("IM_ZoneDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("IM_ZoneDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("zone_cd").Caption("구역코드").Width(70);
+                                        columns.Add().DataField("zone_nm").Caption("구역명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Width(130);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    .Width(200)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+
+                        </div>
+
+                        <label class="col-1">셀</label>
+                        <div class="col-3" style="display:inline-block; margin-left: -5%;">
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("IM_CellDropBox")
+                                    .Name("cell_nm")
+                                    .ValueExpr("cell_cd")
+                                    .DisplayExpr("cell_nm")
+                                    .Placeholder("셀을 선택하시오")
+                                    .ShowClearButton(true)
+                                    .OnValueChanged("IM_Cell_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("IM_CellDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("IM_CellDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("IM_CellDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("cell_cd").Caption("셀코드").Width(70);
+                                        columns.Add().DataField("cell_nm").Caption("셀명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Width(130);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    .Width(200)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+
+
+                        </div>
+                        <!-- 초기화 버튼 -->
+                        <div class="input-group-append">
+                            <i class="fa fa-refresh fa-lg" aria-hidden="true" onclick="fn_ItemManage_refresh()"></i>
+                        </div>
+
+                    </div>
+
+                    <!-- selected data -->
+                    <input type="hidden" name="im_workroom_cd" value="" />
+                    <input type="hidden" name="im_zone_cd" value="" />
+                    <input type="hidden" name="im_cell_cd" value="" />
+                </form>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemManageRightGrid")
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(782)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("box_barcode_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("box_barcode_no").Caption("바코드");
+                        c.Add().DataField("prod_qty").Caption("포장량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("prod_qty_plan").Caption("입고예정량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("workroom_cd").Caption("창고");
+                        c.Add().DataField("zone_cd").Caption("구역");
+                        c.Add().DataField("cell_cd").Caption("셀");
+                    })
+                    .OnFocusedRowChanged("ItemManage_Down_changed")
+                )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,561 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewBag.Title = "CellStackStatus_I";
+}
+
+@{
+    var CellStackStatus_IData = @Html.Raw(Json.Encode(ViewBag.CellStackStatus_IData.Data));
+    var CellStackStatus_IAuth = @Html.Raw(Json.Encode(ViewBag.CellStackStatus_IAuth.Data));
+
+    var WorkroomData_CSI = @Html.Raw(Json.Encode(ViewBag.WorkroomData_CSI.Data));
+}
+
+<script type="text/javascript" id="CellStackStatus_IJs">
+
+    // SP 구문, gubun 변수
+    var CellStackStatus_I_Gubun = "";
+
+    // 메뉴 권한
+    var _CellStackStatus_IAuth;
+
+    // 랙 높이
+    var _CELL_HEIGHT = 0;
+
+    $(function () {
+
+        // 컬럼 초기셋팅
+        Init_CELL_HEIGHT();
+
+        // 사용자 권한
+        _CellStackStatus_IAuth = JSON.parse(@CellStackStatus_IAuth)[0];
+
+        if (_CellStackStatus_IAuth.form_query != "Y") {
+            $("#CellStackStatus_ISearch").remove();
+        }
+
+        // 창고 드랍박스
+        var WorkroomData_CSI = JSON.parse(@WorkroomData_CSI);
+        $("#CSI_WorkRoomDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: WorkroomData_CSI, key: "workroom_cd" }));
+
+        /* 드랍박스 CSS 조정 */
+        // 드랍박스 dx-placeholder
+        $(".dx-placeholder").css('margin-top', '-1%');
+        // 창고
+        $("#CSI_WorkRoomDropBox").removeClass('dx-editor-underlined');
+        $("#CSI_WorkRoomDropBox").css('margin-top', '-1%');
+        // 구역
+        $("#CSI_ZoneDropBox").removeClass('dx-editor-underlined');
+        $("#CSI_ZoneDropBox").css('margin-top', '-1%');
+        // 셀
+        $("#CSI_CellDropBox").removeClass('dx-editor-underlined');
+        $("#CSI_CellDropBox").css('margin-top', '-1%');
+    });
+
+    function Init_CELL_HEIGHT() {
+
+        _CELL_HEIGHT = 0;
+
+        for (var i = 2; i < 9; i++) {
+
+            $("#CellStackStatust_IMain").dxDataGrid("instance").columnOption("cell_height_" + i, "visible", false);
+        }
+    }
+
+    // 조회
+    function CellStackStatus_ISearch() {
+
+        var formData = new FormData($("#CellStackStatus_Iform")[0]);
+
+        if (_CELL_HEIGHT === 0) {
+            alert("랙을 선택하세요.");
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/CellStackStatus_Search',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                // 검색 결과가 없을 경우
+                if (result.length <= 0) {
+                    $("#CellStackStatust_IMain").dxDataGrid("instance").option("dataSource", []);
+                    //$("#CellStackStatust_Main").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                // 컬럼 수 셋팅
+                for (var i = 1; i <= _CELL_HEIGHT; i++) {
+
+                    $("#CellStackStatust_IMain").dxDataGrid("instance").columnOption("cell_height_" + i, "visible", true);
+                }
+
+                // 개행을 위한 replace
+                var newLine = result.replace(/\n/g, "<br>");
+
+                var json = JSON.parse(newLine);
+
+                $("#CellStackStatust_IMain").dxDataGrid("instance").option("dataSource", json);
+
+            }
+        });
+
+
+
+    }
+
+
+    /* 드랍 박스 이벤트 */
+
+    // 창고 셀렉트 박스 선택시,
+    function CSI_WorkRoom_DropBoxChanged(e) {
+
+        // 구역, 셀 드랍박스 초기화
+        $("#CSI_ZoneDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#CSI_ZoneDropBox").dxDropDownBox("instance").reset();
+        $("#CSI_CellDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#CSI_CellDropBox").dxDropDownBox("instance").reset();
+
+        // 랙 높이 초기화
+        _CELL_HEIGHT = 0;
+
+        if (e.value === null || e.value.length <= 0) {
+
+            $("#CSI_ZoneDropBox").dxDropDownBox("instance").repaint();
+            $("#CSI_CellDropBox").dxDropDownBox("instance").repaint();
+
+            // CSS 설정
+            $(".dx-placeholder").css('margin-top', '-1%');
+            $("#CSI_ZoneDropBox").removeClass('dx-editor-underlined');
+            $("#CSI_ZoneDropBox").css('margin-top', '-1%');
+            $("#CSI_CellDropBox").removeClass('dx-editor-underlined');
+            $("#CSI_CellDropBox").css('margin-top', '-1%');
+
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/CellStackStatus_Zone_Select',
+            data: {
+                workroom_cd: e.value[0],
+            },
+            success: function (result) {
+
+                $("#CSI_ZoneDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: JSON.parse(result), key: "zone_cd" }));
+
+                $("#CSI_ZoneDropBox").dxDropDownBox("instance").repaint();
+                // 창고 드랍박스 닫기
+                $("#CSI_WorkRoomDropBox").dxDropDownBox("instance").close();
+
+                // CSS 설정
+                $(".dx-placeholder").css('margin-top', '-1%');
+                $("#CSI_ZoneDropBox").removeClass('dx-editor-underlined');
+                $("#CSI_ZoneDropBox").css('margin-top', '-1%');
+                $("#CSI_CellDropBox").removeClass('dx-editor-underlined');
+                $("#CSI_CellDropBox").css('margin-top', '-1%');
+            }
+        });
+
+    }
+
+    function CSI_Zone_DropBoxChanged(e) {
+
+        // 셀 드랍박스 초기화
+        $("#CSI_CellDropBox").dxDropDownBox("instance").option("dataSource", []);
+        $("#CSI_CellDropBox").dxDropDownBox("instance").reset();
+
+        // 랙 높이 초기화
+        _CELL_HEIGHT = 0;
+
+        if (e.value === null || e.value.length <= 0) {
+            $("#CSI_CellDropBox").dxDropDownBox("instance").repaint();
+
+            // CSS 설정
+            $(".dx-placeholder").css('margin-top', '-1%');
+            $("#CSI_CellDropBox").removeClass('dx-editor-underlined');
+            $("#CSI_CellDropBox").css('margin-top', '-1%');
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/CellStackStatus_Cell_Select',
+            data: {
+                zone_cd: e.value[0],
+            },
+            success: function (result) {
+
+                $("#CSI_CellDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: JSON.parse(result), key: "cell_isle" }));
+
+                $("#CSI_CellDropBox").dxDropDownBox("instance").repaint();
+                // 구역 드랍박스 닫기
+                $("#CSI_ZoneDropBox").dxDropDownBox("instance").close();
+
+                // CSS 설정
+                $(".dx-placeholder").css('margin-top', '-1%');
+                $("#CSI_CellDropBox").removeClass('dx-editor-underlined');
+                $("#CSI_CellDropBox").css('margin-top', '-1%');
+            }
+        });
+
+    }
+
+    function CSI_Cell_DropBoxChanged(e) {
+
+        var formData = new FormData($("#CellStackStatus_Iform")[0]);
+
+        // 랙 높이 초기화
+        _CELL_HEIGHT = 0;
+
+        if (e.value === null || e.value.length <= 0) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/MAX_CELL_HEIGHT',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    // 셀 드랍박스 닫기
+                    $("#CSI_CellDropBox").dxDropDownBox("instance").close();
+                }
+
+                // 랙 높이 셋팅
+                _CELL_HEIGHT = parseInt(JSON.parse(result)[0]["max_cell_height"]);
+
+                // 셀 드랍박스 닫기
+                $("#CSI_CellDropBox").dxDropDownBox("instance").close();
+
+            }
+        });
+
+    }
+
+    /* 드랍박스 이벤트 종료 */
+
+    // 개행 HTML
+    function CellStackStatustGridLineBreak(container, cellInfo) {
+
+        $("<div>").html(cellInfo.value)
+            .appendTo(container);
+    }
+
+    // 셀 더블 클릭시, 팝업 노출
+    function CellDoubleClick(e) {
+
+        if (e.value === "") {
+            return;
+        }
+
+        var formData = new FormData($("#CellStackStatus_Iform")[0]);
+        var cell_column = e.data.cell_column;
+        var cell_height = "0" + e.columnIndex;
+
+        formData.set("cell_column", cell_column);
+        formData.set("cell_height", cell_height);
+
+        $.ajax({
+            type: 'POST',
+            url: '/PrdLoc/CellStackStatus_Popup_Select',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    return;
+                }
+
+                var columns = [
+                    { dataField: "item_cd", caption: "품목코드" },
+                    { dataField: "item_nm", caption: "품목명" },
+                    { dataField: "receipt_time", caption: "입고일자" },
+                    { dataField: "lot_no", caption: "제조번호" },
+                    { dataField: "item_pack", caption: "팩번호" },
+                    { dataField: "item_qty", caption: "수량" }
+                ];
+
+                createPopup("CellStackStatus_I", "셀 상세 정보", result, columns, "item_cd", 950, 500);
+
+                $("#CellStackStatus_IPopup").dxPopup("instance").show();
+            }
+        });
+
+
+    }
+
+    // 그리드 행 높이 조절
+    function Init_CellStackStatus_I_Main() {
+        $("#CellStackStatust_IMain tr.dx-row.dx-data-row").attr("height", "120px;");
+    }
+
+    // 엑셀 다운로드
+    function CellStackStatus_IExcel(gridName, ExcelName) {
+        gridExportToExcel("CellStackStatust_IMain", "완제품 셀 적치 현황");
+    }
+
+</script>
+
+
+<div id="CellStackStatus_I" autoresize="Y">
+
+    <!-- 팝업 -->
+    <div id="CellStackStatus_IPopup"></div>
+
+    <div class="mainTop row">
+
+        <!-- $검색폼-->
+        <div class="col-8">
+
+            <form id="CellStackStatus_Iform">
+
+                <div class="input-wrapper">
+
+                    <div class="col-4 input-group input-group-sm">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">창고</span>
+                        </div>
+
+                        <div class="form-control">
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("CSI_WorkRoomDropBox")
+                                    .Name("workroom_cd")
+                                    .ValueExpr("workroom_cd")
+                                    .DisplayExpr("workroom_nm")
+                                    .Placeholder("창고를 선택하시오")
+                                    //.ShowClearButton(true)
+                                    .Height(24)
+                                    .OnValueChanged("CSI_WorkRoom_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("CSI_WorkRoomDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("CSI_WorkRoomDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("CSI_workroomDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("workroom_cd").Caption("창고코드");
+                                        columns.Add().DataField("workroom_nm").Caption("창고명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Visible(true);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    //.Width(350)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+                        </div>
+
+                    </div>
+
+                    <div class="col-4 input-group input-group-sm">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구역</span>
+                        </div>
+
+                        <div class="form-control">
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("CSI_ZoneDropBox")
+                                    .Name("zone_cd")
+                                    .ValueExpr("zone_cd")
+                                    .DisplayExpr("zone_nm")
+                                    .Placeholder("구역을 선택하시오")
+                                    //.ShowClearButton(true)
+                                    .Height(24)
+                                    .OnValueChanged("CSI_Zone_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("CSI_ZoneDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("CSI_ZoneDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("CSI_ZoneDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("zone_cd").Caption("구역코드");
+                                        columns.Add().DataField("zone_nm").Caption("구역명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Visible(true);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    //.Width(350)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+                        </div>
+
+                    </div>
+
+                    <div class="col-3 input-group input-group-sm">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">셀</span>
+                        </div>
+
+                        <div class="form-control">
+                            @(Html.DevExtreme().DropDownBox()
+                                    .ID("CSI_CellDropBox")
+                                    .Name("cell_isle")
+                                    .ValueExpr("cell_isle")
+                                    .DisplayExpr("cell_nm")
+                                    .Placeholder("랙을 선택하시오")
+                                    //.ShowClearButton(true)
+                                    .Height(24)
+                                    .OnValueChanged("CSI_Cell_DropBoxChanged")
+                                    .OnClosed("DropDownBoxReload")
+                                    .ContentTemplate(new TemplateName("CSI_CellDropBoxTemplate"))
+
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("CSI_CellDropBoxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("CSI_CellDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("cell_nm").Caption("셀명");
+                                        columns.Add().DataField("cell_isle").Caption("랙명");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Visible(true);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    //.Width(350)
+                                    .Height(500)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel");}
+            @*@(Html.DevExtreme().Toolbar()
+                .ID("CellStackStatusIToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("CellStackStatus_ISearch")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("CellStackStatus_ISearch")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })*@
+            
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <!-- 메인 그리드 -->
+        <div class="col-12">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("CellStackStatust_IMain")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    //.HoverStateEnabled(true)
+                    .KeyExpr("cell_column")
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .Height(869)
+                    .OnCellPrepared("Init_CellStackStatus_I_Main")
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("cell_column").Caption("cell_column").Width("130px").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("cell_height_1").Caption("1층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_2").Caption("2층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_3").Caption("3층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_4").Caption("4층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_5").Caption("5층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_6").Caption("6층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_7").Caption("7층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                        c.Add().DataField("cell_height_8").Caption("8층").Alignment(HorizontalAlignment.Center).CellTemplate(new JS("CellStackStatustGridLineBreak"));
+                    })
+                .OnCellDblClick("CellDoubleClick")
+            )
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

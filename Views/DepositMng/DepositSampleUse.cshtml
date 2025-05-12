@@ -1,0 +1,619 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+@using System.Web.Script.Serialization
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    JavaScriptSerializer serializer = new JavaScriptSerializer();
+    serializer.MaxJsonLength = Int32.MaxValue;
+
+    var item = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.item)));
+
+    var employee = @Html.Raw(Json.Encode(ViewBag.employee.Data));
+
+    var DepositSampleUseProgramParam = @Html.Raw(Json.Encode(ViewBag.programParam.Data));
+}
+
+<script id="@(pagePrefix)Js">
+
+    var _depositSampleUseSampleData = "";
+    var _depositSampleUseSampleUseData = "";
+
+    $(function () {
+
+        var DepositSampleUsePopupColumns = {
+            "item": [{ dataField: "item_cd", caption: "품목코드" }
+                , { dataField: "item_nm", caption: "품목명" }
+                , { dataField: "item_top_nm", caption: "대표여부" }],
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }
+                , { dataField: "emp_nm", caption: "사원명" }
+                , { dataField: "dept_cd", caption: "부서코드" }
+                , { dataField: "dept_nm", caption: "부서명" }]
+        };
+
+        createPopup("DepositSampleUseItem", "품목 조회", @item, DepositSampleUsePopupColumns.item);
+        createPopup("DepositSampleUseEmp", "사원 조회", @employee, DepositSampleUsePopupColumns.employee);
+
+        $('input[name=item_cd]+div>button'
+            , $('#' + "DepositSampleUseSearchForm")).click(function (event) {
+                DepositSampleUsePopUpSearch(event);
+            });
+
+        $('input[name=use_emp_cd]+div>button'
+            , $('#' + "DepositSampleUseWriteForm")).click(function (event) {
+                DepositSampleUsePopUpSearch(event);
+            });
+
+        $('#DepositSampleUse .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+        });
+
+        var programParams = JSON.parse(@DepositSampleUseProgramParam);
+
+        $("#DepositSampleUseSearchForm input[name=write_gb]").val(programParams['Table1'][0].parameter_value);
+
+        $("#DepositSampleUseSearchForm input[name=sdate]").datepicker("update", '@DateTime.Now.AddYears(-1).ToShortDateString()');
+        $("#DepositSampleUseSearchForm input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        $("#DepositSampleUseWriteForm select").readonly(true);
+
+        DepositSampleUseEditCheck(false, "N");
+        DepositSampleUseSearch();
+
+    });
+
+    // 수정중인지 체크
+    function DepositSampleUseEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElementToolbar(nowEdit
+            , "DepositSampleUseToolbar"
+            , "DepositSampleUse"
+        );
+
+        UtilView.setActiveElementGrids(nowEdit, "DepositSampleUseGrid;DepositSampleUseDetailGrid");
+
+        $("#DepositSampleUseWriteForm input[name=gubun]").val(status);
+
+        if (nowEdit) {
+            var grid = $("#DepositSampleUseGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("DepositSampleUseGrid", grid.option("focusedRowKey"));
+
+            $("#DepositSampleUseWriteForm select[name=use_unit]").val(gridData.deposit_unit);
+            $("#DepositSampleUseWriteForm input").prop("disabled", false);
+            $("#DepositSampleUseWriteForm button").prop("disabled", false);
+        } else {
+            $("#DepositSampleUseWriteForm input").prop("disabled", true);
+            $("#DepositSampleUseWriteForm button").prop("disabled", true);
+        }
+    }
+
+    function DepositSampleUseFocusChanged() {
+
+        var grid = $("#DepositSampleUseGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("DepositSampleUseGrid", grid.option("focusedRowKey"));
+
+        _depositSampleUseSampleData = gridData;
+
+        $("#DepositSampleUseWriteForm select[name=use_unit]").val(gridData.deposit_unit);
+
+        $.ajax({
+            type: 'GET',
+            url: '/DepositMng/DepositSampleUseSelectDetail',
+            data: {
+                depositsample_id: gridData.depositsample_id,
+                write_gb: $("#DepositSampleUseSearchForm input[name=write_gb]").val()
+            },
+            dataType: "json",
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    var grid = $("#DepositSampleUseDetailGrid").dxDataGrid("instance");
+                    grid.option("dataSource", jsonData);
+
+                    if (!grid.option("focusedRowKey")) {
+                        grid.option("focusedRowIndex", 0);
+                    } else {
+                        DepositSampleUseDetailFocusChanged();
+                    }
+                }
+                catch (e) {
+                    $("#DepositSampleUseDetailGrid").dxDataGrid("option", "dataSource", []);
+                    $("#DepositSampleUseDetailGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+
+            }
+        })
+    }
+
+    function DepositSampleUseDetailFocusChanged() {
+
+        var grid = $("#DepositSampleUseDetailGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("DepositSampleUseDetailGrid", grid.option("focusedRowKey"));
+
+        _depositSampleUseSampleUseData = gridData;
+
+        UtilView.setDataGridFormBind("DepositSampleUseDetailGrid", "DepositSampleUseWriteForm");
+
+    }
+
+    //#region 팝업 관련
+
+    var _depositSampleUseHelpPopUpCurInputName = "";
+
+    function DepositSampleUsePopUpSearch(e) {
+
+        _depositSampleUseHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (_depositSampleUseHelpPopUpCurInputName) {
+            case "item_cd":
+                popupId = "DepositSampleUseItem";
+                break;
+            case "use_emp_cd":
+                popupId = "DepositSampleUseEmp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    function DepositSampleUseItemRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=item_cd]", $("#DepositSampleUseSearchForm")).val(data.item_cd);
+
+        $("#DepositSampleUseItemPopup").dxPopup("instance").hide();
+    }
+
+    function DepositSampleUseEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=use_emp_cd]", $("#DepositSampleUseWriteForm")).val(data.emp_cd);
+        $("input[name=use_emp_nm]", $("#DepositSampleUseWriteForm")).val(data.emp_nm);
+
+        $("#DepositSampleUseEmpPopup").dxPopup("instance").hide();
+    }
+
+    //#endregion
+
+
+    //#region 툴바 클릭 이벤트 관련
+
+    function DepositSampleUseSearch() {
+        $("#DepositSampleUseWriteForm")[0].reset();
+
+        $("#DepositSampleUseGrid").dxDataGrid("option", "focusedRowKey", "");
+        $("#DepositSampleUseDetailGrid").dxDataGrid("option", "focusedRowKey", "");
+        $("#DepositSampleUseDetailGrid").dxDataGrid("option", "DataSource", "");
+
+        _depositSampleUseSampleData = "";
+        _depositSampleUseSampleUseData = "";
+
+        UtilView.dataGridSelect('DepositSampleUseGrid', 'DepositSampleUseSearchForm');
+    }
+
+    function DepositSampleUseInput() {
+
+        var grid = $("#DepositSampleUseGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("사용할 보관 검체를 확인하세요.");
+            return;
+        }
+
+        var gridData = getGridRowByKey("DepositSampleUseGrid", grid.option("focusedRowKey"));
+
+        var stock_unit_qty = parseInt(gridData.stock_unit_qty);
+
+        if (stock_unit_qty <= 0) {
+            alert("사용할 재고가 없습니다!");
+            return;
+        }
+
+        $("#DepositSampleUseWriteForm")[0].reset();
+        DepositSampleUseEditCheck(true, "I");
+        $("#DepositSampleUseWriteForm select[name=status_cd]").val("1");
+    }
+
+    function DepositSampleUseEdit() {
+
+        var grid = $("#DepositSampleUseDetailGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("수정 할 사용 내역이 없습니다.");
+            return;
+        }
+
+        var gridData = getGridRowByKey("DepositSampleUseDetailGrid", grid.option("focusedRowKey"));
+
+        if (gridData.status_cd === "1") {
+            DepositSampleUseEditCheck(true, "U");
+        }
+        else if (gridData.status_cd === "2") {
+            alert("이미요청이 승인 된 보관검체입니다.");
+        }
+        else {
+            alert("이미 승인 후 반출 된 보관검체입니다.");
+        }
+    }
+
+    function DepositSampleUseDelete() {
+
+        var grid = $("#DepositSampleUseDetailGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("삭제 할 사용 내역이 없습니다.");
+            return;
+        }
+
+        var gridData = getGridRowByKey("DepositSampleUseDetailGrid", grid.option("focusedRowKey"));
+
+        if (gridData.status_cd !== "1") {
+            alert("이미 요청 승인 되어 수정이 불가능 합니다.");
+            return;
+        }
+
+        if (!confirm("보관용 검체 사용 정보를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        DepositSampleUseEditCheck(true, "D");
+
+        DepositSampleUseSave();
+    }
+
+    function DepositSampleUseSave() {
+
+        if (!UtilView.checkValidForm("DepositSampleUseWriteForm")) {
+            return;
+        }
+
+        $("#DepositSampleUseWriteForm select").readonly(false);
+
+        var form = $('#DepositSampleUseWriteForm')[0];
+        var formData = new FormData(form);
+
+        $("#DepositSampleUseWriteForm select").readonly(true);
+
+        formData.set("write_gb", $("#DepositSampleUseSearchForm input[name=write_gb]").val());
+        formData.set("depositsample_id", (_depositSampleUseSampleData.depositsample_id ? _depositSampleUseSampleData.depositsample_id : ""));
+        formData.set("depositsampleuse_id", (_depositSampleUseSampleUseData.depositsampleuse_id ? _depositSampleUseSampleUseData.depositsampleuse_id : ""));
+        formData.set("stock_qty", _depositSampleUseSampleData.stock_qty);
+        formData.set("stock_unit_qty", _depositSampleUseSampleData.stock_unit_qty);
+        formData.set("request_qty", _depositSampleUseSampleData.request_qty );
+        formData.set("request_unit_qty", _depositSampleUseSampleData.request_unit_qty);
+        formData.set("before_request_qty", _depositSampleUseSampleUseData.use_qty);
+        formData.set("before_request_unit_qty", _depositSampleUseSampleUseData.use_unit_qty);
+
+        UtilView.dataGridTRX(formData, () => DepositSampleUseSearch());
+
+        DepositSampleUseEditCheck(false, "N");
+
+    }
+
+    function DepositSampleUseUndo() {
+        $('#DepositSampleUseWriteForm')[0].reset();
+        DepositSampleUseEditCheck(false, "N");
+        DepositSampleUseFocusChanged();
+    }
+
+    function DepositSampleUsePrint() {
+
+    }
+
+    function DepositSampleUseExcel() {
+        gridExportToExcel("DepositSampleUseGrid", "보관검체_사용_요청_" + '@DateTime.Now.ToShortDateString()');
+    }
+
+    //#endregion
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="DepositSampleUseItemPopup"></div>
+    <div id="DepositSampleUseEmpPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <input type="text" name="write_gb" hidden="hidden" />
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="@(pagePrefix)selecttype1" name="selecttype" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selecttype1">제조일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="@(pagePrefix)selecttype2" name="selecttype" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selecttype2">채취일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="3" id="@(pagePrefix)selecttype3" name="selecttype" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selecttype3">보관기한</label></span>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">원료유형</span>
+                        </div>
+                        <select class="form-control" name="item_type1">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM021")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary">재고 리스트</button>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="sdate" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="edate" autocomplete="off">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">원료분류</span>
+                        </div>
+                        <select class="form-control" name="item_type2">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CM022")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary">출력</button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "*");}
+        </div>
+
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-12 mb-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DepositSampleUseGrid")
+                    .KeyExpr("depositsample_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(400)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("sampling_date").Caption("채취일자");
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("order_no").Caption("제조번호");
+                        c.Add().DataField("start_date").Caption("제조일자");
+                        c.Add().DataField("valid_date").Caption("사용(유효)기한");
+                        c.Add().DataField("limited_deposit_date").Caption("보관기간");
+                        c.Add().DataField("stock_qty").Caption("재고용기수");
+                        c.Add().DataField("stock_unit_qty").Caption("재고량");
+                        c.Add().DataField("request_qty").Caption("남은요청수");
+                        c.Add().DataField("request_unit_qty").Caption("남은요청량");
+                        c.Add().DataField("deposit_unit_nm").Caption("단위");
+                    })
+                .OnFocusedRowChanged("DepositSampleUseFocusChanged")
+                .OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-9 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DepositSampleUseDetailGrid")
+                    .KeyExpr("depositsampleuse_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("use_date").Caption("사용요청일자");
+                        c.Add().DataField("use_emp_nm").Caption("사용자");
+                        c.Add().DataField("request_qty").Caption("요청수");
+                        c.Add().DataField("refund_qty").Caption("환입수");
+                        c.Add().DataField("use_qty").Caption("사용용기수");
+                        c.Add().DataField("request_unit_qty").Caption("요청량");
+                        c.Add().DataField("refund_unit_qty").Caption("환입량");
+                        c.Add().DataField("use_unit_qty").Caption("사용검체량");
+                        c.Add().DataField("status_nm").Caption("상태");
+                    })
+                .OnFocusedRowChanged("DepositSampleUseDetailFocusChanged")
+                .OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-3 pl-0">
+
+            <div class="box mb-0">
+
+                <form id="DepositSampleUseWriteForm">
+
+                    <input type="text" name="gubun" hidden="hidden" />
+
+                    <div class="divName mb-1">
+                        <p>검체 사용 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">요청일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control datepicker required" name="use_date" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">요청자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="use_emp_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="use_emp_nm" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">요청수량</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control required" name="use_qty" min="0">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" style="font-size:inherit;">개(EA)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">요청량</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control required" name="use_unit_qty" min="0">
+                            </div>
+                            <div class="input-group col-3">
+                                <select class="form-control required" name="use_unit">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CM012")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">요청목적</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="remark">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">상태</label>
+                            <div class="input-group col-4">
+                                <select class="form-control required" name="status_cd">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "CM081")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

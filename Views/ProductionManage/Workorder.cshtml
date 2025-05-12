@@ -1,0 +1,491 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Workorder";
+
+    var workorderData = @Html.Raw(Json.Encode(ViewBag.workorderData.Data));
+    var WorkorderAuth = @Html.Raw(Json.Encode(ViewBag.WorkorderAuth.Data));
+    var itemPopupData = @Html.Raw(Json.Encode(ViewBag.itemPopupData.Data));
+}
+
+@*제조지시*@
+
+<script id="WorkorderJs">
+
+        // 이동 페이지 정보
+        var workorderPageInfo = [
+            {
+                tabName: "원료 불출 지시",
+                tabId: "Workorder_Request",
+                url: "/ProductionManage/Workorder_Request"
+
+            }, {
+                tabName: "제조기록서 승인",
+                tabId: "OrderGuide",
+                url: "/ProductionManage/OrderGuide"
+            }
+        ]
+
+        $(function () {
+            setDatePicker("#Workorder .datepicker");
+
+            if ((@workorderData).length > 0) {
+                $("#WorkorderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@workorderData));
+                $("#WorkorderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#WorkorderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var columns = [
+                { dataField: "item_cd", caption: "품목코드" },
+                { dataField: "item_nm", caption: "품목명" }
+            ];
+
+            createPopup("WorkorderItem", "품목조회", @itemPopupData, columns, "item_cd");
+
+            var WorkorderAuth = JSON.parse(@WorkorderAuth)[0];
+
+            if (WorkorderAuth.form_query != "Y") {
+                $("#WorkorderSearch").remove();
+            }
+
+            $("#WorkorderForm input").prop("readonly", true);
+
+        });
+
+
+        // 원료 불출 지시 페이지 열기
+        function workorderOpenOtherPage1() {
+            var grid = $("#WorkorderGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("WorkorderGrid", grid.option("focusedRowKey"));
+
+            var param = {
+                sdate: $("#WorkorderForm input[name=order_date]").val(),
+                edate: $("#WorkorderForm input[name=order_date]").val(),
+                order_no: $("#WorkorderForm input[name=order_no]").val(),
+                item_cd: gridData.item_cd
+            };
+
+            workorderPageInfo[0].param = param;
+
+            openOtherPage(workorderPageInfo[0]);
+        }
+     
+        // 제조기록서 승인 페이지 열기
+        function workorderOpenOtherPage2() {
+
+            var param = {
+                order_no: $("#WorkorderForm input[name=order_no]").val(),
+                item_nm: $("#WorkorderForm input[name=item_nm]").val()
+            };
+
+            workorderPageInfo[1].param = param;
+
+            openOtherPage(workorderPageInfo[1]);
+        }
+
+        // 제조지시 그리드 포커스 변경
+        function WorkorderSelctWorkOrder() {
+
+            $("#WorkorderForm")[0].reset();
+
+            var grid = $("#WorkorderGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("WorkorderGrid", grid.option("focusedRowKey"));
+
+            $("#WorkorderForm input[name=order_no]").val(data.order_no);
+            $("#WorkorderForm input[name=order_date]").val(data.order_date);
+            $("#WorkorderForm input[name=lot_no]").val(data.lot_no);
+            $("#WorkorderForm input[name=lot_date]").val(data.lot_date);
+            $("#WorkorderForm input[name=item_cd]").val(data.item_cd);
+            $("#WorkorderForm input[name=item_nm]").val(data.item_nm);
+            $("#WorkorderForm input[name=order_qty]").val(data.order_qty);
+            $("#WorkorderForm input[name=order_qty]").val(data.order_qty);
+            $("#WorkorderForm input[name=batch_size_unit]").val(data.batch_size_unit);
+            $("#WorkorderForm input[name=order_bigo]").val(data.order_bigo);
+
+        }
+
+        function workorderSelectItem() {
+            $("#WorkorderItemPopup").dxPopup("instance").show();
+        }
+
+        function WorkorderItemRowDblClick(selectedItems) {
+            var data = selectedItems.data;
+
+            $("#WorkorderSearchForm input[name=item_cd]").val(data.item_cd);
+
+            var popup = $("#WorkorderItemPopup").dxPopup("instance");
+
+            popup.hide()
+        }
+
+        // 조회
+        function WorkorderSearch() {
+
+            var formData = new FormData($("#WorkorderSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                url: '/ProductionManage/WorkorderSelect',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    if (result.length <= 0) {
+
+                        $("#WorkorderForm")[0].reset();
+
+                        $("#WorkorderGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#WorkorderGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#WorkorderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#WorkorderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#WorkorderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            })
+        }
+
+        function WorkorderExcel() {
+            gridExportToExcel("WorkorderGrid", "WorkorderData");
+        }
+
+        function WorkorderPrint() {
+            var btnType;
+            btnType = $(event.target).closest('.dx-button').attr('id');
+
+            var grid = $("#WorkorderGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("WorkorderGrid", grid.option("focusedRowKey"));
+
+            var order_no = data.order_no;
+
+            // report 출력
+            var report = new ReportHelper();
+            // 기존
+            //report.addParam({
+            //    objFile: { path: "ProductionManage", RptFileName: "Weighing_Report" },
+            //    objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport", reportParam: "order_no:" + order_no },
+            //    objEtcInfo: { subParam: "" },
+            //    objTblNm: { tblName: "Header,Weighing" }
+            //});
+            //report.addParam({
+            //    objFile: { path: "ProductionManage", RptFileName: "WorkSheetWR", RptSeq:0 },
+            //    objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport2", reportParam: "order_no:" + order_no },
+            //    objEtcInfo: { subParam: "" },
+            //    objTblNm: { tblName: "header,order_proc" }
+            //});
+            //report.addParam({
+            //    objFile: { path: "ProductionManage", RptFileName: "WorkSheetWR", RptSeq:1 },
+            //    objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport3", reportParam: "order_no:" + order_no },
+            //    objEtcInfo: { subParam: "" },
+            //    objTblNm: { tblName: "header,order_proc" }
+            //});
+
+
+            //2021.03.04 박가희 수정
+            //1.칭량지시서 공정명과 함께 공정순서대로 나오도록 변경
+            report.addParam({
+                objFile: { path: "ProductionManage", RptFileName: "Weighing_Report" },
+                objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport", reportParam: "order_no:" + order_no },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "Header,Weighing" }
+            });
+
+            //2. 작업방법 미리보기
+            report.addParam({
+                objFile: { path: "ProductionManage", RptFileName: "WorkSheet" },
+                objSp: { SpName: "SP_WorkSheetRPT", gubun: "M", reportParam: "order_no:" + order_no },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "WorkSheet_Master,Header,OrderProc" }
+            });
+
+            // 레포트테스트(생성객체확인)
+            //report.testObj();
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+        }
+
+        function WorkorderReport(str) {
+
+            var grid = $("#WorkorderGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("WorkorderGrid", grid.option("focusedRowKey"));
+
+            var order_no = data.order_no;
+
+            var report = new ReportHelper();
+            //report.addParam({
+            //    objFile: { path: "ProductionManage", RptFileName: "Weighing_Report" },
+            //    objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport4", reportParam: "order_no:" + order_no },
+            //    objEtcInfo: { subParam: "" },
+            //    objTblNm: { tblName: "Header,Weighing" }
+            //});
+
+            //2021.03.04 박가희 수정
+            //1.칭량지시서 공정명과 함께 공정순서대로 나오도록 변경
+            report.addParam({
+                objFile: { path: "ProductionManage", RptFileName: "Weighing_Report" },
+                objSp: { SpName: "SP_Workorder_Workorder", gubun: "WeighingReport", reportParam: "order_no:" + order_no },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "Header,Weighing" }
+            });
+
+            //2. 작업방법 미리보기
+            report.addParam({
+                objFile: { path: "ProductionManage", RptFileName: "WorkSheet" },
+                objSp: { SpName: "SP_WorkSheetRPT", gubun: "M", reportParam: "order_no:" + order_no },
+                objEtcInfo: { subParam: "" },
+                objTblNm: { tblName: "WorkSheet_Master,Header,OrderProc" }
+            });
+
+            if (str === 'Preview') {
+                report.preview();
+            } else if (str === 'Print') {
+                report.print();
+            }
+        }
+
+
+</script>
+
+<div id="Workorder" autoresize="Y">
+
+    <div id="WorkorderItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class=" col-8">
+
+            <form id="WorkorderSearchForm">
+
+                <div class=" input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()">
+                        <input type="text" class="form-control datepicker" name="edate" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="workorderSelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조상태</span>
+                        </div>
+                        <select class="form-control" name="order_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.manufactureState).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조번호</span>
+                        </div>
+                        <input type="text" class="form-control" name="lot_no_export" />
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Preview;Print"); }
+
+            @*<div class="align-end-only">
+                <button class="btn btn-secondary" onclick="WorkorderReport('Preview')">기록서(미리보기)</button>
+                <button class="btn btn-secondary" onclick="WorkorderReport('Print')">기록서(프린트)</button>
+            </div>*@
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("WorkorderGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .KeyExpr("order_no")
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("order_date").Caption("지시일자");
+                        columns.Add().DataField("order_no").Caption("제조지시번호");
+                        columns.Add().DataField("item_cd").Caption("제품코드");
+                        columns.Add().DataField("item_nm").Caption("제품명");
+                        columns.Add().DataField("lot_no").Caption("제조번호");
+                        columns.Add().DataField("lot_date").Caption("제조일자");
+                        columns.Add().DataField("order_qty").Caption("지시수량");
+                        columns.Add()
+                                        .Caption("단위")
+                                        .Lookup(lookup => lookup
+                                            .DataSource(d => d.WebApi()
+                                                .RouteName("Comm")
+                                                .LoadAction("GetCommon")
+                                                .LoadParams(new
+                                                {
+                                                    pGubun = "공통코드"
+                                                    ,
+                                                    pDiv = "D"
+                                                    ,
+                                                    pStrWhere = "CM012"
+                                                    ,
+                                                    pTableName = "unit"
+                                                }
+                                                ).Key("keyfield"))
+                                            .ValueExpr("keyfield")
+                                            .DisplayExpr("displayfield")
+                                        ).DataField("batch_size_unit")
+                                        .DataType(GridColumnDataType.String);
+
+                        columns.Add().DataField("issue_status").Caption("사본발행여부").DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return rowData.issue_status == ""Y""; }");
+                        columns.Add().DataField("gubun").Caption("불출지시상태");
+                        columns.Add().DataField("weighing_order_status_nm").Caption("승인상태");
+                        columns.Add().DataField("order_status_nm").Caption("제조상태");
+                        columns.Add().DataField("weighing_status").Caption("칭량지시상태");
+                        columns.Add().DataField("order_bigo").Caption("비고");
+                    })
+                    .OnFocusedRowChanged("WorkorderSelctWorkOrder")
+                )
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <div class="divName">
+                    <p>제조지시 정보</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <div class="align-end-only pr-1 mb-1">
+
+                        <button class="btn btn-secondary" onclick="workorderOpenOtherPage1()">원료 불출 지시</button>
+                        <button class="btn btn-secondary" onclick="workorderOpenOtherPage2()">제조기록서 지시</button>
+
+                    </div>
+
+                    <form id="WorkorderForm">
+
+                        <div class="input-wrapper">
+
+                            <label class="col-3">제조지시번호</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="order_no" readonly="readonly">
+                            </div>
+
+                            <label class="col-2">지시일자</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="order_date" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-3">제조번호</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="lot_no" readonly="readonly">
+                            </div>
+
+                            <label class="col-2">제조일자</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="lot_date" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-3">제품코드</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_cd" readonly="readonly">
+                            </div>
+                            <div class="input-group col-5">
+                                <input type="text" class="form-control col-12" name="item_nm" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-3">지시수량</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="order_qty" readonly="readonly">
+                            </div>
+                            <div class="input-group col-5">
+                                <input type="text" class="form-control col-12" name="batch_size_unit" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="order_bigo" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

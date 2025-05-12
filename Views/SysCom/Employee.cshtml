@@ -1,0 +1,671 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Employee";
+
+    var employeeData = @Html.Raw(Json.Encode(ViewBag.employeeData.Data));
+    var departmentData = @Html.Raw(Json.Encode(ViewBag.departmentData.Data));
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+}
+
+@*사원관리*@
+
+<script id="EmployeeJs">
+
+        var _employeeCRUDGubun;
+
+        $(function () {
+            setDatePicker("#Employee .datepicker");
+
+            var emp_data = @employeeData;
+
+            if (emp_data.length > 0) {
+                $("#EmployeeGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@employeeData));
+                $("#EmployeeGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#EmployeeGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            var columns1 = [
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            var columns2 = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("EmployeeDepartment1", "부서조회1", @departmentData, columns1, "dept_cd");
+            createPopup("EmployeeDepartment2", "부서조회2", @departmentData, columns1, "dept_cd");
+            createPopup("Employee1", "사원조회1", @empPopupData, columns2, "emp_cd");
+            createPopup("Employee2", "사원조회2", @empPopupData, columns2, "emp_cd");
+
+            employeeEditCheck(false);
+
+            $('#Employee input[name=retire_date]').datepicker('destroy');
+            $('#Employee input[name=retire_date]').attr('readonly', true);
+
+        });
+
+        // --------- 전화번호 , 팩스번호 '-' 입력 ---------------------------------------------
+        var autoHypenPhone = function (str) {
+            str = str.replace(/[^0-9]/g, '');
+            var tmp = '';
+            if (str.length < 4) {
+                return str;
+            } else if (str.length < 7) {
+                tmp += str.substr(0, 3);
+                tmp += '-';
+                tmp += str.substr(3);
+                return tmp;
+            } else if (str.length < 11) {
+                tmp += str.substr(0, 3);
+                tmp += '-';
+                tmp += str.substr(3, 3);
+                tmp += '-';
+                tmp += str.substr(6);
+                return tmp;
+            } else {
+                tmp += str.substr(0, 3);
+                tmp += '-';
+                tmp += str.substr(3, 4);
+                tmp += '-';
+                tmp += str.substr(7);
+                return tmp;
+            }
+
+            return str;
+        }
+
+        var phoneNum = document.getElementById('employeePhoneNo');
+
+        phoneNum.onkeyup = function () {
+            this.value = autoHypenPhone(this.value);
+        }
+        // ------------------------------------------------------------------------------------------------------
+
+        // 수정중인지 체크
+        function employeeEditCheck(nowEdit) {
+
+            //$("#Employee input[name=emp_cd]").attr("readonly", false);
+            //$("#Employee input[name=dept_cd]").attr("readonly", false);
+            //$("#Employee input[name=dept_nm]").attr("readonly", false);
+
+            if (nowEdit) {
+
+                $("#EmployeeSave").dxButton().parent().parent().removeClass("display-none");
+                $("#EmployeeUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#EmployeeSearch").dxButton().parent().parent().addClass("display-none");
+                $("#EmployeeInput").dxButton().parent().parent().addClass("display-none");
+                $("#EmployeeEdit").dxButton().parent().parent().addClass("display-none");
+                $("#EmployeeDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#employeeForm :disabled").attr('disabled', false);
+                $("#EmployeeGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#EmployeeSave").dxButton().parent().parent().addClass("display-none");
+                $("#EmployeeUndo").dxButton().parent().parent().addClass("display-none");
+                $("#EmployeeSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#EmployeeInput").dxButton().parent().parent().removeClass("display-none");
+                $("#EmployeeEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#EmployeeDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#employeeForm :enabled").attr('disabled', true);
+                $("#EmployeeGrid").dxDataGrid("option", "disabled", false);
+            }
+
+        }
+
+        function EmployeeSelectEmployee() {
+
+            $("#employeeForm")[0].reset();
+
+            let grid = $("#EmployeeGrid").dxDataGrid("instance");
+
+            let data = getGridRowByKey("EmployeeGrid", grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(data)) return;
+
+            $("#employeeForm input[name=emp_cd]").val(data.emp_cd);
+            $("#employeeForm input[name=emp_nm]").val(data.emp_nm);
+            $("#employeeForm input[name=phone_no]").val(data.phone_no);
+            $("#employeeForm input[name=email_addr]").val(data.email_addr);
+            $("#employeeForm input[name=birth_date]").val(data.birth_date);
+            $("#employeeForm input[name=enter_date]").val(data.enter_date);
+            $("#employeeForm select[name=emp_type]").val(data.emp_type);
+            $("#employeeForm input[name=dept_cd]").val(data.dept_cd);
+            $("#employeeForm input[name=dept_nm]").val(data.dept_nm);
+            $("#employeeForm select[name=emp_post]").val(data.emp_post);
+            $("#employeeForm select[name=emp_rair]").val(data.emp_rair);
+            $("#employeeForm input[name=manager_emp_cd]").val(data.manager_emp_cd);
+            $("#employeeForm input[name=manager_emp_nm]").val(data.manager_emp_nm);
+            $("#employeeForm input[name=retire_date]").val(data.retire_date);
+            if (data.use_yn === "Y") {
+                $("#employeeForm input[name=use_yn][value=Y]").prop("checked", true);
+            } else {
+                $("#employeeForm input[name=use_yn][value=N]").prop("checked", true);
+            }
+
+        }
+
+        function searchEmployeeDept(num) {
+            $("#EmployeeDepartment" + num + "Popup").dxPopup("instance").show();
+        }
+
+        function EmployeeDepartment1RowDblClick(selectedItems) {
+            $("#Employee input[name=search_dept_cd]").val(selectedItems.data.dept_cd);
+
+            $("#EmployeeDepartment1Popup").dxPopup("instance").hide();
+        }
+        function EmployeeDepartment2RowDblClick(selectedItems) {
+            $("#Employee input[name=dept_cd]").val(selectedItems.data.dept_cd);
+            $("#Employee input[name=dept_nm]").val(selectedItems.data.dept_nm);
+
+            $("#EmployeeDepartment2Popup").dxPopup("instance").hide();
+        }
+
+        function searchEmployeeEmp(num) {
+            $("#Employee" + num + "Popup").dxPopup("instance").show();
+        }
+
+        function Employee1RowDblClick(selectedItems) {
+            $("#Employee input[name=search_emp_cd]").val(selectedItems.data.emp_cd);
+
+            $("#Employee1Popup").dxPopup("instance").hide();
+        }
+        function Employee2RowDblClick(selectedItems) {
+            $("#Employee input[name=manager_emp_cd]").val(selectedItems.data.emp_cd);
+            $("#Employee input[name=manager_emp_nm]").val(selectedItems.data.emp_nm);
+
+            $("#Employee2Popup").dxPopup("instance").hide();
+        }
+
+        function employeeInputClear(input) {
+            if (input === "dept") {
+                $("#Employee input[name=dept_cd]").val("");
+                $("#Employee input[name=dept_nm]").val("");
+            } else if (input === "emp") {
+                $("#Employee input[name=manager_emp_cd]").val("");
+                $("#Employee input[name=manager_emp_nm]").val("");
+            }
+        }
+
+
+        //function getGridRowByKey(key) {
+
+        //    let grid = $("#EmployeeGrid").dxDataGrid('instance');
+        //    let rows = grid.getVisibleRows();
+        //    let rowIndex = grid.getRowIndexByKey(key);
+        //    let row = rows[rowIndex];
+
+        //    return row.data;
+        //}
+
+        function EmployeeInput() {
+
+            _employeeCRUDGubun = "I";
+
+            employeeEditCheck(true);
+            $("#employeeForm")[0].reset();
+
+            $('#employeeForm input[name=emp_cd]').attr('readonly', false);
+        }
+
+        function EmployeeEdit() {
+
+            _employeeCRUDGubun = "U";
+
+            $('#employeeForm input[name=emp_cd]').attr('readonly', true);
+            employeeEditCheck(true);
+        }
+
+        function EmployeeDelete() {
+
+            var deleteChk = confirm("이 사원을 삭제하시겠습니까?");
+
+            if (deleteChk) {
+                _employeeCRUDGubun = "D";
+
+                var grid = $("#EmployeeGrid").dxDataGrid("instance");
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysCom/employeeCRUD',
+                    data: {
+                        emp_cd: grid.option("focusedRowKey"),
+                        gubun: _employeeCRUDGubun
+                    },
+                    success: function (result) {
+                        _employeeCRUDGubun = "";
+                        employeeEditCheck(false);
+                        EmployeeSearch();
+                    }
+                });
+            }
+        }
+
+        function EmployeeSave() {
+
+            if (!UtilView.checkValidForm("employeeForm")) {
+                return;
+            }
+
+            var email_addr = $("#employeeForm input[name=email_addr]").val();
+            var email_validation = true;
+            if (email_addr != null && email_addr != "") {
+                email_validation = checkEmail(email_addr);
+            }
+
+            if (email_validation == false) {
+                alert("올바른 이메일 주소를 입력 해 주세요.");
+                return;
+            }
+
+            var formData = new FormData($("#employeeForm")[0]);
+
+            formData.set("gubun", _employeeCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/employeeCRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result == '') {
+                        alert('동일한 사원 번호의 사원이 존재합니다.\r\n확인 후 다시 시도해주십시오.');
+                    }
+                    else {
+                        alert(result);
+                        _employeeCRUDGubun = "";
+                        employeeEditCheck(false);
+                        EmployeeSearch();
+                    }
+                }
+            });
+        }
+
+        function EmployeeUndo() {
+
+            employeeEditCheck(false);
+
+            EmployeeSelectEmployee();
+            _employeeCRUDGubun = "";
+
+        }
+
+        function retireDateControl(isInputable) {
+
+            if (isInputable === 'false') {
+
+                $("#Employee input[name=retire_date]").datepicker();
+
+            } else if (isInputable === 'false') {
+                $('#Employee input[name=retire_date]').val("");
+                $('#Employee input[name=retire_date]').datepicker('destroy');
+                $('#Employee input[name=retire_date]').attr('readonly', true);
+            }
+
+        }
+
+        function EmployeeSearch() {
+
+            var formData = new FormData($("#employeeSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysCom/selectEmployee',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result)) {
+                        var json = JSON.parse(result);
+                        $("#EmployeeGrid").dxDataGrid("instance").option("dataSource", json);
+
+                    } else {
+                        $("#EmployeeGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#employeeForm")[0].reset();
+                    }
+                }
+            });
+
+            UtilView.setGridFocus("G", "EmployeeGrid");
+        }
+
+    function EmployeeExcel() {
+        gridExportToExcel("EmployeeGrid", "EmployeeData");
+    }
+
+    function checkEmail(myValue) {
+        var email = myValue;
+        var regExp = /^[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*@@[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*\.[a-zA-Z]{2,3}$/i;
+
+        if (regExp.test(email) == false) {
+            //이메일 형식이 알파벳+숫자@알파벳+숫자.알파벳+숫자 형식이 아닐경우
+            return false;
+        }
+        return true;
+    }
+
+</script>
+
+
+<div id="Employee" autoresize="Y">
+
+    <div id="EmployeeDepartment1Popup"></div>
+    <div id="EmployeeDepartment2Popup"></div>
+    <div id="Employee1Popup"></div>
+    <div id="Employee2Popup"></div>
+
+    @*<div id="bcTarget2" style="margin-top:30px;"></div>*@
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="employeeSearchForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">부서</span>
+                        </div>
+                        <input type="text" class="form-control" name="search_dept_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchEmployeeDept('1')">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사원</span>
+                        </div>
+                        <input type="text" class="form-control" name="search_emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchEmployeeEmp('1')">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="employee_use_yn_radio" checked="checked" onclick="EmployeeSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="employee_use_yn_radio" onclick="EmployeeSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="employee_use_yn_radio" onclick="EmployeeSearch()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("EmployeeGrid")
+                    .KeyExpr("emp_cd")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnFocusedRowChanged("EmployeeSelectEmployee")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface").Width("7%").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("dept_nm").Caption("부서명").Alignment(HorizontalAlignment.Center).Width("15%");
+                        c.Add().DataField("emp_cd").Caption("사원코드").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("emp_nm").Caption("사원명").Alignment(HorizontalAlignment.Center);
+                        c.Add()
+                                     .Caption("직위")
+                                     .Lookup(lookup => lookup
+                                         .DataSource(d => d.WebApi()
+                                             .RouteName("Comm")
+                                             .LoadAction("GetCommon")
+                                             .LoadMethod("GET")
+                                             .LoadParams(new
+                                             {
+                                                 pGubun = "공통코드"
+                                                 ,
+                                                 pDiv = "D"
+                                                 ,
+                                                 pStrWhere = "CM005"
+                                                 ,
+                                                 pTableName = "empPostGubun"
+                                             }
+                                         ).Key("keyfield"))
+                                         .ValueExpr("keyfield")
+                                         .DisplayExpr("displayfield")
+                                         ).DataField("emp_post")
+                                         .DataType(GridColumnDataType.String).Width("7%")
+                                         .Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("enter_date").Caption("입사일").Alignment(HorizontalAlignment.Center).Width("10%");
+                        c.Add().DataField("phone_no").Caption("전화번호").Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("email_addr").Caption("이메일").Alignment(HorizontalAlignment.Center).Width("20%");
+                        c.Add().DataField("use_yn").Caption("사용여부").Width("7%")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+
+                    })
+                )
+            </div>
+
+        </div>
+
+        <div class="col-4">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>사원 정보</p>
+                    <span id="signSetValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="employeeForm">
+
+                        <div class="input-wrapper">
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-3">사원번호 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12 required" name="emp_cd">
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-3">사원번호</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="emp_cd">
+                                </div>
+                            }
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사원명 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="emp_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">연락처</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" id="employeePhoneNo" name="phone_no" maxlength="13">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">이메일</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" id="employeeEmail" name="email_addr">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">생년월일</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker" name="birth_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">입사일자 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker required" name="enter_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사원구분</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="emp_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.empTypeGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">부서코드 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="dept_cd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="searchEmployeeDept('2')">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="dept_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">직위</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="emp_post">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.empPostGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">직무</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="emp_rair">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.empRairGubun).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">조장코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="manager_emp_cd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="searchEmployeeEmp('2')">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="manager_emp_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">퇴사일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker" name="retire_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <div class="radioDiv required col-12">
+                                    <label class="col-5" style="padding:0px"><input type="radio" name="use_yn" value="Y" onclick="retireDateControl('true')" />예 </label>
+                                    <label class="col-6" style="padding:0px"><input type="radio" name="use_yn" value="N" onclick="retireDateControl('false')" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3"></label>
+                            <div class="input-group col-8">
+                                <span class="text-danger">사용여부 값에 따라 퇴사일자를 선택 할 수 있습니다.</span>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

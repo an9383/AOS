@@ -1,0 +1,1418 @@
+﻿@*제조제품 관리*@
+@using System.Data
+@using HACCP.Libs 
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Item_Standard";
+
+    var itemData = @Html.Raw(Json.Encode(ViewBag.items.Data));
+    var warehousePopupData = @Html.Raw(Json.Encode(ViewBag.warehousePopupData.Data));
+    var Item_StandardAuth = @Html.Raw(Json.Encode(ViewBag.Item_StandardAuth.Data));
+}
+
+@*제조제품 관리*@
+
+    <script id="Item_StandardJs">
+
+        var _itemStandardCRUDGubun;
+        var _itemStandardDuplicatedCheck = false;
+        var _itemStandardIsOtherLicenseUsing = false;
+        var _itemStandardImageSeq;
+        var _itemStandardImageCnt = 0;
+
+        $(function () {
+            setDatePicker("#Item_Standard .datepicker");
+
+            if ((@itemData).length > 0) {
+                $("#Item_StandardGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@itemData));
+                $("#Item_StandardGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#Item_StandardGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            var columns = [
+                { dataField: "workroom_cd", caption: "보관창고코드" },
+                { dataField: "workroom_nm", caption: "보관창고명" }
+            ];
+
+            createPopup("Item_StandardWareHouse", "보관창고 조회", @warehousePopupData, columns, "workroom_cd");
+
+            Item_StandardEditCheck(false);
+
+            $($("#Item_StandardUploadBtn1")).click(function (event) {
+                var fileUploader = $('#Item_StandardUpperImageUploader').dxFileUploader('instance');
+
+                _itemStandardImageSeq = 1;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#Item_StandardUploadBtn2")).click(function (event) {
+                var fileUploader = $('#Item_StandardMiddleImageUploader').dxFileUploader('instance');
+
+                _itemStandardImageSeq = 2;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#Item_StandardUploadBtn3")).click(function (event) {
+                var fileUploader = $('#Item_StandardLowerImageUploader').dxFileUploader('instance');
+
+                _itemStandardImageSeq = 3;
+                fileUploader._isCustomClickEvent = true;
+                fileUploader._$fileInput.click();
+            });
+
+            $($("#Item_StandardDeleteBtn1")).click(function (event) {
+                Item_StandardDeleteImage(1);
+            });
+
+            $($("#Item_StandardDeleteBtn2")).click(function (event) {
+                Item_StandardDeleteImage(2);
+            });
+
+            $($("#Item_StandardDeleteBtn3")).click(function (event) {
+                Item_StandardDeleteImage(3);
+            });
+
+        });
+
+        function itemStandardSearchWareHouse() {
+            $("#Item_StandardWareHousePopup").dxPopup("instance").show();
+        }
+
+        function Item_StandardWareHouseRowDblClick(selectedItems) {
+
+            $("#Item_StandardForm input[name=keeping_warehouse]").val(selectedItems.data.workroom_cd);
+            $("#Item_StandardForm input[name=workroom_nm]").val(selectedItems.data.workroom_nm);
+
+            $("#Item_StandardWareHousePopup").dxPopup("instance").hide();
+
+        }
+
+        // 수정중인지 체크
+        function Item_StandardEditCheck(nowEdit) {
+
+            //$("#Item_StandardForm input[name=item_cd]").prop("readonly", false);
+            $("#itemStandardDuplicateCheckBtn").prop("disabled", false);
+
+            if (nowEdit) {
+                $("#Item_StandardSave").dxButton().parent().parent().removeClass("display-none");
+                $("#Item_StandardUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#Item_StandardSearch").dxButton().parent().parent().addClass("display-none");
+                $("#Item_StandardInput").dxButton().parent().parent().addClass("display-none");
+                $("#Item_StandardEdit").dxButton().parent().parent().addClass("display-none");
+                $("#Item_StandardDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#Item_StandardForm :disabled").prop('disabled', false);
+
+                var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+                if (grid.totalCount()) {
+                    var data = getGridRowByKey('Item_StandardLicenseGrid', grid.option("focusedRowKey"));
+
+                    if (data.prod_end === "Y") {
+                        $('#Item_StandardForm select[name=break_type]').prop('disabled', true);
+                    } else {
+                        $('#Item_StandardForm select[name=break_type]').prop('disabled', false);
+                    }
+                }
+
+                $("#Item_StandardGrid").dxDataGrid("option", "disabled", true);
+                $("#Item_StandardLicenseGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+                $("#Item_StandardSave").dxButton().parent().parent().addClass("display-none");
+                $("#Item_StandardUndo").dxButton().parent().parent().addClass("display-none");
+                $("#Item_StandardSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#Item_StandardInput").dxButton().parent().parent().removeClass("display-none");
+                $("#Item_StandardEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#Item_StandardDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#Item_StandardForm :enabled").prop('disabled', true);
+                $("#Item_StandardGrid").dxDataGrid("option", "disabled", false);
+                $("#Item_StandardLicenseGrid").dxDataGrid("option", "disabled", false);
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 input[name=item_packunit]").removeClass("required");
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size2]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 select[name=item_lot_size_unit]").removeClass("required");
+
+                if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                    _itemStandardDuplicatedCheck = false;
+                }
+            }
+        }
+
+        // 개정번호 셀렉트박스 옵션 삽입
+        function setLicenseSelectBoxOption(data) {
+
+            $("#itemStandardLicenseNo").empty();
+
+            if (data.length > 0) {
+                for (var count = 0; count < data.length; count++) {
+                    var option = $("<option value='" + data[count].item_license_no + "'>" + data[count].item_license_no_nm + "</option>");
+                    $('#itemStandardLicenseNo').append(option);
+                }
+            }
+        }
+
+        // 제제 그리드 로우 클릭
+        function Item_StandardSelectItem() {
+
+            var grid = $("#Item_StandardGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('Item_StandardGrid', grid.option("focusedRowKey"));
+            if (UtilView.isEmpty(gridData)) return;
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/SelectItemDetail',
+                data: {
+                    item_cd: gridData.item_cd
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        if (result[0].length > 0) {
+                            $("#Item_StandardLicenseGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                            UtilView.setGridFocus("G", "Item_StandardLicenseGrid");
+                        } else {
+                            $("#Item_StandardLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+                            Item_StandardClearForm();
+                            return;
+                        }
+
+                        setLicenseSelectBoxOption(JSON.parse(result[1]));
+                        Item_StandardFillForm(JSON.parse(result[0])[0]);
+                        reLoadItemImage();
+                    }
+                }
+            })
+        }
+
+        function reLoadItemImage() {
+            selectItemImage($("#Item_StandardForm input[name=item_cd]").val());
+        }
+
+        function selectItemImage(item_cd) {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/SelectItemImage',
+                data: {
+                    item_cd: item_cd
+                },
+                success: function (result) {
+
+                    try {
+
+                        var jsonData = JSON.parse(result);
+
+                        _itemStandardImageCnt = jsonData.length;
+
+                        $("#Item_StandardUpperImage").attr('src', jsonData[0].upper_image);
+
+                        $("#Item_StandardMiddleImage").attr('src', jsonData[0].middle_image);
+
+                        $("#Item_StandardLowerImage").attr('src', jsonData[0].lower_image);
+
+                    } catch (e) {
+
+                        _itemStandardImageCnt = 0;
+
+                        $("#Item_StandardForm img").attr('src', '/Content/image/defaultSign.png');
+                    }
+                }
+            })
+        }
+
+        // 개정번호 그리드 로우 클릭
+        function Item_StandardSelectLicenseNo() {
+
+            var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = getGridRowByKey('Item_StandardLicenseGrid', grid.option("focusedRowKey"));
+                if (UtilView.isEmpty(data)) return;
+                Item_StandardFillForm(data);
+            }
+        }
+
+        function Item_StandardFillForm(data) {
+
+            Item_StandardClearForm();
+
+            if ($("#itemStandardLicenseNo").val() !== data.item_license_no ) {
+                $("#itemStandardLicenseNo").val(data.item_license_no);
+            }
+
+            if (data.item_license_current_ck === "Y") {
+                $("#Item_Standard input[name=use_yn]").prop("checked", true);
+            } else {
+                $("#Item_Standard input[name=use_yn]").prop("checked", false);
+            }
+
+            // === 개정상세정보 ===
+            $("#Item_StandardForm input[name=item_license_no]").val(data.item_license_no);
+            $("#Item_StandardForm input[name=item_license_start_date]").val(data.item_license_start_date);
+            $("#Item_StandardForm textarea[name=revision_remark]").text(data.revision_remark);
+
+            // === 허가정보 ===
+            $("#Item_StandardForm input[name=item_permission_no]").val(data.item_permission_no);
+            $("#Item_StandardForm input[name=item_permission_date]").val(data.item_permission_date);
+            $("#Item_StandardForm input[name=item_class]").val(data.item_class);
+            $("#Item_StandardForm input[name=item_write_date]").val(data.item_write_date);
+            $("#Item_StandardForm input[name=item_proc_no]").val(data.item_proc_no);
+            $("#Item_StandardForm input[name=item_permission_type]").val(data.item_permission_type);
+
+
+            // === 기본정보 ===
+            $("#Item_StandardForm input[name=item_cd]").val(data.item_cd);
+            $("#Item_StandardForm select[name=item_gb]").val(data.item_gb);
+            $("#Item_StandardForm input[name=item_nm]").val(data.item_nm);
+            $("#Item_StandardForm input[name=abbreviation_cd]").val(data.abbreviation_cd);
+            $("#Item_StandardForm input[name=item_s_nm]").val(data.item_s_nm);
+
+            if (data.prod_end == "Y") {
+                $('#Item_StandardForm input[name="prod_end"]').prop("checked", true);
+            } else {
+                $('#Item_StandardForm input[name="prod_end"]').prop("checked", false);
+            }
+
+            $("#Item_StandardForm select[name=break_type]").val(data.break_type);
+
+            // === 주요정보 ===
+            $("#Item_StandardForm input[name=item_surface]").val(data.item_surface);
+            $("#Item_StandardForm input[name=item_content]").val(data.item_content);
+            $("#Item_StandardForm select[name=item_content_unit]").val(data.item_content_unit);
+            $("#Item_StandardForm input[name=item_packunit]").val(data.item_packunit);
+            $("#Item_StandardForm input[name=item_input_content]").val(data.item_input_content);
+            $("#Item_StandardForm input[name=item_content_unit]").val(data.item_content_unit);
+            $("#Item_StandardForm input[name=item_content2]").val(data.item_content2);
+            $("#Item_StandardForm input[name=item_content3]").val(data.item_content3);
+            $("#Item_StandardForm input[name=item_exchangerate]").val(data.item_exchangerate);
+            $("#Item_StandardForm select[name=item_unit]").val(data.item_unit);
+            $("#Item_StandardForm input[name=item_validity_period]").val(data.item_validity_period);
+            $("#Item_StandardForm select[name=item_validity_period_unit]").val(data.item_validity_period_unit);
+            $("#Item_StandardForm select[name=item_keep_condition]").val(data.item_keep_condition);
+            $("#Item_StandardForm select[name=item_keep_temperature]").val(data.item_keep_temperature);
+            $("#Item_StandardForm input[name=item_keeping_term]").val(data.kepping_term);
+            $("#Item_StandardForm select[name=item_keeping_unit]").val(data.kepping_term_unit);
+            $("#Item_StandardForm input[name=keeping_warehouse]").val(data.keeping_warehouse);
+            $("#Item_StandardForm input[name=workroom_nm]").val(data.workroom_nm);
+
+            // === 분류정보 ===
+            $("#Item_StandardForm select[name=item_form_cd]").val(data.item_form_cd);
+            $("#Item_StandardForm select[name=item_packunit]").val(data.item_packunit);
+            $("#Item_StandardForm select[name=item_type1]").val(data.item_type1);
+            if (data.in_out_ck != "") {
+                $('#Item_StandardForm input[name="in_out_ck"][value=' + data.in_out_ck + ']').prop("checked", true);
+            }
+            $("#Item_StandardForm select[name=plant_cd]").val(data.plant_cd);
+            if (data.outer_process != "") {
+                $('#Item_StandardForm input[name="outer_process"][value=' + data.outer_process + ']').prop("checked", true);
+            }
+            if (data.concentrate_yn != "") {
+                $('#Item_StandardForm input[name="concentrate_yn"][value=' + data.concentrate_yn + ']').prop("checked", true);
+            }
+            $("#Item_StandardForm select[name=item_type3]").val(data.item_type3);
+            $("#Item_StandardForm select[name=certification_type]").val(data.certification_type);
+
+            // === 배치단위 정보 ===
+            if (data.lot_size_display_type != "") {
+                $('#Item_StandardForm input[name="lot_size_display_type"][value=' + data.lot_size_display_type + ']').prop("checked", true);
+            }
+            $("#Item_StandardForm input[name=item_lot_size]").val(data.item_lot_size);
+            $("#Item_StandardForm input[name=item_lot_size2]").val(data.item_lot_size2);
+            $("#Item_StandardForm select[name=item_lot_size_unit]").val(data.item_lot_size_unit);
+        }
+
+        // 우측 폼 비움
+        function Item_StandardClearForm() {
+            $("#Item_StandardForm")[0].reset();
+            $("#Item_StandardForm textarea").text("");
+        }
+
+        // 조회
+        function Item_StandardSearch() {
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/Item_StandardSelectItem',
+                data: {
+                    prod_end: $("#Item_StandardSearchForm select[name=prod_end]").val(),
+                    item_gb: $("#Item_StandardSearchForm select[name=item_gb]").val()
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#Item_StandardGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#Item_StandardGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "Item_StandardGrid");
+        }
+
+        // 입력
+        function Item_StandardInput() {
+
+            Item_StandardEditCheck(true);
+            _itemStandardCRUDGubun = "I";
+            Item_StandardClearForm();
+            $("#Item_StandardLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+            //$("#Item_StandardLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+            $("#itemStandardLicenseNo option").remove();
+            $('#Item_Standard input[name="use_yn"]').prop("checked", false);
+            $("#Item_StandardForm select[name=plant_cd]").val("PC001");
+            $('#Item_StandardForm select[name="item_gb"]').val("6");
+
+            $("#Item_StandardForm input:radio[name='in_out_ck']:radio[value='Y']").prop('checked', true);
+            $("#Item_StandardForm input:radio[name='outer_process']:radio[value='1']").prop('checked', true);
+            $("#Item_StandardForm input:radio[name='concentrate_yn']:radio[value='N']").prop('checked', true);
+
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $("#PackMeterialMasterForm input[name=item_cd]").attr("readonly", false);
+            }
+        }
+
+        // 수정
+        function Item_StandardEdit() {
+
+            var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = JSON.parse(JSON.stringify(grid.option("dataSource")));
+
+                data.splice(grid.option("focusedRowIndex"), 1);
+
+                for (var i = 0; i < data.length; i++) {
+                    if (data[i].prod_end === "Y") {
+                        _itemStandardIsOtherLicenseUsing = true;
+                    }
+                }
+
+                Item_Standard2Required($("#Item_Standard2MenuDiv_3 input[name=lot_size_display_type]:checked").val());
+
+                Item_StandardEditCheck(true);
+                _itemStandardCRUDGubun = "U";
+                $("#Item_StandardForm input[name=item_cd]").prop("readonly", true);
+                $("#itemStandardDuplicateCheckBtn").prop("disabled", true);
+            }
+        }
+
+        // 삭제
+        function Item_StandardDelete() {
+
+            var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = getGridRowByKey('Item_StandardLicenseGrid', grid.option("focusedRowKey"));
+                var ds = grid.option("dataSource");
+
+                if (ds.length <= 0) {
+                    return;
+                }
+
+                var deleteMsg = "";
+
+                if (ds.length === 1) {
+
+                    deleteMsg = data.item_license_no + "번의 개정정보와 상품정보가 모두 삭제됩니다. \n 삭제하시겠습니까?";
+                    _itemStandardCRUDGubun = "D";
+
+                } else {
+                    deleteMsg = "개정번호 '" + data.item_license_no + "' 을(를) 삭제하시겠습니까?";
+                    _itemStandardCRUDGubun = "DR";
+                }
+
+                var isOK = confirm(deleteMsg);
+
+                if (!isOK) {
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysItem/Item_StandardCRUD',
+                    data: {
+                        gubun: _itemStandardCRUDGubun,
+                        item_cd: data.item_cd,
+                        item_gb: data.item_gb,
+                        item_license_no: data.item_license_no
+                    },
+                    async: false,
+                    success: function (result) {
+                        if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                            $("#Item_StandardForm text[name=checkResText]").text("");
+                        }
+                        Item_StandardSearch();
+                        _itemStandardIsOtherLicenseUsing = false;
+                    }
+                });
+            }
+
+        }
+
+        // 저장
+        function Item_StandardSave() {
+
+            if (!UtilView.checkValidForm("Item_StandardForm")) {
+                return;
+            }
+
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                if (!_itemStandardDuplicatedCheck && _itemStandardCRUDGubun === "I") {
+                    alert("제조제품 코드 중복확인을 진행해주십시오.");
+                    return;
+                }
+            }
+
+            //이게뭐임-_-?
+            //if ($('#Item_StandardForm select[name="item_gb"]').val() ==
+            //    $('#Item_StandardForm input[name="item_cd"]').val("6"))
+            var formData = new FormData($("#Item_StandardForm")[0]);
+            formData.append("gubun", _itemStandardCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/Item_StandardCRUD',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    //if (result <= 0) {
+                    //    $("#Item_StandardLicenseGrid").dxDataGrid("instance").option("dataSource", []);
+                    //    $("#Item_StandardLicenseGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+                    //    $("#Item_StandardForm")[0].reset();
+                    //    return;
+                    //}
+
+                    Item_StandardEditCheck(false);
+                    if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                        _itemStandardDuplicatedCheck = false;
+                        $("#Item_StandardForm text[name=checkResText]").text("");
+                    }
+
+                    Item_StandardSearch();
+                    _itemStandardIsOtherLicenseUsing = false;
+                }
+            });
+        }
+
+        // 취소
+        function Item_StandardUndo() {
+            Item_StandardEditCheck(false);
+            Item_StandardSelectItem();
+            _itemStandardIsOtherLicenseUsing = false;
+            if ('@Public_Function.MasterData_AutoNumbering_yn' == "N") {
+                $("#Item_StandardForm text[name=checkResText]").text("");
+            }
+
+        }
+
+        // 제제코드 중복 확인
+        function itemStandardItemCdDuplicateCheck() {
+
+            if (_itemStandardCRUDGubun === "IR") {
+                return;
+            }
+
+            if ($('#Item_StandardForm input[name=item_cd]').val() == "" || $('#Item_StandardForm input[name=item_cd]').val() == null) {
+
+                _itemStandardDuplicatedCheck = false;
+
+                $("#Item_StandardForm text[name=checkResText]").text("빈 문자열 입니다.");
+                $("#Item_StandardForm text[name=checkResText]").css("color", "red");
+
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/Item_StandardDuplicateCheck',
+                data: {
+                    item_cd: $('#Item_StandardForm input[name=item_cd]').val()
+                },
+                success: function (result) {
+
+                    console.log(result);
+
+                    $("#Item_StandardForm text[name=checkResText]").text(result[1]);
+
+                    if (result[0] == "0") {
+                        _itemStandardDuplicatedCheck = false;
+                        $("#Item_StandardForm text[name=checkResText]").css("color", "red");
+                    }
+                    else if (result[0] == "1") {
+                        _itemStandardDuplicatedCheck = true;
+                        $("#Item_StandardForm text[name=checkResText]").css("color", "green");
+                    }
+                }
+            })
+        };
+
+        // 제제 코드 수정했을시
+        function rewriteItem_StandardItemCd() {
+            _itemStandardDuplicatedCheck = false;
+            $("#Item_StandardForm text[name=checkResText]").text("");
+        }
+
+        // 사용여부 체크에 따른 중지사유 셀렉트 박스 제어
+        function itemStandardProdEndCk() {
+
+            if (_itemStandardIsOtherLicenseUsing) {
+                alert("이미 사용중인 개정번호가 있습니다.");
+                $('#Item_StandardForm input[name="prod_end"]').prop("checked", false);
+                return;
+            }
+
+            if ($('#Item_StandardForm input[name=prod_end]').is(":checked") == true) {
+
+                $('#Item_StandardForm select[name=break_type]').val("1");
+                $('#Item_StandardForm select[name=break_type]').prop('disabled', true);
+            } else {
+                $('#Item_StandardForm select[name=break_type]').prop('disabled', false);
+            }
+        }
+
+        function itemStandardUseCk() {
+
+            if (!confirm("해당 개정을 사용 하시겠습니까?")) {
+                return;
+            }
+
+            var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = JSON.parse(JSON.stringify(grid.option("dataSource")));
+
+                data.splice(grid.option("focusedRowIndex"), 1);
+
+                for (var i = 0; i < data.length; i++) {
+                    if (data[i].prod_end === "Y") {
+                        alert("이미 사용중인 개정번호가 있습니다.");
+                        return;
+                    }
+                }
+
+                Item_StandardEditCheck(true);
+
+                _itemStandardCRUDGubun = "U";
+                $('#Item_StandardForm input[name="prod_end"]').prop("checked", true);
+
+                Item_StandardSave();
+            }
+        }
+
+        function itemStandardUseUnck() {
+            Item_StandardEditCheck(true);
+
+            _itemStandardCRUDGubun = "U";
+            $('#Item_StandardForm input[name="prod_end"]').prop("checked", false);
+
+            Item_StandardSave();
+        }
+
+        function itemContentUnitSelectChange() {
+            $("#Item_StandardForm input[name=item_content_unit]").val($("#Item_StandardForm select[name=item_content_unit]").val());
+        }
+
+        function itemPackUnitSelectChange() {
+            $("#Item_StandardForm input[name=item_packunit]").val($("#Item_StandardForm select[name=item_packunit]").val());
+        }
+
+        function itemStandardInputNewLicense() {
+
+            var grid = $("#Item_StandardGrid").dxDataGrid("instance");
+            var data = getGridRowByKey('Item_StandardGrid', grid.option("focusedRowKey"));
+
+            var isOK = confirm("제조제품 '" + data.item_nm + "' 의 신규개정을 생성하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/Item_StandardGetLicenseNo',
+                data: {
+                    item_cd: data.item_cd
+                },
+                success: function (result) {
+                    if (UtilView.isEmpty(result)) return;
+
+                    var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+                    if (grid.totalCount()) {
+                        var data = grid.option("dataSource");
+
+                        for (var i = 0; i < data.length; i++) {
+                            if (data[i].prod_end === "Y") {
+                                _itemStandardIsOtherLicenseUsing = true;
+                            }
+                        }
+
+                        var today = new Date();
+
+                        var year = today.getFullYear();
+                        var month = ((today.getMonth() + 1) < 10 ? "0" + (today.getMonth() + 1) : (today.getMonth() + 1));
+                        var date = (today.getDate() < 10 ? "0" + today.getDate() : today.getDate());
+
+                        $("#Item_StandardForm input[name=item_license_no]").val(result);
+                        $("#Item_StandardForm input[name=item_license_start_date]").val(year + '-' + month + '-' + date);
+                        Item_StandardEditCheck(true);
+                        _itemStandardCRUDGubun = "IR";
+                        $("#Item_StandardForm input[name=item_cd]").prop("readonly", true);
+                        $('#Item_StandardForm input[name="prod_end"]').prop("checked", false);
+                        $("#Item_StandardForm input[name=item_cd]").prop("readonly", true);
+                    }
+
+                }
+            })
+
+        }
+
+        // 제제 사진 업로드
+        function Item_StandardUploadImage(e) {
+
+            if (_itemStandardCRUDGubun === "I") {
+                alert("입력을 완료한 후에 이용해주세요.");
+                return;
+            }
+
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "item_cd", $("#Item_StandardForm input[name=item_cd]").val());
+            url = updateQueryStringParameter(url, "gubun", _itemStandardImageSeq);
+            url = updateQueryStringParameter(url, "imageCnt", _itemStandardImageCnt);
+            //url = updateQueryStringParameter(url, "fGubun", _itemStandardImageSeq);
+
+            e.component.option("uploadUrl", url);
+        }
+
+        // 제제 사진 삭제
+        function Item_StandardDeleteImage(num) {
+
+            var isOK = confirm("제제 이미지를 삭제하시겠습니까?");
+
+            if (!isOK) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysItem/DeleteItemImage',
+                data: {
+                    item_cd: $("#Item_StandardForm input[name=item_cd]").val(),
+                    fGubun: num
+                },
+                success: function (result) {
+                    Item_StandardSelectItem();
+                }
+            })
+        }
+
+        function Item_StandardSelectRevision(e) {
+            var grid = $("#Item_StandardLicenseGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                $("#Item_StandardLicenseGrid").dxDataGrid("option", "focusedRowKey", $("#itemStandardLicenseNo").val());
+            }
+        }
+
+        function Item_StandardExcel() {
+            gridExportToExcel("Item_StandardGrid", "ItemStandardData");
+        }
+
+        function Item_Standard2Required(gubun) {
+
+            if (gubun === 'Y') {
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size]").addClass("required");
+                $("#Item_Standard2MenuDiv_3 input[name=item_packunit]").addClass("required");
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size2]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 select[name=item_lot_size_unit]").removeClass("required");
+
+            } else if (gubun === 'N') {
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 input[name=item_packunit]").removeClass("required");
+
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size2]").addClass("required");
+                $("#Item_Standard2MenuDiv_3 select[name=item_lot_size_unit]").addClass("required");
+
+            } else {
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 input[name=item_packunit]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 input[name=item_lot_size2]").removeClass("required");
+                $("#Item_Standard2MenuDiv_3 select[name=item_lot_size_unit]").removeClass("required");
+            }
+        }
+
+    </script>
+
+<div id="Item_Standard">
+
+    <div id="Item_StandardWareHousePopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="Item_StandardSearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용구분</span>
+                        </div>
+                        <select class="form-control" name="prod_end" onchange="Item_StandardSearch()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.usedGubuns).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control col-8" name="item_gb" onchange="Item_StandardSearch()">
+                            <option value="5,6">전체</option>
+                            <option value="5">반제품</option>
+                            <option value="6">제조제품</option>
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("Item_StandardGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(869)
+                    .HoverStateEnabled(true)
+                    .KeyExpr("item_cd")
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface").Width(75);
+                        c.Add().DataField("item_cd").Caption("제조제품코드").Width(100);
+                        c.Add().DataField("item_nm").Caption("제조제품명");
+
+                    })
+                    .FocusedRowEnabled(true)
+                    .OnFocusedRowChanged("Item_StandardSelectItem")
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-8 pl-0">
+
+            <div class="input-wrapper">
+
+                <label class="col-1">개정번호</label>
+                <div class="input-group col-2">
+                    <select class="form-control col-12" name="license_no" id="itemStandardLicenseNo" onchange="Item_StandardSelectRevision()">
+                    </select>
+                </div>
+                <label class="col-2">사용여부</label>
+                <div class="input-group col-2">
+                    <input type="checkbox" class="form-control col-12" name="use_yn" value="Y">
+                </div>
+
+                <div class="license-CRUD-Btn">
+                    <button class="btn btn-secondary" onclick="itemStandardInputNewLicense()">신규개정 생성</button>
+                    <button class="btn btn-secondary" onclick="itemStandardUseCk()">사용 확인</button>
+                    <button class="btn btn-secondary" onclick="itemStandardUseUnck()">해제</button>
+                </div>
+
+            </div>
+
+            <form id="Item_StandardForm">
+
+                <div class="box-height-auto pl-0 mb-1">
+
+                    <div class="divName">
+                        <p>개정내역</p>
+                        <span class="text-danger display-none col-8"></span>
+                    </div>
+
+                    <div class="row ml-0">
+
+                        <div class="col-6 pl-0 pr-0">
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("Item_StandardLicenseGrid")
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                                .Height(240)
+                                .HoverStateEnabled(true)
+                                .KeyExpr("item_license_no")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_license_no").Caption("개정번호").Width(100);
+                                    c.Add().DataField("item_license_start_date").Caption("발효일자").Width(100);
+                                    c.Add().DataField("prod_end").Caption("사용여부").DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return rowData.prod_end == ""Y""; }");
+                                    c.Add().DataField("item_safety_day").Caption("안전재고일");
+                                    c.Add().DataField("concentrate_yn").Caption("농축액추출").DataType(GridColumnDataType.Boolean)
+                                        .CalculateCellValue(@"function(rowData) { return rowData.concentrate_yn == ""Y""; }");
+
+                                })
+                                .FocusedRowEnabled(true)
+                                .OnFocusedRowChanged("Item_StandardSelectLicenseNo")
+                            )
+                        </div>
+
+                        <div class="col-6 pl-0">
+
+                            <ul class="nav nav-tabs" id="Item_Standard1MenuDiv">
+                                <li class="nav-item">
+                                    <a class="nav-link active" onclick="menutab('Item_Standard1MenuDiv', 'Item_Standard1MenuDiv', 1)">개정상세정보</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" onclick="menutab('Item_Standard1MenuDiv', 'Item_Standard1MenuDiv', 2)">허가정보</a>
+                                </li>
+                            </ul>
+
+                            <div id="Item_Standard1MenuDiv">
+
+                                <div class="menuDiv" id="Item_Standard1MenuDiv_1">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">개정번호 <star>*<star></label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12 required" name="item_license_no">
+                                        </div>
+                                        <label class="col-2">발효일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_license_start_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">개정사유 <star>*<star></label>
+                                        <div class="input-group col-9">
+                                            <textarea rows="4" class="col-12 form-control required" name="revision_remark" />
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div class="menuDiv display-none" id="Item_Standard1MenuDiv_2">
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">허가번호</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12" name="item_permission_no">
+                                        </div>
+                                        <label class="col-2">허가일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_permission_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-2">분류코드</label>
+                                        <div class="input-group col-3">
+                                            <input type="text" class="form-control col-12" name="item_class">
+                                        </div>
+                                        <label class="col-2">작성일자</label>
+                                        <div class="input-group col-4">
+                                            <input type="text" class="form-control col-12 datepicker" name="item_peritem_write_datemission_date">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제조제품표준서번호</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control col-12" name="item_proc_no">
+                                        </div>
+                                    </div>
+
+                                    <div class="input-wrapper">
+                                        <label class="col-3">제품 유형</label>
+                                        <div class="input-group col-8">
+                                            <input type="text" class="form-control col-12" name="item_permission_type">
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="box-height-auto pl-0 mb-1">
+
+                    <div class="divName">
+                        <p>기본정보</p>
+                        <span class="text-danger display-none col-8"></span>
+                    </div>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+
+                            @if (Public_Function.MasterData_AutoNumbering_yn == "N")
+                            {
+                                <label class="col-2">제품코드 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12 required" name="item_cd" onchange="rewriteItem_StandardItemCd()">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="itemStandardDuplicateCheckBtn" onclick="itemStandardItemCdDuplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="input-group col-5">
+                                    <text name="checkResText"></text>
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="col-2">제품코드</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-12" name="item_cd" readonly="readonly" @*onchange="rewriteItem_StandardItemCd()"*@>
+                                    @*<div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="itemStandardDuplicateCheckBtn" onclick="itemStandardItemCdDuplicateCheck()">
+                                            중복확인
+                                        </button>
+                                    </div>*@
+                                </div>
+                                @*<div class="col-5">
+                                    <text name="checkResText"></text>
+                                </div>*@
+                            }
+
+                            <label class="col-2">제품구분</label>
+                            <div class="input-group col-3">
+                                <select class="form-control col-12" name="item_gb" id="item_gb">
+                                    <option value="5">반제품</option>
+                                    <option value="6">제조제품</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">제품명 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12 required" name="item_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">약식코드</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="abbreviation_cd">
+                            </div>
+                            <label class="col-2">약식품명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="item_s_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사용여부</label>
+                            <div class="input-group col-3">
+                                <input type="checkbox" name="prod_end" onclick="itemStandardProdEndCk()" value="Y" />
+                            </div>
+                            <label class="col-2">사용중지사유</label>
+                            <div class="input-group col-3">
+                                <select class="col-12 form-control" name="break_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.retiredReason).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="box-height-auto pl-0 mb-0" style="height:365px;">
+
+                    <ul class="nav nav-tabs" id="Item_Standard2MenuDiv">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('Item_Standard2MenuDiv', 'Item_Standard2MenuDiv', 1)">주요정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Item_Standard2MenuDiv', 'Item_Standard2MenuDiv', 2)">분류정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Item_Standard2MenuDiv', 'Item_Standard2MenuDiv', 3)">배치단위 정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('Item_Standard2MenuDiv', 'Item_Standard2MenuDiv', 4)">제제 이미지</a>
+                        </li>
+                    </ul>
+
+                    <div class="menuDiv" id="Item_Standard2MenuDiv">
+
+                        <div id="Item_Standard2MenuDiv_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">성상</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="item_surface">
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">단위중량 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control required" name="item_content" />
+                                    <select class="form-control col-3 required" name="item_content_unit" onchange="itemContentUnitSelectChange()">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                    /
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                                <label class="col-2">실충전량</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-3 form-control" name="item_input_content" />
+                                    <input type="text" class="col-3 form-control" name="item_content_unit" readonly="readonly" />
+                                    /
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">피막단위량1</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_content2" />
+                                </div>
+                                <label class="col-2">피막단위량2</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-3 form-control" name="item_content3" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">함량</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_exchangerate" />
+                                    <input type="text" class="col-3 form-control" name="item_content_unit" readonly="readonly" />
+                                    /
+                                    <input type="text" class="col-3 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                                <label class="col-2">반제품 관리단위 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-3 required" name="item_unit">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">유효기간 <star>*</star></label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control required" name="item_validity_period" />
+                                    <select class="form-control col-3 required" name="item_validity_period_unit">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">보관조건/온도 <star>*</star></label>
+                                <div class="input-group col-3">
+                                    <select class="form-control col-6 required" name="item_keep_condition">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageConditions).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                    <select class="form-control col-6 required" name="item_keep_temperature">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.storageTemperatures).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">보관기간</label>
+                                <div class="input-group col-4">
+                                    <input type="number" class="col-3 form-control" name="item_keeping_term" />
+                                    <select class="form-control col-3" name="item_keeping_unit">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.periodGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <label class="col-2">보관창고</label>
+                                <div class="input-group col-3">
+                                    <input type="text" class="form-control col-6" name="keeping_warehouse" readonly="readonly" />
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="itemStandardSearchWareHouse()">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" name="workroom_nm" class="form-control col-6" readonly="readonly" />
+                                </div>
+                            </div>
+
+                        </div>
+
+                        @*분류정보*@
+                    <div id="Item_Standard2MenuDiv_2" class="display-none">
+
+                        <div class="input-wrapper">
+                            <label class="col-2">제형</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="item_form_cd">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.fomulation).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">제제단위 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <select class="col-12 form-control required" name="item_packunit" onchange="itemPackUnitSelectChange()">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">생산동</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="item_type1">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.productionBuildingGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">국내외구분</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv">
+                                    <input type="radio" name="in_out_ck" value="Y" /> 국내
+                                    <input type="radio" name="in_out_ck" value="N" /> 국외
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">사업장 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control required" name="plant_cd">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.workplaceGubuns).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">외주구분 <star>*</star></label>
+                            <div class="input-group col-3 required">
+                                <div class="radioDiv">
+                                    <input type="radio" name="outer_process" value="1" /> N/A
+                                    <input type="radio" name="outer_process" value="2" /> 수탁
+                                    <input type="radio" name="outer_process" value="3" /> 위탁
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">제품유형 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control required" name="item_type3">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.productType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                            <label class="col-2">농축액구분 <star>*</star></label>
+                            <div class="input-group col-3 required">
+                                <div class="radioDiv">
+                                    <input type="radio" name="concentrate_yn" value="Y" /> Y
+                                    <input type="radio" name="concentrate_yn" value="N" /> N
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">인증유형</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="certification_type">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.certificationType).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                        <div id="Item_Standard2MenuDiv_3" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-3">배치단위 표시형식</label>
+                                <div class="input-group col-3">
+                                    <div class="radioDiv required">
+                                        <input type="radio" name="lot_size_display_type" value="Y" onclick="Item_Standard2Required('Y')"/> 수량단위
+                                        <input type="radio" name="lot_size_display_type" value="N" onclick="Item_Standard2Required('N')"/> 중량단위
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">대표배치단위(수량)</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-8 form-control" name="item_lot_size" />
+                                    <input type="text" class="col-4 form-control" name="item_packunit" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">대표배치단위(중량)</label>
+                                <div class="input-group col-3">
+                                    <input type="number" class="col-8 form-control" name="item_lot_size2" />
+                                    <select class="col-4 form-control" name="item_lot_size_unit">
+                                        @foreach (DataRow row in ((DataTable)ViewBag.unitGubuns).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div id="Item_Standard2MenuDiv_4" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(상)</label>
+                                <div class="input-group col-6">
+                                    <img id="Item_StandardUpperImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Item_StandardUploadBtn1" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Item_StandardDeleteBtn1" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Item_StandardUpperImageUploader")
+                                .Name("upper_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Item_StandardUploadImage")
+                            .OnUploaded("Item_StandardSearch")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(중)</label>
+                                <div class="input-group col-6">
+                                    <img id="Item_StandardMiddleImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Item_StandardUploadBtn2" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Item_StandardDeleteBtn2" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Item_StandardMiddleImageUploader")
+                                .Name("middle_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Item_StandardUploadImage")
+                            .OnUploaded("Item_StandardSearch")
+                            )
+
+                            <div class="input-wrapper">
+                                <label class="col-2">제제모양(하)</label>
+                                <div class="input-group col-6">
+                                    <img id="Item_StandardLowerImage" class="material-image" src="" alt="" />
+                                </div>
+                                <div class="input-group col-2">
+                                    <button id="Item_StandardUploadBtn3" class="btn btn-sm btn-secondary pr-1" type="button">등록</button>
+                                    <button id="Item_StandardDeleteBtn3" class="btn btn-sm btn-secondary pl-1" type="button">삭제</button>
+                                </div>
+                            </div>
+
+                            @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("Item_StandardLowerImageUploader")
+                                .Name("lower_image")
+                                .Multiple(false)
+                                .Accept("image/*")
+                                .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png", ".bmp" })
+                                .UploadUrl(Url.Action("UploadMaterialImage", "SysItem"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(10000000)
+                                .OnValueChanged("Item_StandardUploadImage")
+                            .OnUploaded("Item_StandardSearch")
+                            )
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>

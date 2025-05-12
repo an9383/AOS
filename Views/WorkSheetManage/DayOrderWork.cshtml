@@ -1,0 +1,1817 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.WorkSheetManage.DayOrderWork.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var DayOrderWorkList = Html.Raw(Json.Encode(ViewBag.DayOrderWorkList.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeStatus = (DataTable)ViewBag.orderStatus;       //  검색용_공정상태
+    var selectedDB = Public_Function.selectedDB;
+}
+
+@{
+    string[] DayWorkGridKey = { "order_proc_id", "packing_order_no"};
+
+}
+
+@*일자별 작업현황*@
+
+<script id="@(pagePrefix)Js">
+
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var ReportGubun = "";
+    var DayOrderWorkFocusedRow = null;
+    var DayOrderWorkFocusedDetailRow = null;
+    var selectedDBName = "@(selectedDB)";
+
+    var DayOrderWorkGrid_datasource = @DayOrderWorkList;
+
+    //그룹코드 배열
+    var DayOrderWork_GroupingArr = new Array();
+
+    //작업방법 db저장
+    var DayOrderWork_tempArray = new Array();
+    var DayOrderWork_editChek = false;
+
+    //var dtRegex = /([0-2][0-9]{3})-([0-1][0-9])-([0-3][0-9]) ([0-5][0-9]):([0-5][0-9]):([0-5][0-9])(([\-\+]([0-1][0-9])\:00))?/;
+
+    $(function () {
+
+        if (@DayOrderWorkList) {
+            $("#DayOrderWorkGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@DayOrderWorkList));
+            $("#DayOrderWorkGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#DayOrderWorkGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        setDatePicker("#DayOrderWork .datepicker");
+
+        //작업방법 작업시간 수정기능 활성화
+        $("#DayOrderWork_DetailGridDiv").dblclick(function () {
+
+            DayOrderWorkEditCheck();
+
+        });
+    });
+
+    //조회
+    function DayOrderWorkSearch() {
+        var data = new FormData($("#DayOrderWorkSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/WorkSheetManage/DayOrderWorkSelect',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var JsonData = JSON.parse(result);
+
+                    if (JsonData.length > 0) {
+                        DayOrderWorkGrid_datasource = result;
+                        $("#DayOrderWorkGrid").dxDataGrid("option", "dataSource", JsonData);
+                        $("#DayOrderWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#DayOrderWorkGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                    } else {
+                        $("#DayOrderWorkGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#DayOrderWorkDetailGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                    }
+                } else {
+                    $("#DayOrderWorkGrid").dxDataGrid("option", "dataSource", []);
+                    $("#DayOrderWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                    $("#DayOrderWorkDetailGrid").dxDataGrid("option", "dataSource", []);
+                    $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                }
+
+            }
+        })
+
+    }
+
+    function DayOrderWorkPrint() {
+        //var btnType;
+        ReportGubun = $(event.target).closest('.dx-button').attr('id');
+
+        //아이센스용
+        var plant_nm = sessionStorage.getItem('plantNM');
+        console.log(plant_nm + " / " + selectedDBName);
+        if (selectedDBName == "RTEGMS_ISENS2") {
+            var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#DayOrderWorkPopupTemplate_ISENS"));
+            popup.show();
+            return;
+        }
+
+        //그룹코드 있을때, 리포트 미리보기 선택값으로 설정
+        if (DayOrderWorkFocusedRow.data.grouping_cd != "" && DayOrderWorkFocusedRow.data.grouping_cd != null) {
+            DayOrderWork_GroupingArr = (DayOrderWorkFocusedRow.data.grouping_cd).split(",");
+        }
+
+        //리포트 호출구분 팝업
+        //var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        //popup.option("contentTemplate", $("#DayOrderWorkPopupTemplate"));
+
+        $("#DayOrderWorkPopup").dxPopup({
+            title: "미리보기 선택",
+            visible: true,
+            contentTemplate: SetReportPopupTemplate()
+        });
+
+        //popup.show();
+    }
+
+    function DayOrderWorkPreview() {
+        //var btnType;
+        ReportGubun = $(event.target).closest('.dx-button').attr('id');
+
+        //아이센스용
+        var plant_nm = sessionStorage.getItem('plantNM');
+        console.log(plant_nm + " / " + selectedDBName);
+        if (selectedDBName == "RTEGMS_ISENS2") {
+            var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#DayOrderWorkPopupTemplate_ISENS"));
+            popup.show();
+            return;
+        }
+
+        //그룹코드 있을때, 리포트 미리보기 선택값으로 설정
+        if (DayOrderWorkFocusedRow.data.grouping_cd != "" && DayOrderWorkFocusedRow.data.grouping_cd != null) {
+            DayOrderWork_GroupingArr = (DayOrderWorkFocusedRow.data.grouping_cd).split(",");
+        }
+
+        //리포트 호출구분 팝업
+        //var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        //popup.option("contentTemplate", $("#DayOrderWorkPopupTemplate"));
+
+        $("#DayOrderWorkPopup").dxPopup({
+            title: "미리보기 선택",
+            visible: true,
+            contentTemplate: SetReportPopupTemplate()
+        })
+        //popup.show();
+    }
+
+    function DayOrderWorkExcel() {
+        gridExportToExcel("DayOrderWorkGrid", "DayOrderWorkData");
+    }
+
+    //세부공정 정보 조회
+    function DayOrderWorkFocusChanged(e) {
+
+        if (e.row && e.row.data) {
+            DayOrderWorkFocusedRow = e.row;
+
+            $.ajax({
+                type: 'POST',
+                url: '/WorkSheetManage/DayOrderWorkSelectDetail',
+                data: {
+                    order_no: e.row.data.order_no,
+                    order_proc_id: e.row.data.order_proc_id,
+                    process_cd: e.row.data.process_cd,
+                    packing_order_no: e.row.data.packing_order_no
+                    //order_detailproc_id: e.row.data.order_detailproc_id
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    if (result.length > 0) {
+
+                        var JsonData = JSON.parse(result);
+
+                        if (JsonData.length > 0) {
+                            $("#DayOrderWorkDetailGrid").dxDataGrid("option", "dataSource", JsonData);
+                            $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                            $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                        } else {
+                            $("#DayOrderWorkDetailGrid").dxDataGrid("option", "dataSource", []);
+                            $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        }
+                    } else {
+                        $("#DayOrderWorkDetailGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkDetailGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                    }
+
+                }
+            })
+        } else {
+            DayOrderWorkFocusedRow = null;
+        }
+
+    }
+
+    //작업방법 정보 조회
+    function DayOrderWorkDetailFocusChanged(e) {
+
+        if (e.row && e.row.data) {
+            DayOrderWorkFocusedDetailRow = e.row;
+
+            $.ajax({
+                type: 'POST',
+                url: '/WorkSheetManage/DayOrderWorkSelectDetailWork',
+                data: {
+                    order_no: DayOrderWorkFocusedDetailRow.data.order_no,
+                    order_proc_id: DayOrderWorkFocusedDetailRow.data.order_proc_id,
+                    order_detailproc_id: DayOrderWorkFocusedDetailRow.data.order_detailproc_id
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    if (result.length > 0) {
+
+                        var JsonData = JSON.parse(result);
+
+                        if (JsonData.length > 0) {
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", JsonData);
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                        } else {
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                            $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                        }
+                    } else {
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                    }
+
+                }
+            })
+        } else {
+            DayOrderWorkFocusedDetailRow = null
+        }
+    }
+
+    function DayOrderWorkPopupClear() {
+
+        DayOrderWork_GroupingArr = new Array();
+
+        $("#DayOrderWorkPopup").dxPopup({
+            contentTemplate: null
+        })
+
+        $("#DayOrderWorkPopupForm input[name='opt'][value='%']").prop("checked", true);
+    }
+
+    //2021.04.20 박가희
+    //통합 또는 그룹코드 선택하여 리포트 보기
+    function DayOrderWorkViewReport() {
+
+        if (DayOrderWorkFocusedRow == null) {
+            alert("선택된 값이 없습니다"); return;
+        }
+
+        //통합리포트인지, 그룹리포트인지 선택
+        var option = $("#DayOrderWorkPopupForm input[name='opt']:checked").val();
+        DayOrderWorkTotalReport(option);
+
+        setTimeout(function () {
+            var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+            popup.hide();
+        }, 500);
+
+    }
+
+
+    //레포트 출력 또는 인쇄 -> 기존 리포트별 팝업 생성
+    //기존 선택 백업 - 현재 사용 안함(영진버전)
+    function DayOrderWorkViewReport_backup() {
+
+        if (DayOrderWorkFocusedRow == null) {
+            alert("선택된 공정이 없습니다"); return;
+        }
+
+        var order = DayOrderWorkFocusedRow.data;
+
+        var option = $("#DayOrderWorkPopupForm input[name='opt']:checked").val();
+
+        // report 출력
+        var report = new ReportHelper();
+
+        //선택공정
+        if (option == "1") {
+
+            //제조
+            if (order.mp_ck == "M") {
+
+                //제조지시및기록서
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheet" },
+                    objSp: { SpName: "SP_WORKSHEET_Y", gubun: "S1", reportParam: "ORDER_NO:" + order.order_no + ";ORDER_PROC_ID:" + order.order_proc_id + ";process_cd:" + order.process_cd },
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,ItemImage,Transfer,TransferB,OrderProc,order_detailproc_worktime,vessel,RateA,RateB,SubReport,exam_request" },
+                    objSub: { subRptName: "Order_detailproc_worktime,Transfer,TransferB,ItemImage,vessel,RateA,RateB,exam_request" }
+                });
+
+            } else {
+                //포장
+                PrintWorkSheet("1", report, order.mp_ck, order.order_no, order.order_proc_id, order.packing_order_no, order.process_cd);
+            }
+        }
+
+        //전체공정(Batch, 수율일람표, 개정이력, 칭량사전점검, 처방전, 칭량기록서, 칭량실청소, 제조지시및기록서 )
+        if (option == "2") {
+
+            //----------------------------
+            //1. 표지부분
+            //----------------------------
+
+            //제조
+            if (order.mp_ck == "M") {
+
+                //2.수율일람표
+                //PrintOrderIssue(영진)
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "OrderIssue2" },
+                    objSp: { SpName: "SP_ORDERISSUER_Y", gubun: "S1", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no + ";sign_set_cd:2001;sign_set_cd2:2005;ORDER_PROC_ID:" + order.order_proc_id },
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,TotalRate" },
+                    //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark,StdWorkTime,RealWorkTime" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                    objSub: { subRptName: "OrderIssue_Detail" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                });
+
+                //3.개정이력
+                //WorkSheetHistory(영진)
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetHistory" },
+                    objSp: { SpName: "SP_ORDERISSUER_Y", gubun: "S3", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no },
+                    objEtcInfo: { subParam: "", viewerName: ""  },
+                    objTblNm: { tblName: "Header,History" },
+                    objSub: { subRptName: "" }
+                });
+
+                //4.칭량기록서(칭량사전점검, 처방전, 칭량기록서, 칭량실청소)
+                //Main SP의 리턴 결과 수에 따라 4개의 리포트(칭량사전점검, 처방전, 칭량기록서, 칭량실청소)가 생성(4의 배수로 생성)
+                PrintWeighing(report, order.order_no);
+
+            } else {
+            //포장
+
+                PrintPackingOrderIssue(report, order.mp_ck, order.order_no, order.packing_order_no, "2002", "2006");
+
+            }
+
+            //----------------------------
+            //2. 공정부분
+            //----------------------------
+            PrintWorkSheet("2", report, order.mp_ck, order.order_no, order.order_proc_id, order.packing_order_no, order.process_cd);
+
+            //포장 출력의 경우 마지막에 수율 요약표 추가
+            if (order.mp_ck == "P") {
+
+                //별첨 라벨 및 설명서 부착
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetPack_Label" },
+                    objSp: { SpName: "SP_PACKINGORDERISSUE", gubun: "S1", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no + ";PACKING_ORDER_NO:" + order.packing_order_no + ";sign_set_cd:2002;sign_set_cd2:2006"},
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,PackingOrder,Printing_result" },
+                });
+
+                //수율일람표
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "OrderIssue2" },
+                    objSp: { SpName: "SP_ORDERISSUER_Y", gubun: "S1", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no + ";sign_set_cd:2001;sign_set_cd2:2005;ORDER_PROC_ID:" + order.order_proc_id },
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,TotalRate" },
+                    //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark,StdWorkTime,RealWorkTime" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                    objSub: { subRptName: "OrderIssue_Detail" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                });
+
+
+            }
+
+
+        }
+
+        //표지
+        if (option == "3") {
+
+            if (order.mp_ck == "M") {
+
+                //2.수율일람표
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "OrderIssue2" },
+                    objSp: { SpName: "SP_ORDERISSUER_Y", gubun: "S1", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no + ";sign_set_cd:2001;sign_set_cd2:2005;ORDER_PROC_ID:" + order.order_proc_id },
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,TotalRate" },
+                    //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark,StdWorkTime,RealWorkTime" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                    objSub: { subRptName: "OrderIssue_Detail" } //2021.01.19 표준작업시간, 실작업시간 하위리포트 추가(StdWorkTime, RealWorkTime)
+                });
+
+                //3.개정이력
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetHistory" },
+                    objSp: { SpName: "SP_ORDERISSUER_Y", gubun: "S3", reportParam: "MP_CK:" + order.mp_ck + ";ORDER_NO:" + order.order_no },
+                    objEtcInfo: { subParam: "", viewerName: "" },
+                    objTblNm: { tblName: "Header,History" },
+                    objSub: { subRptName: "" }
+                });
+
+
+
+                //4.칭량기록서(칭량사전점검, 처방전, 칭량기록서, 칭량실청소)
+                //Main SP의 리턴 결과 수에 따라 4개의 리포트(칭량사전점검, 처방전, 칭량기록서, 칭량실청소)가 생성(4의 배수로 생성)
+                PrintWeighing(report, order.order_no);
+
+            } else {
+            //포장
+
+                PrintPackingOrderIssue(report, order.mp_ck, order.order_no, order.packing_order_no, "2002", "2006");
+
+            }
+
+        }
+
+        //직접자제 출력
+        if (option == "4") {
+
+            //원료 칭량지시서 발행 (원료 1장, 직접자제 1장 출력 직접자제 없으면 원료만 출력)
+            WorkSheetWeighPrint(report, order.order_no);
+        }
+
+        //공정기록서 출력
+        if (option == "5") {
+
+            var grid = $("#DayOrderWorkGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = getGridRowByKey('DayOrderWorkGrid', grid.option("focusedRowKey"));
+                var order_no = data.order_no;
+                var packing_order_no = data.packing_order_no;
+
+                if (data.process_cd == "380") {
+
+                    //공정 리포트 (스틱포장)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph2" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no + ";p_po_no:" + packing_order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+                else if (data.process_cd == "350") {
+
+                    //공정 리포트 (코팅)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph350" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+                else if (data.process_cd == "360") {
+                    //공정 리포트 (타정)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph360" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+
+                }
+
+                //공정 리포트 (그 외 제조공정)
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "ProcessCheckReport" },
+                    objSp: { SpName: "SP_CP_DAILY", gubun: "Normal", reportParam: "P_WO_NO:" + order_no },
+                    objEtcInfo: { subParam: "", viewerName: "" },
+                    objTblNm: { tblName: "ProcessCheckReport_H,ProcessCheckReport_M" },
+                    objSub: { subRptName: "" }
+                });
+
+
+                //개발서버에서만 보여줌 (아이센스용 공정검사성적서)
+                var plant_nm = sessionStorage.getItem('plantNM');
+                if (selectedDBName == "RTEGMS_ISENS2") {
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_2" },
+                        objSp: { SpName: "RTEGMS_ISENS2.dbo.SP_CP_DAILY_M", gubun: "", reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamREport_2_H1,ProcessExamREport_2_H2,ProcessExamREport_2_M,ProcessExamREport_2_S" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+            }
+        }
+
+        var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        popup.hide();
+
+        if (ReportGubun.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (ReportGubun.indexOf('Print') > -1) {
+            report.print();
+        }
+
+        //setTimeout(function () {
+        //    var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        //    popup.hide();
+        //}, 1000);
+
+    }
+
+    //ISENS 전용 리포트 출력
+    function DayOrderWorkTotalReport_ISENS() {
+        var report = new ReportHelper();
+        var option = $("#DayOrderWorkPopupForm input[name='opt']:checked").val();
+
+        //통합리포트 출력
+        if (option == "%") {
+            var order = DayOrderWorkFocusedRow.data;
+
+            //2021.03.25 제조, 포장 리포트 통합 테스트 중
+            var sdate = $("#DayOrderWorkSearchForm [name='sdate']").val();
+            var edate = $("#DayOrderWorkSearchForm [name='edate']").val();
+
+            $.ajax({
+                type: 'POST',
+                url: '/WorkSheetManage/DayOrderWork_ReportMaster',
+                data: {
+                    order_no: order.order_no,
+                    grouping_cd: option,
+                    sdate: sdate,
+                    edate: edate
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    if (result.length > 0) {
+
+                        var reportMasterData = JSON.parse(result); //리포트 이름
+
+                        for (var i = reportMasterData.length - 1; i >= 0; i--) {
+                            //for (var i = 0; i < reportMasterData.length; i++) {
+
+                            //제조기록서 통합(포장 포함)
+                            if (reportMasterData[i].rpt_name == "DayWorkReport") {
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage_1", RptFileName: "DayWorkReport" },
+                                    objSp: {
+                                        SpName: "SP_DayWorkReport", gubun: "TotalReport", reportParam: "order_no:" + order.order_no +
+                                            ";sdate:" + sdate + ";edate:" + edate + ";grouping_cd:" + option
+                                    },
+                                    objEtcInfo: { subParam: "", viewerName: "" },
+                                    objTblNm: {
+                                        tblName: "ReportMaster,WorkSheetHistory_Header,WorkSheetHistory_History,WorkSheetW_Header,WorkSheetW_order_weighing,WorkSheetW_sum,WorkSheetW_order_item_bom,WorkSheetW_sum_bom,WorkSheetW_item_info,"
+                                            + "OrderIssue_Header,OrderIssue_TotalRate,ProcessCheckReport_H,ProcessCheckReport_M,PackingOrderIssue_Header,PackingOrderIssue_PackingOrder,PackingOrderIssue_item_info"
+                                    },
+                                    //objSub: { subRptName: "WorkSheetHistory.rpt,WorkSheetWRA.rpt,WorkSheetWRB.rpt,WorkSheetWR_Info.rpt,OrderIssue2.rpt,PackingOrderIssue.rpt,PackingOrderIssue_sub.rpt,PackingOrderIssue_Info.rpt" }
+                                    objSub: { subRptName: "" }
+
+                                });
+                            }
+
+
+                            //제조지시 작업방법
+                            else if (reportMasterData[i].rpt_name == "WorkSheet_M") {
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage_1", RptFileName: "WORKSHEET_M" },
+                                    objSp: { SpName: "SP_WORKSHEET_M", gubun: "S", reportParam: "ORDER_NO:" + order.order_no + ";grouping_cd:" + option },
+                                    objEtcInfo: { subParam: "", viewerName: "" },
+                                    objTblNm: { tblName: "WorkSheet_M_Header,WorkSheet_M_OrderProc,WorkSheet_M_PrevCheck,WorkSheet_M_PrevCheck_Equip" },
+                                    objSub: { subRptName: "PrevCheck,PrevCheck_Equip" }
+
+                                });
+                            }
+
+                            //포장지시 작업방법
+                            else if (reportMasterData[i].rpt_name == "WorkSheet_P") {
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage_1", RptFileName: "WORKSHEET_P" },
+                                    objSp: { SpName: "SP_WORKSHEET_P", gubun: "S", reportParam: "ORDER_NO:" + order.order_no },
+                                    objEtcInfo: { subParam: "", viewerName: "" },
+                                    objTblNm: { tblName: "WorkSheet_P_Header,WorkSheet_P_OrderProc,WorkSheet_P_order_detailproc_worktime,WorkSheet_P_WorkTime,WorkSheet_P_PrevCheck,WorkSheet_P_PrevCheck_Equip" },
+                                    objSub: { subRptName: "PrevCheck,PrevCheck_Equip" }
+
+                                });
+                            }
+
+
+                        }
+
+                    } else {
+                        alert("해당 제조번호에 대한 승인된 제조지시가 없습니다");
+                    }
+
+                }
+            });
+        }
+
+
+        //공정기록서 출력
+        if (option == "5") {
+
+            var grid = $("#DayOrderWorkGrid").dxDataGrid("instance");
+            if (grid.totalCount()) {
+                var data = getGridRowByKey('DayOrderWorkGrid', grid.option("focusedRowKey"));
+                var order_no = data.order_no;
+                var packing_order_no = data.packing_order_no;
+
+                if (data.process_cd == "380") {
+
+                    //공정 리포트 (스틱포장)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph2" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no + ";p_po_no:" + packing_order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+                else if (data.process_cd == "350") {
+
+                    //공정 리포트 (코팅)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph350" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+                else if (data.process_cd == "360") {
+                    //공정 리포트 (타정)
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph360" },
+                        objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                        objSub: { subRptName: "" }
+                    });
+
+                }
+
+                //공정 리포트 (그 외 제조공정)
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "ProcessCheckReport" },
+                    objSp: { SpName: "SP_CP_DAILY", gubun: "Normal", reportParam: "P_WO_NO:" + order_no },
+                    objEtcInfo: { subParam: "", viewerName: "" },
+                    objTblNm: { tblName: "ProcessCheckReport_H,ProcessCheckReport_M" },
+                    objSub: { subRptName: "" }
+                });
+
+
+                //개발서버에서만 보여줌 (아이센스용 공정검사성적서)
+                var plant_nm = sessionStorage.getItem('plantNM');
+                if (selectedDBName == "RTEGMS_ISENS2") {
+                    report.addParam({
+                        objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_2" },
+                        objSp: { SpName: "RTEGMS_ISENS2.dbo.SP_CP_DAILY_M", gubun: "", reportParam: "P_WO_NO:" + order_no },
+                        objEtcInfo: { subParam: "", viewerName: "" },
+                        objTblNm: { tblName: "ProcessExamREport_2_H1,ProcessExamREport_2_H2,ProcessExamREport_2_M,ProcessExamREport_2_S" },
+                        objSub: { subRptName: "" }
+                    });
+                }
+            }
+        }
+
+        var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        popup.hide();
+
+        if (ReportGubun.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (ReportGubun.indexOf('Print') > -1) {
+            report.print();
+        }
+
+
+    }
+
+
+     //2021-02-18 리포트 통합 - 현재 사용
+    function DayOrderWorkTotalReport(option) {
+
+        var order = DayOrderWorkFocusedRow.data;
+
+        var report = new ReportHelper();
+
+        //2021.03.25 제조, 포장 리포트 통합 테스트 중
+        var sdate = $("#DayOrderWorkSearchForm [name='sdate']").val();
+        var edate = $("#DayOrderWorkSearchForm [name='edate']").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/WorkSheetManage/DayOrderWork_ReportMaster',
+            data: {
+                order_no: order.order_no,
+                grouping_cd: option,
+                sdate: sdate,
+                edate: edate
+            },
+            dataType: 'json',
+            async: false,
+            success: function (result) {
+                if (result.length > 0) {
+
+                    var reportMasterData = JSON.parse(result); //리포트 이름
+
+                    for (var i = reportMasterData.length-1; i >= 0 ; i--) {
+                    //for (var i = 0; i < reportMasterData.length; i++) {
+
+
+                        //공정 리포트 (코팅)
+                        if (reportMasterData[i].rpt_name == "ProcessExamReport_Graph350") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph350" },
+                                objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_350", reportParam: "P_WO_NO:" + order.order_no },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                                objSub: { subRptName: "" }
+                            });
+                        }
+
+                        //공정 리포트 (타정)
+                        else if (reportMasterData[i].rpt_name == "ProcessExamReport_Graph360") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph360" },
+                                objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_360", reportParam: "P_WO_NO:" + order.order_no },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                                objSub: { subRptName: "" }
+                            });
+
+                        }
+
+                        //공정 리포트 (스틱포장)
+                        else if (reportMasterData[i].rpt_name == "ProcessExamReport_Graph380") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph2" },
+                                objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_380", reportParam: "P_WO_NO:" + order.order_no + ";p_po_no:" + order.packing_order_no },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+                                objSub: { subRptName: "" }
+                            });
+                        }
+
+                        //제조기록서 통합(포장 포함)
+                        else if (reportMasterData[i].rpt_name == "DayWorkReport") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage_1", RptFileName: "DayWorkReport" },
+                                objSp: {
+                                    SpName: "SP_DayWorkReport", gubun: "TotalReport", reportParam: "order_no:" + order.order_no +
+                                        ";sdate:" + sdate + ";edate:" + edate  +";grouping_cd:" + option},
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: {
+                                    tblName: "ReportMaster,WorkSheetHistory_Header,WorkSheetHistory_History,WorkSheetW_Header,WorkSheetW_order_weighing,WorkSheetW_sum,WorkSheetW_order_item_bom,WorkSheetW_sum_bom,WorkSheetW_item_info,"
+                                        + "OrderIssue_Header,OrderIssue_TotalRate,ProcessCheckReport_H,ProcessCheckReport_M,PackingOrderIssue_Header,PackingOrderIssue_PackingOrder,PackingOrderIssue_item_info"
+                                },
+                                //objSub: { subRptName: "WorkSheetHistory.rpt,WorkSheetWRA.rpt,WorkSheetWRB.rpt,WorkSheetWR_Info.rpt,OrderIssue2.rpt,PackingOrderIssue.rpt,PackingOrderIssue_sub.rpt,PackingOrderIssue_Info.rpt" }
+                                objSub: { subRptName: "" }
+
+                            });
+                        }
+
+
+                        //제조지시 작업방법
+                        else if (reportMasterData[i].rpt_name == "WorkSheet_M") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage_1", RptFileName: "WORKSHEET_M" },
+                                objSp: { SpName: "SP_WORKSHEET_M", gubun: "S", reportParam: "ORDER_NO:" + order.order_no + ";grouping_cd:" + option },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "WorkSheet_M_Header,WorkSheet_M_OrderProc,WorkSheet_M_PrevCheck,WorkSheet_M_PrevCheck_Equip" },
+                                objSub: { subRptName: "PrevCheck,PrevCheck_Equip" }
+
+                            });
+                        }
+
+                        //포장지시 작업방법
+                        else if (reportMasterData[i].rpt_name == "WorkSheet_P") {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage_1", RptFileName: "WORKSHEET_P" },
+                                objSp: { SpName: "SP_WORKSHEET_P", gubun: "S", reportParam: "ORDER_NO:" + order.order_no},
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "WorkSheet_P_Header,WorkSheet_P_OrderProc,WorkSheet_P_order_detailproc_worktime,WorkSheet_P_WorkTime,WorkSheet_P_PrevCheck,WorkSheet_P_PrevCheck_Equip" },
+                                objSub: { subRptName: "PrevCheck,PrevCheck_Equip" }
+
+                            });
+                        }
+
+
+                    }
+
+                } else {
+                    alert("해당 제조번호에 대한 승인된 제조지시가 없습니다");
+                }
+
+            }
+        })
+
+        // #region 리포트 통합 기존 소스
+        //제조 리포트
+        //if (order.mp_ck == "M") {
+
+
+        //    //2021.03.11 박가희 추가
+        //    //제조지시만 내려가있을 경우,
+        //    if (order.order_proc_make_status == '1') {
+        //        alert("승인된 제조지시가 아닙니다.");
+        //    } else {
+        //        report.addParam({
+        //            objFile: { path: "WorkSheetManage_1", RptFileName: "DayWorkReport_M" },
+        //            objSp: { SpName: "SP_DayWorkReport_M", gubun: "S", reportParam: "ORDER_NO:" + order.order_no+";revision_no:" + order.revision_no },
+        //            objEtcInfo: { subParam: "page=0", viewerName: "" },
+        //            objTblNm: {
+        //                tblName: "OrderIssue_Header,OrderIssue_TotalRate,WorkSheetHistory_Header,WorkSheetHistory_History,WorkSheetW_Master,WorkSheetW_header,WorkSheetW_order_proc,WorkSheetW_order_weighing,WorkSheetW_sum,WorkSheetW_order_procB,WorkSheetW_order_item_bom,WorkSheetW_sum_bom,WorkSheetW_item_info," +
+        //                    //"WorkSheet_Master,WorkSheet_Header,WorkSheet_OrderProc,WorkSheet_order_detailproc_worktime,WorkSheet_M_Header,WorkSheet_M_OrderProc"
+        //                     "WorkSheet_M_Header,WorkSheet_M_OrderProc,WorkSheet_M_PrevCheck"
+
+        //            },
+        //            //objSub: { subRptName: "OrderIssue2.rpt,WorkSheetHistory.rpt,WorkSheetWR.rpt,WorkSheet.rpt" }
+        //            objSub: { subRptName: "WorkSheetHistory.rpt,WorkSheetWRA.rpt,WorkSheetWRB.rpt,WorkSheetWR_Info.rpt,OrderIssue2.rpt" }
+
+        //        });
+
+        //        report.addParam({
+        //            objFile: { path: "WorkSheetManage_1", RptFileName: "WORKSHEET_M" },
+        //            objSp: { SpName: "SP_WORKSHEET_M", gubun: "S", reportParam: "ORDER_NO:" + order.order_no +";revision_no:" + order.revision_no },
+        //            objEtcInfo: { subParam: "", viewerName: "" },
+        //            objTblNm: { tblName: "WorkSheet_Header,WorkSheet_OrderProc,WorkSheet_PrevCheck" },
+        //            objSub: { subRptName: "" }
+
+        //        });
+        //    }
+
+        //    var lot_no = order.lot_no;
+        //    var order_no = order.order_no;
+        //    var packing_order_no = order.packing_order_no;
+        //    //var grid = $("#DayOrderWorkGrid").dxDataGrid("instance");
+        //    //var grid_data = grid.getDataSource().items();
+
+        //    var grid_data = JSON.parse(DayOrderWorkGrid_datasource);
+
+        //    //console.log(grid_data.length);
+        //    for (var i = 0; i < grid_data.length; i++) {
+        //        try {
+        //            var data = grid_data[i];
+
+        //            //console.log("data.lot_no" + data.lot_no + "data.process_cd" + data.process_cd);
+        //            if (data.lot_no == lot_no && data.process_cd == "350") {
+        //                //공정 리포트 (코팅)
+        //                report.addParam({
+        //                    objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph350" },
+        //                    objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+        //                    objEtcInfo: { subParam: "", viewerName: "" },
+        //                    objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+        //                    objSub: { subRptName: "" }
+        //                });
+        //            }
+        //            else if (data.lot_no == lot_no && data.process_cd == "360") {
+        //                //공정 리포트 (타정)
+        //                report.addParam({
+        //                    objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph360" },
+        //                    objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + data.process_cd, reportParam: "P_WO_NO:" + order_no },
+        //                    objEtcInfo: { subParam: "", viewerName: "" },
+        //                    objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+        //                    objSub: { subRptName: "" }
+        //                });
+        //            }
+        //        }
+        //        catch (e) {
+        //        }
+        //    }
+
+        //    //공정 리포트 (그 외 제조공정)
+        //    report.addParam({
+        //        objFile: { path: "WorkSheetManage", RptFileName: "ProcessCheckReport" },
+        //        objSp: { SpName: "SP_CP_DAILY", gubun: "Normal", reportParam: "P_WO_NO:" + order_no },
+        //        objEtcInfo: { subParam: "", viewerName: "" },
+        //        objTblNm: { tblName: "ProcessCheckReport_H,ProcessCheckReport_M" },
+        //        objSub: { subRptName: "" }
+        //    });
+
+
+        //    //아이센스용 공정검사 리포트. 개발서버에서만 표시
+        //    var plant_nm = sessionStorage.getItem('plantNM');
+
+        //    if (plant_nm == "TASCO" && selectedDBName == "RTEGMS_ISENS") {
+        //        report.addParam({
+        //            objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_2" },
+        //            objSp: { SpName: "RTEGMS_ISENS.dbo.SP_CP_DAILY_M", gubun: "", reportParam: "P_WO_NO:" + order_no },
+        //            objEtcInfo: { subParam: "", viewerName: "" },
+        //            objTblNm: { tblName: "ProcessExamREport_2_H1,ProcessExamREport_2_H2,ProcessExamREport_2_M,ProcessExamREport_2_S" },
+        //            objSub: { subRptName: "" }
+        //        });
+        //    }
+        //}
+
+        ////포장 리포트
+        //if (order.mp_ck == "P") {
+        //    if (order.order_proc_make_status == '1') {
+        //        //지시만 내려간 경우
+        //        //리포트 띄우지 않음
+        //        alert("승인된 포장지시가 아닙니다.");
+
+        //    } else {
+        //        report.addParam({
+        //            objFile: { path: "WorkSheetManage_1", RptFileName: "DayWorkReport_P" },
+        //            objSp: { SpName: "SP_DayWorkReport_P", gubun: "S", reportParam: "ORDER_NO:" + order.order_no + ";PACKING_ORDER_NO:" + order.packing_order_no },
+        //            objEtcInfo: { subParam: "page=0", viewerName: "" },
+        //            objTblNm: {
+        //                tblName: "PACKINGORDER_MASTER,PackingOrderIssue_Header,PackingOrderIssue_PackingOrder,PackingOrderIssue_Printing_result,PackingOrderIssue_item_info,WorkSheet_Master,WorkSheet_MasterDetail,WorkSheet_Header,WorkSheet_OrderProc,WorkSheet_order_detailproc_worktime,WorkSheet_WorkTime"
+        //            },
+        //            //objSub: { subRptName: "PackingOrderIssue.rpt,PackingOrderIssue_sub.rpt,WorkSheetPack.rpt,WorkSheetClean.rpt,WorkSheetWorking.rpt" }
+        //            objSub: { subRptName: "PackingOrderIssue.rpt,PackingOrderIssue_sub.rpt,PackingOrderIssue_Info.rpt,WorkSheetPack.rpt" }
+
+        //        });
+        //    }
+
+
+        //    //포장공정검사 대표코드는 하나라 있으면  표시함
+        //    if (order.process_cd == "380") {
+        //        //console.log(order.process_exam_cd);
+
+        //        //공정 리포트 (스틱포장)
+        //        report.addParam({
+        //            objFile: { path: "WorkSheetManage", RptFileName: "ProcessExamReport_Graph2" },
+        //            objSp: { SpName: "SP_CP_DAILY", gubun: "Graph_" + order.process_cd, reportParam: "P_WO_NO:" + order.order_no + ";p_po_no:" + order.packing_order_no },
+        //            objEtcInfo: { subParam: "", viewerName: "" },
+        //            objTblNm: { tblName: "ProcessExamReport_Graph2_H,ProcessExamReport_Graph2_M,ProcessExamReport_Graph2_S,ProcessExamReport_Graph2_T" },
+        //            objSub: { subRptName: "" }
+        //        });
+        //    }
+        //}
+
+        // #endregion
+
+
+
+        report.preview();
+
+    }
+
+
+    //포장관련
+    function PrintPackingOrderIssue(report, mp_ck, order_no, packing_order_no, sign_set_cd, sign_set_cd2) {
+        var data = {};
+        data.mp_ck = mp_ck;
+        data.order_no = order_no;
+        data.packing_order_no = packing_order_no;
+        data.sign_set_cd = sign_set_cd;
+        data.sign_set_cd2 = sign_set_cd2;
+
+        $.ajax({
+            type: 'POST',
+            url: '/WorkSheetManage/PrintPackingOrderMasterSP',
+            dataType: 'json',
+            async: false,
+            data: data,
+            success: function (data) {
+                if (data.length > 0) {
+
+                    var JsonData = JSON.parse(data);
+                    //console.log(JsonData);
+                    if (JsonData.length > 0) {
+
+                        //현재 DB 구조로 item_bom_rpt_seq, rpt_cnt를 가지고올 수 없음(item_bom 테이블에 item_bom_rpt_seq 컬럼이 없음)
+                        //var rpt_cnt = Number(JsonData[0].rpt_cnt);
+                        //console.log("rpt_cnt :" + rpt_cnt);
+                        //for (var i = 0; i < rpt_cnt; i++) {
+
+                        //var subData = param;
+                        //subData.item_bom_rpt_seq = (i + 1);
+                        //var item_bom_rpt_seq = (i + 1);
+
+                        //포장지시및기록서 표지
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "PackingOrderIssue", RptSeq: 0 },
+                            //objSp: { SpName: "SP_PACKINGORDERISSUE", gubun: "S1", reportParam: "MP_CK:" + mp_ck + ";ORDER_NO:" + order_no + ";PACKING_ORDER_NO:" + packing_order_no + ";sign_set_cd:" + sign_set_cd + ";sign_set_cd2:" + sign_set_cd2 + ";item_bom_rpt_seq:" + item_bom_rpt_seq},
+                            objSp: { SpName: "SP_PACKINGORDERISSUE", gubun: "S1", reportParam: "MP_CK:" + mp_ck + ";ORDER_NO:" + order_no + ";PACKING_ORDER_NO:" + packing_order_no + ";sign_set_cd:" + sign_set_cd + ";sign_set_cd2:" + sign_set_cd2 },
+
+                            objEtcInfo: { subParam: "", viewerName: "" },
+                            objTblNm: { tblName: "Header,PackingOrder,Printing_result" },
+                            objSub: { subRptName: "Printing_result" }
+                        });
+
+                        //포장지시및기록서 표지
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "PackingOrderIssue_sub", RptSeq: 0 },
+                            //objSp: { SpName: "SP_PACKINGORDERISSUE", gubun: "S1", reportParam: "MP_CK:" + mp_ck + ";ORDER_NO:" + order_no + ";PACKING_ORDER_NO:" + packing_order_no + ";sign_set_cd:" + sign_set_cd + ";sign_set_cd2:" + sign_set_cd2 + ";item_bom_rpt_seq:" + item_bom_rpt_seq },
+                            objSp: { SpName: "SP_PACKINGORDERISSUE", gubun: "S1", reportParam: "MP_CK:" + mp_ck + ";ORDER_NO:" + order_no + ";PACKING_ORDER_NO:" + packing_order_no + ";sign_set_cd:" + sign_set_cd + ";sign_set_cd2:" + sign_set_cd2 },
+
+                            objEtcInfo: { subParam: "", viewerName: "" },
+                            objTblNm: { tblName: "Header,PackingOrder,Printing_result" },
+                            objSub: { subRptName: "PackingMaterial_Return" }
+                        });
+
+                        //}
+                    }
+                }
+            }
+        })
+
+    }
+
+    //칭량관련
+    function PrintWeighing(report, order_no) {
+        var data = {};
+        data.order_no = order_no;
+
+        $.ajax({
+            type: 'POST',
+            url: '/WorkSheetManage/PrintWeighingMasterSP',
+            dataType: 'json',
+            async: false,
+            data: data,
+            success: function (data) {
+                if (data.length > 0) {
+
+                    var JsonData = JSON.parse(data);
+
+                    if (JsonData.length > 0) {
+
+                        for (var i = 0; i < JsonData.length; i++) {
+
+                            var subData = {};
+                            subData.order_no = order_no;
+                            subData.input_order_id = JsonData[i].input_order_id;
+                            subData.weighing_no = JsonData[i].weighing_no;
+
+                            //칭량사전점검
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWR", RptSeq: i },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S5", reportParam: "order_no:" + order_no + ";input_order_id:" + JsonData[i].input_order_id + ";weighing_no:" + JsonData[i].weighing_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                                objSub: { subRptName: "" }
+                            });
+
+                            //칭량기록서
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRB", RptSeq: i },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S5", reportParam: "order_no:" + order_no + ";input_order_id:" + JsonData[i].input_order_id + ";weighing_no:" + JsonData[i].weighing_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                                objSub: { subRptName: "" }
+                            });
+
+                            //칭량실청소
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRC", RptSeq: i },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S5", reportParam: "order_no:" + order_no + ";input_order_id:" + JsonData[i].input_order_id + ";weighing_no:" + JsonData[i].weighing_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                                objSub: { subRptName: "" }
+                            });
+
+                            //처방전
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRA", RptSeq: i },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S5", reportParam: "order_no:" + order_no + ";input_order_id:" + JsonData[i].input_order_id + ";weighing_no:" + JsonData[i].weighing_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                                objSub: { subRptName: "" }
+                            });
+                        }
+
+                    } else {
+
+                        //칭량사전점검
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWR", RptSeq: 0 },
+                            objSp: { SpName: "SP_WorkSheetW", gubun: "S", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                            objEtcInfo: { subParam: "page=0", viewerName: "" },
+                            objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                            objSub: { subRptName: "" }
+                        });
+
+                        //칭량기록서
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRB", RptSeq: 0 },
+                            objSp: { SpName: "SP_WorkSheetW", gubun: "S", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                            objEtcInfo: { subParam: "page=0", viewerName: "" },
+                            objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                            objSub: { subRptName: "" }
+                        });
+
+                        //칭량실청소
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRC", RptSeq: 0 },
+                            objSp: { SpName: "SP_WorkSheetW", gubun: "S", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                            objEtcInfo: { subParam: "page=0", viewerName: "" },
+                            objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                            objSub: { subRptName: "" }
+                        });
+
+                        //처방전
+                        report.addParam({
+                            objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRA", RptSeq: 0 },
+                            objSp: { SpName: "SP_WorkSheetW", gubun: "S", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                            objEtcInfo: { subParam: "page=0", viewerName: "" },
+                            objTblNm: { tblName: "header,order_proc,order_weighing,sum,order_procB,order_item_bom,sum_bom" },
+                            objSub: { subRptName: "" }
+                        });
+                    }
+
+                }
+            }
+        })
+
+    }
+
+    //공정관련(option :1(선택공정),  option :2(전체공정))
+    function PrintWorkSheet(option, report, mp_ck, order_no, order_proc_id, packing_order_no, process_cd) {
+        if (option == "1") {
+
+            if (mp_ck == "P") {
+
+                var data = {};
+                data.order_no = order_no;
+                data.order_proc_id = order_proc_id;
+                data.order_detailproc_mid = "0";
+
+                var order_detailproc_id = 0;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/WorkSheetManage/PrintWorkSheetDetailSP',
+                    dataType: 'json',
+                    async: false,
+                    data: data,
+                    success: function (data) {
+
+                        var JsonData = JSON.parse(data);
+                        if (JsonData.length > 0) {
+                            for (var i = 0; i < JsonData.length; i++) {
+                                //var order_detailproc_mid = JsonData_1[j].order_detailproc_mid;
+
+                                //특정세부공정에 대해서만 출력하도록 한다.
+                                if (order_detailproc_id != 0 && order_detailproc_id != Number(JsonData[i].order_detailproc_mid))
+                                    continue;
+
+                                //포장지시및기록서
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetPack", RptSeq: i },
+                                    objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData[i].order_detailproc_mid + ";PROCESS_CD:" + process_cd },
+                                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                    objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                    objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                });
+
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetClean", RptSeq: i },
+                                    objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData[i].order_detailproc_mid + ";PROCESS_CD:" + process_cd },
+                                    objEtcInfo: { subParam: "", viewerName: "" },
+                                    objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                    //objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                    objSub: { subRptName: "" }
+                                });
+
+                                report.addParam({
+                                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWorking", RptSeq: i },
+                                    objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData[i].order_detailproc_mid + ";PROCESS_CD:" + process_cd },
+                                    objEtcInfo: { subParam: "", viewerName: "" },
+                                    objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                    //objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                    objSub: { subRptName: "" }
+                                });
+
+                            }
+                        }
+
+                    }
+                })
+
+                //공정검사서
+                report.addParam({
+                    objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetPack_P_shin", RptSeq: 0 },
+                    objSp: { SpName: "SP_WorkSheetPack_P", gubun: "S", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id },
+                    objEtcInfo: { subParam: "page=0", viewerName: "" },
+                    objTblNm: { tblName: "Header,Process_Exam_M,Process_Exam_4,Process_Exam_8" },
+                    objSub: { subRptName: "ex4,ex8" }
+                });
+            }
+        }
+
+        if (option == "2") {
+            var data = {};
+            data.mp_ck = mp_ck;
+            data.order_no = order_no;
+            data.packing_order_no = packing_order_no;
+
+            $.ajax({
+                type: 'POST',
+                url: '/WorkSheetManage/PrintWorkSheetMasterSP',
+                dataType: 'json',
+                async: false,
+                data: data,
+                success: function (data) {
+                    if (data.length > 0) {
+
+                        var JsonData = JSON.parse(data);
+
+                        if (JsonData.length > 0) {
+                            for (var i = 0; i < JsonData.length; i++) {
+                                var order_proc_id = JsonData[i].order_proc_id;
+
+                                if (mp_ck == "M") {
+
+                                    report.addParam({
+                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheet", RptSeq: i },
+                                        objSp: { SpName: "SP_WORKSHEET_Y", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";process_cd:" + JsonData[i].process_cd },
+                                        objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                        objTblNm: { tblName: "Header,ItemImage,Transfer,TransferB,OrderProc,order_detailproc_worktime,vessel,RateA,RateB,SubReport,exam_request" },
+                                        objSub: { subRptName: "Order_detailproc_worktime,Transfer,TransferB,ItemImage,vessel,RateA,RateB,exam_request" }
+                                    });
+
+                                    report.addParam({
+                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetP", RptSeq: i },
+                                        objSp: { SpName: "SP_WORKSHEETP", gubun: "S1", reportParam: "MP_CK:" + mp_ck + ";ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id },
+                                        objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                        objTblNm: { tblName: "Header,none,packingcontent,UseDate,ProcExamSpec,PreTablet,AvgWeight,AvgWeight1,AvgWeight2,AvgWeight3,AvgWeight4,AvgWeight5,IndWeight,Thickness,Hardness,Melt,Attrition,LessMoisture,Filling,checkingprint,count,packing,powder_indweight,melt_count" },
+                                        objSub: { subRptName: "UseDate,ProcExamSpec,PreTablet,AvgWeight,AvgWeightTable,IndWeight,Thickness,Hardness,Melt,Attrition,LessMoisture,Filling,checkingprint,count,packing,powder_indweight" }
+                                    });
+
+                                } else {
+
+                                    var order_detailproc_id = 0;
+
+                                    var data_1 = {};
+                                    data_1.order_no = order_no;
+                                    data_1.order_proc_id = order_proc_id;
+                                    data_1.order_detailproc_mid = "0";
+
+                                    $.ajax({
+                                        type: 'POST',
+                                        url: '/WorkSheetManage/PrintWorkSheetDetailSP',
+                                        dataType: 'json',
+                                        async: false,
+                                        data: data_1,
+                                        success: function (data) {
+
+                                            var JsonData_1 = JSON.parse(data);
+                                            //console.log(JsonData_1);
+
+                                            if (JsonData_1.length > 0) {
+                                                for (var j = 0; j < JsonData_1.length; j++) {
+                                                    //var order_detailproc_mid = JsonData_1[j].order_detailproc_mid;
+
+                                                    //특정세부공정에 대해서만 출력하도록 한다.
+                                                    if (order_detailproc_id != 0 && order_detailproc_id != Number(JsonData_1[j].order_detailproc_mid))
+                                                        continue;
+
+                                                    //포장지시및기록서
+                                                    report.addParam({
+                                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetPack", RptSeq: j },
+                                                        objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData_1[j].order_detailproc_mid + ";PROCESS_CD:" + JsonData_1[j].process_cd },
+                                                        objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                                        objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                                        objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                                    });
+
+                                                    report.addParam({
+                                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetClean", RptSeq: j },
+                                                        objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData_1[j].order_detailproc_mid + ";PROCESS_CD:" + JsonData_1[j].process_cd },
+                                                        objEtcInfo: { subParam: "", viewerName: "" },
+                                                        objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                                        //objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                                        objSub: { subRptName: "" }
+                                                    });
+
+                                                    report.addParam({
+                                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWorking", RptSeq: j },
+                                                        objSp: { SpName: "SP_WORKSHEETPACK", gubun: "S1", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id + ";ORDER_DETAILPROC_MID:" + JsonData_1[j].order_detailproc_mid + ";PROCESS_CD:" + JsonData_1[j].process_cd },
+                                                        objEtcInfo: { subParam: "", viewerName: "" },
+                                                        objTblNm: { tblName: "Header,Transfer,OrderProc,order_detailproc_worktime,vessel,RateE,UsingMaterial,SubReport,-,WorkerTime,OrderEquipParameter" },
+                                                        //objSub: { subRptName: "Order_detailproc_worktime,Transfer,vessel,UsingMaterial,WorkerTime,OrderEquipParam" }
+                                                        objSub: { subRptName: "" }
+                                                    });
+
+                                                }
+                                            }
+
+                                        }
+                                    })
+
+                                    //공정검사서
+                                    report.addParam({
+                                        objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetPack_P_shin", RptSeq: 0 },
+                                        objSp: { SpName: "SP_WorkSheetPack_P", gubun: "S", reportParam: "ORDER_NO:" + order_no + ";ORDER_PROC_ID:" + order_proc_id },
+                                        objEtcInfo: { subParam: "page=0", viewerName: "" },
+                                        objTblNm: { tblName: "Header,Process_Exam_M,Process_Exam_4,Process_Exam_8" },
+                                        objSub: { subRptName: "ex4,ex8" }
+                                    });
+
+                                }
+                            }
+
+                        }
+                    }
+                }
+            })
+        }
+
+
+    }
+
+    //칭량지시서
+    function WorkSheetWeighPrint(report, order_no) {
+        var data = {};
+        data.order_no = order_no;
+
+        $.ajax({
+            type: 'POST',
+            url: '/WorkSheetManage/WorkSheetWeighMasterSP',
+            dataType: 'json',
+            async: false,
+            data: data,
+            success: function (data) {
+                if (data.length > 0) {
+
+                    var JsonData = JSON.parse(data);
+                    //console.log(JsonData);
+                    //if (JsonData.length > 0) {
+
+                    if (JsonData.Table.length > 0) {
+                        if (JsonData.Table2.length > 0) {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRF" },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S6", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "header,sum_bom,order_material,order_raw_material" },
+                                objSub: { subRptName: "" }
+                            });
+                        }
+
+                        if (JsonData.Table3.length > 0) {
+                            report.addParam({
+                                objFile: { path: "WorkSheetManage", RptFileName: "WorkSheetWRG" },
+                                objSp: { SpName: "SP_WorkSheetW", gubun: "S6", reportParam: "order_no:" + order_no + ";mp_ck:M;sign_set_cd:2001;sign_set_cd2:2005" },
+                                objEtcInfo: { subParam: "", viewerName: "" },
+                                objTblNm: { tblName: "header,sum_bom,order_material,order_raw_material" },
+                                objSub: { subRptName: "" }
+                            });
+                        }
+                    }
+                    //}
+                }
+            }
+        })
+    }
+    function DayOrderWorkViewCancel() {
+        $("#DayOrderWorkPopup").dxPopup({
+            contentTemplate: null
+        })
+
+        var popup = $("#DayOrderWorkPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //미리보기 팝업 띄울때, 그룹코드 설정하도록 폼내용 만들어줌
+    function SetReportPopupTemplate() {
+        var template = '';
+
+        template = '<form id="DayOrderWorkPopupForm">';
+        template += '<div class="input-wrapper">';
+        template += '           <input type="radio" value="%" id="opt_0" name="opt" checked />';
+        template += '           <span class="form-control-sm"><label for="opt_1">통합리포트</label></span>';
+
+        if (DayOrderWork_GroupingArr.length > 0) {
+            for (var i = 0; i < DayOrderWork_GroupingArr.length; i++) {
+                template += '   <input type="radio" value="' + DayOrderWork_GroupingArr[i] + '" id="opt_' + DayOrderWork_GroupingArr[i] +'" name="opt" />';
+                template += '   <span class="form-control-sm"><label for="opt_' + DayOrderWork_GroupingArr[i] + '">그룹코드' + DayOrderWork_GroupingArr[i]+'</label></span>';
+            }
+        }
+
+        template += '   </div >';
+        template += '</form >';
+
+        template += ' <div class="align-center">'
+        template += ' <button class="btn btn-secondary" onclick="DayOrderWorkViewReport()">확인</button>';
+        template += ' <button class="btn btn-secondary" onclick="DayOrderWorkViewCancel()">취소</button>';
+        template += '</div>';
+
+        return template;
+
+    }
+
+    //작업방법 작업시간 수정 -> 각 로우에 대해
+    function DayOrderWork_OnRowUpdated(e) {
+
+        var data = e.data;
+        if (data.order_work_start_time != null || data.order_work_start_time == "") {
+            data.order_work_start_time = new Date(data.order_work_start_time).format("yyyy-MM-dd HH:mm").toString();
+        }
+
+        if (data.order_work_end_time != null || data.order_work_end_time == "") {
+            data.order_work_end_time = new Date(data.order_work_end_time).format("yyyy-MM-dd HH:mm").toString();
+        }
+
+        DayOrderWork_tempArray.push(data);
+
+        //var start_test = data.order_work_start_time.length == 19 && dtRegex.test(data.order_work_start_time);
+       // var end_test = data.order_work_end_time.length == 19 && dtRegex.test(data.order_work_end_time);
+
+        //if (start_test && end_test) {
+        //    DayOrderWork_tempArray.push(data);
+        //} else {
+        //    alert("시간을 바르게 입력해주세요");
+        //}
+
+    }
+
+    //작업방법 작업시간 그리드 상단 저장버튼 클릭시,
+    function DayOrderWork_OnToolbarPreparing(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+
+            if (item.name == "saveButton") {
+                item.options.onClick = function (args) {
+                    DayOrderWork_DetailProcSave();
+                };
+            }
+
+            //되돌리기 버튼 클릭시
+            if (item.name == "revertButton") {
+                item.options.onClick = function (args) {
+                    e.component.cancelEditData();
+                    DayOrderWork_tempArray = new Array();
+                };
+            }
+
+        });
+    }
+
+    //작업방법 db저장
+    async function DayOrderWork_DetailProcSave() {
+
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        await $("#DayOrderWorkDetailWorkGrid").dxDataGrid("instance").saveEditData();
+
+        if (DayOrderWork_tempArray.length > 0) {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/WorkSheetManage/DayOrderWork_DetailProcSave',
+                data: {
+                    paramData: JSON.stringify(DayOrderWork_tempArray)
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    var JsonData = JSON.parse(result);
+
+                    if (JsonData.message != "" || JsonData.message != null) {
+                        alert(JsonData.message);
+                    } else {
+                        alert("저장 실패하였습니다");
+                    }
+
+                    DayOrderWork_tempArray = new Array();
+                    DayOrderWork_editChek = true;
+
+                    DayOrderWorkEditCheck();
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/WorkSheetManage/DayOrderWorkSelectDetailWork',
+                        data: {
+                            order_no: DayOrderWorkFocusedDetailRow.data.order_no,
+                            order_proc_id: DayOrderWorkFocusedDetailRow.data.order_proc_id,
+                            order_detailproc_id: DayOrderWorkFocusedDetailRow.data.order_detailproc_id
+                        },
+                        dataType: 'json',
+                        async: false,
+                        success: function (result) {
+                            if (result.length > 0) {
+
+                                var JsonData = JSON.parse(result);
+
+                                if (JsonData.length > 0) {
+                                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", JsonData);
+                                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                                } else {
+                                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                                    $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                                }
+                            } else {
+                                $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "dataSource", []);
+                                $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "focusedRowIndex", -1);
+                            }
+
+                        }
+                    })
+
+                }
+            })
+
+
+        }
+
+    }
+
+
+    //그리드 수정기능 활성화, 비활성화
+    function DayOrderWorkEditCheck() {
+        if (!DayOrderWork_editChek) {
+            var editing = {
+                allowAdding: false,
+                allowUpdating: true,
+                allowDeleting: false,
+                mode: 'batch'
+            }
+            DayOrderWork_editChek = true;
+
+        } else {
+            var editing = {
+                allowAdding: false,
+                allowUpdating: false,
+                allowDeleting: false,
+                mode: 'batch'
+            }
+            DayOrderWork_editChek = false;
+
+        }
+
+        $("#DayOrderWorkDetailWorkGrid").dxDataGrid("option", "editing", editing);
+
+    }
+
+
+    //수정시, 첫번째 체크박스와 계산서일자만 수정가능하도록
+    //수정시, 포맷에 맞추어 시간 보이도록
+    function DayOrderWork_OnEditorPreparing(e) {
+        //시작시간,종료시간, type:selection(그리드 로우 선택 체크박스) 셀만 수정가능, 검색어입력 패널도 추가
+
+        if (e.parentType == "searchPanel") {
+            e.editorOptions.disabled = false;
+        }
+        else if ((e.parentType === "dataRow" && (e.dataField == "order_work_start_time" || e.dataField == "order_work_end_time") )) {
+
+            e.editorOptions.disabled = false;
+
+            if ((e.parentType === "dataRow" && e.dataField == "order_work_start_time" || e.dataField == "order_work_end_time")) {
+                var grid = $("#DayOrderWorkDetailWorkGrid").dxDataGrid("instance");
+
+                e.editorOptions.onValueChanged = function (args) {
+                    console.log(e);
+                    var date = new Date(args.value);
+                    var dateTime = date.format("yyyy-MM-dd HH:mm");
+
+                    var rowKey = e.row.data.order_work_id
+                    var rowIndex = grid.getRowIndexByKey(rowKey);
+                    grid.cellValue(rowIndex, e.dataField, dateTime);
+                }
+            }
+
+        } else {
+            e.editorOptions.disabled = true;
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @using (Html.DevExtreme().NamedTemplate("DayOrderWorkPopupTemplate"))
+    {
+        @*<form id="DayOrderWorkPopupForm">
+
+                <div class="input-wrapper">
+                    <div class="col-12 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="opt_0" name="opt" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="opt_1">통합리포트</label></span>
+                    </div>
+                </div>
+            </form>
+            <div class="align-center">
+                <button class="btn btn-secondary" onclick="DayOrderWorkViewReport()">확인</button>
+                <button class="btn btn-secondary" onclick="DayOrderWorkViewCancel()">취소</button>
+            </div>*@
+    }
+
+    @using (Html.DevExtreme().NamedTemplate("DayOrderWorkPopupTemplate_ISENS"))
+    {
+        <form id="DayOrderWorkPopupForm">
+
+                <div class="input-wrapper">
+                    <div class="col-12 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="opt_1" name="opt" />
+                            <span class="form-control-sm"><label for="opt_1">통합리포트</label></span>
+                            <input class="input-group-append" type="radio" value="5" id="opt_2" name="opt" checked />
+                            <span class="form-control-sm"><label for="opt_2">공정검사서</label></span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <div class="align-center">
+                <button class="btn btn-secondary" onclick="DayOrderWorkTotalReport_ISENS()">확인</button>
+                <button class="btn btn-secondary" onclick="DayOrderWorkViewCancel()">취소</button>
+            </div>
+    }
+
+    @(Html.DevExtreme().Popup()
+            .ID("DayOrderWorkPopup")
+            .Width(500)
+            .Height(150)
+            .ShowTitle(true)
+            .Title("제조기록서 미리보기")
+            .OnHidden("DayOrderWorkPopupClear")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("DayOrderWork_DateBoxTemplate"))
+    {
+        @(Html.DevExtreme().DateBox()
+        .Type(DateBoxType.DateTime)
+        .DisplayFormat("yyyy-MM-dd HH:mm")
+        .Value(new JS("value"))
+        )
+    }
+
+
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-group input-group-sm col-3">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">작업일자</span>
+                    </div>
+                    <input type="text" class="form-control datepicker text-center" name="sdate" value="@srch.sdate">
+                    <label class="p-1 m-0">~</label>
+                    <input type="text" class="form-control input-sm datepicker text-center" name="edate" value="@srch.edate">
+                </div>
+
+                <div class="input-group input-group-sm col-2">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">공정상태</span>
+                    </div>
+                    <select class="form-control" name="status">
+                        @foreach (DataRow row in ((DataTable)ViewBag.orderStatus).Rows)
+                        {
+                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                        }
+                    </select>
+                </div>
+            </form>
+            @*<button type="button" class="btn btn-secondary" onclick="DayOrderWorkTotalReport()">통합리포트 미리보기</button>*@
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Print;Preview;Excel"); }
+        </div>
+    </div>
+
+    <div class="row margin-bottom">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    //.KeyExpr("order_proc_id")
+                    .KeyExpr(DayWorkGridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(400)
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+
+                        c.Add().DataField("order_no").Caption("제조지시번호");
+                        c.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        c.Add().DataField("revision_no").Caption("개정번호");
+
+                        c.Add().DataField("process_nm").Caption("공정");
+                        c.Add().DataField("order_proc_make_status_nm").Caption("공정상태");
+                        //c.Add().DataField("order_detailproc_real_worker").Caption("작업자");
+                        //c.Add().DataField("order_detailproc_real_inspector").Caption("확인자");
+
+                        c.Add().DataField("order_proc_start_time").Caption("시작시각").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                        c.Add().DataField("order_proc_end_time").Caption("완료시각").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                        c.Add().DataField("grouping_cd_1").Caption("그룹코드").Width(70);
+
+                    })
+                .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                .OnToolbarPreparing("HideToolbarButton")
+                )
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-5 pr-0">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>세부공정 정보</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "DetailGrid")
+                        .KeyExpr("order_detailproc_id")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .Height(400)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("detailproc_nm").Caption("세부공정명");
+                            c.Add().DataField("order_detailproc_real_worker_nm").Caption("작업자");
+                            c.Add().DataField("order_detailproc_real_inspector_nm").Caption("확인자");
+                            c.Add().DataField("order_detailproc_status_nm").Caption("상태");
+                            c.Add().DataField("order_detailproc_start_time").Caption("시작시각").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                            c.Add().DataField("order_detailproc_end_time").Caption("완료시각").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm");
+                        })
+                        .OnFocusedRowChanged(pagePrefix + "DetailFocusChanged")
+                    )
+            </div>
+        </div>
+        <div class="col-7 pl-0">
+            <div class="box mb-0">
+                <div class="divName" id="DayOrderWork_DetailGridDiv">
+                    <p>작업방법 정보</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "DetailWorkGrid")
+                        .KeyExpr("order_work_id")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .Height(400)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            //c.Add().DataField("order_work_start_time").Caption("시작시간").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm").Width(120).EditCellTemplate(new TemplateName("DayOrderWork_DateBoxTemplate"));
+                            //c.Add().DataField("order_work_end_time").Caption("종료시간").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm").Width(120).EditCellTemplate(new TemplateName("DayOrderWork_DateBoxTemplate"));
+                            c.Add().DataField("order_work_start_time").Caption("시작시간").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm").Width(120);
+                            c.Add().DataField("order_work_end_time").Caption("종료시간").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm").Width(120);
+                            c.Add().DataField("order_work_method").Caption("작업방법").AllowEditing(false);
+                            c.Add().DataField("order_work_manual_data").Caption("결과값").AllowEditing(false);
+
+                        })
+                        .OnRowUpdated("DayOrderWork_OnRowUpdated")
+                        .OnToolbarPreparing("DayOrderWork_OnToolbarPreparing")
+                        .OnEditorPreparing("DayOrderWork_OnEditorPreparing")
+                    )
+
+            </div>
+        </div>
+    </div>
+</div>

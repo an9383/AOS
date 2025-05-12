@@ -1,0 +1,1066 @@
+﻿@*자재불출지시*@
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewBag.Title = "Packingorder_Request";
+
+    var PackingOrderRquest = @Html.Raw(Json.Encode(ViewBag.PackingOrderRquest.Data));
+    var Items = @Html.Raw(Json.Encode(ViewBag.Items.Data));
+
+}
+@{
+    string[] PackingOrderRequestGridKey = { "req_order_seq", "req_order_child_cd" };
+}
+
+<script id="Packingorder_RequestJs">
+
+    var _packingOrderRequestOrderNo = "";
+    var _packingOrderRequestReleaseData;
+    var _packingOrderRequestIsOK = false;
+
+    $(function () {
+
+        $("#PackingOrderRequestReleaseBtnGroup button").prop("disabled", true);
+
+        setDatePicker("#Packingorder_Request .datepicker");
+
+        if ((@PackingOrderRquest).length > 0) {
+            $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@PackingOrderRquest));
+            $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        var columns = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+
+        $("#Packingorder_RequestSearchForm input[name=sdate]").datepicker("update", '@ViewBag.sdate');
+        $("#Packingorder_RequestSearchForm input[name=edate]").datepicker("update", '@ViewBag.edate');
+
+        createPopup("PackingOrderRequestItem", "품목조회", @Items, columns);
+
+    });
+
+    // 조회용 제품 코드 팝업
+    function PackingOrderRequestSelectItem() {
+        $("#PackingOrderRequestItemPopup").dxPopup("instance").show();
+    }
+
+    // 제품 팝업 로우 더블클릭
+    function PackingOrderRequestItemRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("#Packingorder_RequestSearchForm input[name=item_cd]").val(data.item_cd);
+
+        var popup = $("#PackingOrderRequestItemPopup").dxPopup("instance");
+
+        popup.hide()
+    }
+
+    // 조회
+    function Packingorder_RequestSearch() {
+
+        var formData = $("#Packingorder_RequestSearchForm").serialize();
+
+        $.ajax({
+            type: 'GET',
+            url: '/PackingManage/SelectPackingOrderRequest',
+            data: formData,
+            dataType: 'json',
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        })
+    }
+
+    // 포장지시 그리드 포커스 변경
+    function PackingOrderRequestSelctPackingOrder() {
+        _packingOrderRequestOrderNo = "";
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data;
+        if (grid.totalCount() > 0) {
+            data = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+        } else {
+            return;
+        }
+
+        _packingOrderRequestOrderNo = data.packing_order_no;
+
+        $.ajax({
+            type: 'GET',
+            url: '/PackingManage/PackingOrderRequestSelectReleaseStandard',
+            data: {
+                packing_order_no: data.packing_order_no,
+                item_cd: data.sale_item_cd,
+                batch_size: data.batch_size_sub,
+                packing_order_qty: data.packing_order_qty
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    $("#PackingOrderRequestReleaseBtnGroup button").prop("disabled", true);
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                $("#PackingOrderRequestReleaseBtnGroup button").prop("disabled", false);
+
+            }
+        })
+    }
+
+    // 불출 기준 그리드 포커스 변경
+    function PackingOrderRequestSelctRelease() {
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+
+        if (grid.totalCount() > 0) {
+            var data = getGridRowByKey("PackingOrderRequestReleaseGrid", grid.option("focusedRowKey"));
+
+            if (data.req_order_id !== -1) {
+                PackingOrderRequestGetUsageData(data);
+            } else {
+                $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("focusedRowKey", "");
+            }
+
+            PackingOrderRequestGetCurrentStockData(data);
+
+        }
+    }
+
+    // 사용량 조회
+    function PackingOrderRequestGetUsageData(data) {
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'GET',
+            url: '/PackingManage/PackingOrderRequestSelectUsage',
+            data: {
+                packing_order_no: data.order_no,
+                req_order_gb: data.req_order_gb,
+                req_order_id: data.req_order_id
+            },
+            success: function (result) {
+
+                var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+
+                if (result.length <= 0) {
+
+                    grid.option("keyExpr", "req_order_seq");
+
+                    $("#PackingOrder_Request input[name=req_order_math]").val("");
+                    $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                $("#PackingOrder_Request input[name=req_order_math]").val(json[0].REQ_ORDER_MATH);
+            }
+        })
+    }
+
+    // 현재고 조회
+    function PackingOrderRequestGetCurrentStockData(data) {
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'GET',
+            url: '/PackingManage/PackingOrderRequestSelectCurrentStock',
+            data: {
+                material_item_cd: data.req_order_child_cd,
+                item_cd: gridData.sale_item_cd
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+
+                    $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingOrderRequestStockGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            }
+        })
+    }
+
+    // 사용량 자동계산
+    function PackingOrderRequestUsageAutoCalc(){
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data1 = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+        var data2 = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance").option("dataSource");
+
+
+        if (data2[0].req_order_status == "03") {
+            alert("이미 확정된 불출지시입니다.");
+            return;
+        }
+        if (data2[0].req_order_status == "01") {
+            alert("이미 계산이 완료되었습니다.");
+            return;
+        }
+
+        var isOK = confirm("사용량을 자동 계산하시겠습니까?");
+
+        if (!isOK) {
+            return;
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/PackingOrderRequestAutoCalcUsage',
+            async: false,
+            dataType: "json",
+            data: {
+                packingOrderRequests: JSON.stringify(data2),
+                packing_order_no: data1.packing_order_no,
+                sale_item_cd: data1.sale_item_cd
+            },
+            success: function (result) {
+                console.log(result);
+
+
+
+                if (result.result) {
+                    alert("계산 완료하였습니다.");
+                    return;
+                } else {
+                    alert("가용 재고량보다 투입량이 많습니다.");
+                    return;
+                }
+
+            }
+        })
+
+        PackingOrderRequestSelctPackingOrder();
+
+    }
+
+    // 사용량 전체 제거
+    function PackingOrderRequestDeleteRelease() {
+
+        if (!confirm("사용량을 전부 제거하시겠습니까?")) {
+            return;
+        }
+
+        var isOK = true;
+
+        //var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        //var data = getGridRowByKey("PackingOrderRequestReleaseGrid", grid.option("focusedRowKey"));
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+
+        if (data.gubun === "확정") {
+            alert("확정된 상태에서는 삭제할 수 없습니다.");
+            return;
+        }
+
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+
+        grid.getDataSource().store().load().done(function (data) {
+
+            for (var i = 0; i < data.length; i++) {
+                if (data[i].req_order_status === "03") {
+                    alertError("확정된 상태에서는 삭제할 수 없습니다.");
+                    isOK = false;
+                    return;
+                }
+            }
+        });
+
+        if (!isOK) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/PackingOrderRequestDeleteAllUsage',
+            data: {
+                order_no: data.packing_order_no
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert(json.result);
+
+                PackingOrderRequestSelctPackingOrder();
+            }
+        })
+
+    }
+
+    // 사용량 로우 추가버튼
+    function PackingOrderRequestUsageInitNew(e) {
+        var grid = $("#PackingOrderRequestStockGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("PackingOrderRequestStockGrid", grid.option("focusedRowKey"));
+
+        e.data.req_order_material_qc_no = data.receipt_qc_no3;
+    }
+
+    // 사용량 수정
+    function PackingOrderRequestUsageEdit(isEditing) {
+
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        var data = grid.option("dataSource");
+
+        _packingOrderRequestReleaseData = getGridRowByKey("PackingOrderRequestReleaseGrid", grid.option("focusedRowKey"));;
+
+        if (data[0].req_order_id === "-1") {
+            alert("모든 원료의 계산이 완료된 후 변경할 수 있습니다.\r\n자동 계산을 먼저 진행해 주십시오.");
+
+            return;
+        }
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data2 = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+
+        if (data2.gubun === "확정") {
+            alert("이미 확정된 불출지시입니다.");
+            return;
+        }
+
+        if (isEditing) {
+
+            var editing = {
+                allowAdding: true,
+                allowDeleting: true,
+                mode: 'row'
+            }
+
+            $("#PackingOrderRequestUsageGrid").dxDataGrid("option", "editing", editing);
+
+            $("#PackingOrderRequestUsageDiv1").addClass("display-none");
+            $("#PackingOrderRequestUsageDiv2").removeClass("display-none");
+
+            $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("option", "disabled", true);
+            $("#PackingOrderRequestReleaseGrid").dxDataGrid("option", "disabled", true);
+
+        } else {
+
+            var editing = {
+                allowAdding: false,
+                allowDeleting: false
+            }
+
+            $("#PackingOrderRequestUsageGrid").dxDataGrid("option", "editing", editing);
+
+            $("#PackingOrderRequestUsageDiv1").removeClass("display-none");
+            $("#PackingOrderRequestUsageDiv2").addClass("display-none");
+
+            $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("option", "disabled", false);
+            $("#PackingOrderRequestReleaseGrid").dxDataGrid("option", "disabled", false);
+        }
+    }
+
+    // 사용량 추가
+    function PackingOrderRequestUsageInsert(info) {
+
+        var totalQty = $("#PackingOrderRequestUsageGrid").dxDataGrid("instance").getTotalSummaryValue("req_order_material_qty");
+
+        var data = _packingOrderRequestReleaseData;
+
+        if (parseFloat(totalQty) + parseFloat(info.data.req_order_material_qty) > parseFloat(data.req_order_real_qty)) {
+            alert("사용할 양의 합계가 실투입량을 초과했습니다.");
+            info.cancel = true;
+            return;
+        }
+
+        info.data.order_no = data.order_no;
+        info.data.req_order_gb = data.req_order_gb;
+        info.data.req_order_id = data.req_order_id;
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/PackingOrderRequestInsertUsage',
+            dataType: "json",
+            data: { packingOrderRequest: JSON.stringify(info.data) },
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert(json.result);
+
+                PackingOrderRequestSelctRelease();
+            }
+        })
+
+    }
+
+    // 사용량 삭제
+    function PackingOrderRequestUsageDelete(info) {
+
+        var data = {
+            packing_order_no: _packingOrderRequestOrderNo,
+            req_order_gb: info.data.req_order_gb,
+            req_order_id: info.data.req_order_id,
+            req_order_material_id: info.data.req_order_material_id
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/PackingOrderRequestDeleteUsage',
+            data: { packingOrderRequest: JSON.stringify(data) },
+            dataType: "json",
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                alert(json.result);
+
+                PackingOrderRequestSelctRelease();
+            }
+        })
+
+    }
+
+    // 확정
+    function PackingOrderRequestReleaseConfirmation() {
+
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        if (grid.totalCount() <= 0) return;
+
+        var data = grid.option("dataSource");
+
+        for (var i = 0; i < data.length; i++) {
+            if (data[i].req_order_status == "03") {
+                alert("이미 확정되었습니다.");
+                return;
+            } else if (data[i].req_order_status != "01") {
+                alert("계산 완료되지 않은 항목이 있습니다.\r\n사용량 계산 버튼을 눌러 사용량 계산을 진행해 주십시오.");
+                return;
+            } 
+        }
+
+
+        if (data[0].req_order_id === "-1") {
+            alert("사용량을 입력해주세요.");
+
+            return;
+        }
+
+
+        if (!confirm("자재 사용량을 확정하시겠습니까?")) {
+            return;
+        }
+
+        _packingOrderRequestIsOK = true;
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/PackingOrderRequestSelectQty',
+            async: false,
+            dataType: "json",
+            data: {
+                packingOrderRequests: JSON.stringify(data),
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                PackingOrderRequestSelctPackingOrder();
+                PackingOrderRequestSelctRelease();
+                alert(json.result);
+            }
+        })
+
+        //for (var i = 0; i < data.length; i++) {
+
+        //    var tmpData = data[i];
+
+        //    $.ajax({
+        //        type: 'POST',
+        //        url: '/ProductionManage/PackingOrderRequestSelectQty',
+        //        data: {
+        //            order_no: data[i].order_no,
+        //            req_order_gb: data[i].req_order_gb,
+        //            req_order_id: data[i].req_order_id
+        //        },
+        //        async: false,
+        //        success: function (result) {
+
+        //            if (result.length <= 0) {
+        //                return;
+        //            }
+
+        //            var json = JSON.parse(result);
+
+        //            if (json.hasOwnProperty('sessionLoss')) {
+        //                alert("세션이 만료되었습니다.");
+        //                sessionStorage.clear();
+        //                location.replace("/Comm/Login");
+        //            }
+
+        //            if (parseFloat(tmpData.req_order_real_qty).toFixed(2) != json.result.toFixed(2)) {
+
+        //                alert((i + 1) + '번줄 [' + tmpData.req_order_child_cd + '] ' + tmpData.req_order_child_nm + '의 사용량이 실투입량보다 적습니다. \r\n확인 후 다시 시도해주십시오.');
+        //                _packingOrderRequestIsOK = false;
+
+        //                return;
+        //            }
+
+        //        }
+
+        //    })
+
+        //}
+
+        //if (!_packingOrderRequestIsOK) {
+
+        //    return;
+
+        //} else {
+
+        //    for (var i = 0; i < data.length; i++) {
+
+        //        var tmpData = data[i];
+
+        //        $.ajax({
+        //            type: 'POST',
+        //            url: '/ProductionManage/PackingOrderRequestConfirm',
+        //            data: {
+        //                order_no: data[i].order_no,
+        //                req_order_gb: data[i].req_order_gb,
+        //                req_order_id: data[i].req_order_id
+        //            },
+        //            async: false,
+        //            success: function (result) {
+
+        //                var json = JSON.parse(result);
+
+        //                if (json.result === "Fail") {
+        //                    alert("실패하였습니다.");
+        //                }
+
+        //                if (json.hasOwnProperty('sessionLoss')) {
+        //                    alert("세션이 만료되었습니다.");
+        //                    sessionStorage.clear();
+        //                    location.replace("/Comm/Login");
+        //                }
+
+        //            }
+
+        //        })
+
+        //    }
+
+        //    $.ajax({
+        //        type: 'POST',
+        //        url: '/ProductionManage/PackingOrderRequestFinalConfirm',
+        //        data: {
+        //            order_no: data[0].order_no
+        //        },
+        //        async: false,
+        //        success: function (result) {
+
+        //            if (result.length <= 0) {
+        //                return;
+        //            }
+
+        //            var json = JSON.parse(result);
+
+        //            if (json.hasOwnProperty('sessionLoss')) {
+        //                alert("세션이 만료되었습니다.");
+        //                sessionStorage.clear();
+        //                location.replace("/Comm/Login");
+        //            }
+
+        //            alert("확정되었습니다.");
+        //            PackingOrderRequestSelctPackingOrder();
+        //        }
+        //    })
+        //}
+    }
+
+    // 확정 취소
+    function PackingOrderRequestCancelReleaseConfirmation() {
+
+        var isOK = confirm("불출취소 하시겠습니까?");
+
+        if (!isOK) {
+            return;
+        }
+
+        var grid1 = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data1 = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid1.option("focusedRowKey"));
+
+        var grid2 = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        var data2 = getGridRowByKey("PackingOrderRequestReleaseGrid", grid2.option("focusedRowKey"));
+
+        console.log(data1);
+        console.log(data2);
+
+        if (data1.length <= 0) {
+            alert("불출지시 정보가 없습니다.");
+            return;
+        }
+
+        if (data2.length <= 0) {
+            alert("원료 투입 정보가 없습니다.");
+            return;
+        }
+
+        if (data2.req_order_status === "01") {
+            alert("불출취소는 불출작업이 완료된 것만 가능합니다.");
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/PackingManage/CancelReleaseConfirmation',
+            data: {
+                packing_order_no: data1.packing_order_no,
+                process_cd: data2.process_cd
+            },
+            success: function (result) {
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                console.log(result);
+                alert(json.result);
+
+                Packingorder_RequestSearch();
+                PackingOrderRequestSelctPackingOrder();
+
+            }
+        })
+    }
+
+    // 자재시험 현황
+    function PackingOrderRequestTestProgressStatus() {
+
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("PackingOrderRequestReleaseGrid", grid.option("focusedRowKey"));
+
+        var requestData = {
+            search_number: data.req_order_child_cd
+        };
+
+        $.ajax({
+            type: "POST",
+            url: '/ProductionManage/TestProgressStatus',
+            traditional: true,
+            data: requestData
+        }).done(function (response) {
+            var popup = $("#PackingOrderRequestTestProgressStatusPopup").dxPopup('instance');
+
+            popup.option("contentTemplate", function (content) {
+
+                content.append(response);
+            });
+
+            popup.show();
+
+        }).fail(function (data) {
+            alert("Failed: " + data.response);
+        });
+    }
+
+    // 자재재고현황
+    function PackingOrderRequestStockCheck() {
+
+        var grid = $("#PackingOrderRequestReleaseGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("PackingOrderRequestReleaseGrid", grid.option("focusedRowKey"));
+
+        var urlInfo = {
+            tabName: "자재재고현황",
+            tabId: "StockStatus2_P",
+            url: "/RowMatWh/StockStatus2_P"
+        };
+
+        var param = {
+            item_cd_S: data.req_order_child_cd
+        };
+
+        urlInfo.param = param;
+
+        openOtherPage(urlInfo);
+    }
+
+    function Packingorder_RequestExcel() {
+        gridExportToExcel("PackingOrderRequestReleaseGrid", "자재_불출지시_" + "@DateTime.Now.ToShortDateString()");
+    }
+
+    function Packingorder_RequestPrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var grid = $("#PackingOrderRequestPackingOrderGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("PackingOrderRequestPackingOrderGrid", grid.option("focusedRowKey"));
+
+        var packing_order_no = data.packing_order_no;
+
+        // report 출력
+        var report = new ReportHelper();
+        report.addParam({
+            objFile: { path: "PackingManage", RptFileName: "InputOrderRecordR" },
+            objSp: { SpName: "SP_Packingorder_Request", gubun: "R", reportParam: "packing_order_no:" + packing_order_no },
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: "Header,InputOrder" }
+        });
+
+        // 레포트테스트(생성객체확인)
+        report.testObj();
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+
+    function PackingorderRequestRelease_BackgroundColor(e) {
+        if (e.rowType == "data") {
+            var data = e.data;
+            if (data.req_order_status == "00" && (data.req_order_real_qty > data.available_inventory)) {
+                e.rowElement[0].style.backgroundColor = '#F77558';
+            }
+        }
+    }
+
+</script>
+
+<div id="Packingorder_Request">
+
+    <div id="PackingOrderRequestItemPopup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("PackingOrderRequestTestProgressStatusPopup")
+            .Width(1600)
+            .Height(900)
+            .ShowTitle(true)
+            .Title("시험진행 단계")
+            .Visible(false)
+            .DragEnabled(false)
+            .ContentTemplate(new TemplateName("popup-template"))
+        )
+    </div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="Packingorder_RequestSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate" value="@ViewBag.sdate">
+                        <input type="text" class="form-control datepicker" name="edate" value="@ViewBag.edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd" value="@ViewBag.item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="PackingOrderRequestSelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Excel;Preview;Print"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box-height-auto mb-1">
+                <div class="divName">
+                    <p>포장지시 정보</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderRequestPackingOrderGrid")
+                    .KeyExpr("packing_order_no")
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Height(200)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("gubun").Caption("확정여부");
+                        columns.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        columns.Add().DataField("packing_order_date").Caption("지시일자");
+                        columns.Add().DataField("sale_item_cd").Caption("코드");
+                        columns.Add().DataField("sale_item_nm").Caption("포장제품");
+                        columns.Add().DataField("lot_no").Caption("제조번호");
+                        columns.Add().DataField("packing_order_qty").Caption("지시수량");
+                        columns.Add().DataField("item_packunit").Caption("지시단위");
+                        columns.Add().DataField("batch_size_sub").Caption("포장단위");
+                        columns.Add().DataField("item_packunit2").Caption("단위");
+                        columns.Add().DataField("order_no").Caption("제조지시번호");
+                    })
+                    .OnFocusedRowChanged("PackingOrderRequestSelctPackingOrder")
+                    )
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-5 pr-1">
+            <div class="box mb-0">
+                <div class="divName">
+                    <p>불출기준</p>
+                </div>
+
+                <div id="PackingOrderRequestReleaseBtnGroup" style="text-align: end; margin: 5px;">
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestDeleteRelease()">사용량 전체 삭제</button>
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestTestProgressStatus()">자재시험현황</button>
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestStockCheck()">자재재고현황</button>
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestUsageAutoCalc()">사용량 자동계산</button>
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestReleaseConfirmation()">확정</button>
+                    <button class="btn btn-sm btn-secondary" onclick="PackingOrderRequestCancelReleaseConfirmation()">확정취소</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderRequestReleaseGrid")
+                    .KeyExpr(PackingOrderRequestGridKey)
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Height(561)
+                    .OnRowPrepared("PackingorderRequestRelease_BackgroundColor")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("process_nm").Caption("공정");
+                        columns.Add().DataField("req_order_child_cd").Caption("자재코드");
+                        columns.Add().DataField("req_order_child_nm").Caption("자재명");
+                        columns.Add().DataField("req_order_child_packunit").Caption("단위");
+                        columns.Add().DataField("req_order_real_qty").Caption("실투입량")
+                                .Format("#,##0.000");
+                        columns.Add().DataField("req_order_status_nm").Caption("상태");
+                        columns.Add().DataField("remark").Caption("비고");
+                    })
+                    .OnFocusedRowChanged("PackingOrderRequestSelctRelease")
+                )
+            </div>
+        </div>
+
+        <div class="col-7 pl-0 mb-0">
+            <div class="box-height-auto mb-1">
+                <div class="divName">
+                    <p>사용량</p>
+                </div>
+
+                <div id="PackingOrderRequestUsageDiv1" style="text-align: end; margin: 5px;">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="PackingOrderRequestUsageEdit(true)">사용량 수정</button>
+                </div>
+                <div id="PackingOrderRequestUsageDiv2" style="text-align: end; margin: 5px;" class="display-none">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="PackingOrderRequestUsageEdit(false)">확인</button>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderRequestUsageGrid")
+                    .KeyExpr("req_order_material_id")
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Height(200)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                        {
+                            columns.Add().DataField("req_order_material_qc_no").Caption("시험번호");
+                            columns.Add().DataField("req_order_material_qty").Caption("사용할 양")
+                                .DataType(GridColumnDataType.Number)
+                                .Format("#,##0.000");
+                            columns.Add().DataField("qc_remark").Caption("비고");
+                        })
+                    .Summary(s =>
+                        s.TotalItems(items =>
+                            {
+                                items.Add()
+                                .Column("req_order_material_qty")
+                                        .ShowInColumn("req_order_material_qty")
+                                        .ValueFormat(Format.Decimal)
+                                        .SummaryType(SummaryType.Sum);
+                            })
+                        )
+                    .OnRowInserting("PackingOrderRequestUsageInsert")
+                    .OnRowRemoving("PackingOrderRequestUsageDelete")
+                    .OnInitNewRow("PackingOrderRequestUsageInitNew")
+                )
+            </div>
+
+            <div class="box-height-auto mb-0">
+                <div class="divName">
+                    <p>현재고</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderRequestStockGrid")
+                    .KeyExpr("receipt_qc_no3")
+                    .AllowColumnResizing(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Height(320)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("receipt_qc_no3").Caption("시험번호");
+                        columns.Add().DataField("warehouse_usable_qty").Caption("가용재고")
+                            .DataType(GridColumnDataType.Number)
+                            .Format("#,##0.000");
+                        columns.Add().DataField("remark").Caption("비고");
+                    })
+                    .Summary(s =>
+                        s.TotalItems(items =>
+                            {
+                                items.Add()
+                                .Column("warehouse_usable_qty")
+                                    .ShowInColumn("warehouse_usable_qty")
+                                    .ValueFormat(Format.Decimal)
+                                    .SummaryType(SummaryType.Sum);
+                            })
+                        )
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

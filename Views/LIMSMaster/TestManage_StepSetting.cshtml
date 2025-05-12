@@ -1,0 +1,709 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    var programGridData = @Html.Raw(Json.Encode(ViewBag.programGridData.Data));
+}
+
+@{
+    string[] TestManageStepSettingGridKey = { "test_type", "process_kind", "test_process_set_seq" };
+    string[] TestManageStepSettingGridKey2 = { "test_type", "program_cd" };
+}
+
+@*시험 관리 단계 설정*@
+
+<script id="@(pagePrefix)Js">
+
+    var _testManageStepSettingCRUDStatus = "";
+    var _testManageStepSettingProgramChanges = new Array();
+
+    $(function () {
+
+        TestManage_StepSettingEditCheck(false, 'N');
+
+        if ((@programGridData).length > 0) {
+            $("#TestManage_StepSettingProgram2Grid").dxDataGrid("option", "dataSource", JSON.parse(@programGridData));
+        } else {
+            $("#TestManage_StepSettingProgram2Grid").dxDataGrid("option", "dataSource", []);
+        }
+
+        $('input[name=program_cd]+div>button', $('#' + "TestManage_StepSettingWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.program', '프로그램 조회', 'form_cd', $("#TestManage_StepSettingWriteForm input[name=program_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=program_cd]", $('#' + "TestManage_StepSettingWriteForm")).val(selectedItems.form_cd);
+                    $("input[name=program_nm]", $('#' + "TestManage_StepSettingWriteForm")).val(selectedItems.form_nm);
+                }
+            );
+        });
+
+        $('input[name=sign_set_cd]+div>button', $('#' + "TestManage_StepSettingWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.sign_set', '서명 조회', 'sign_set_cd', $("#TestManage_StepSettingWriteForm input[name=sign_set_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=sign_set_cd]", $('#' + "TestManage_StepSettingWriteForm")).val(selectedItems.sign_set_cd);
+                    $("input[name=sign_set_nm]", $('#' + "TestManage_StepSettingWriteForm")).val(selectedItems.sign_set_nm);
+                }
+            );
+        });
+
+        $("#TestManage_StepSettingSelectBox1").show();
+        $("#TestManage_StepSettingSelectBox2").hide();
+
+        TestManage_StepSettingSearch();
+
+    });
+
+    // 수정중인지 체크
+    function TestManage_StepSettingEditCheck(nowEdit, status) {
+
+        UtilView.setActiveElementToolbar(nowEdit
+            , "TestManage_StepSettingToolbar"
+            , "TestManage_StepSetting"
+        );
+
+        UtilView.setActiveElementFormId(nowEdit
+            , status
+            , "TestManage_StepSettingWriteForm"
+            , "curr_status");
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+        var tabs = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance");
+
+        _testManageStepSettingCRUDStatus = status;
+
+        if (nowEdit) {
+
+            for (var i = 0; i < 3; i++) {
+                if (tabIndex === i) {
+                    continue;
+                }
+                tabs.option("items[" + i + "].disabled", true);
+            }
+
+            if (tabIndex < 2)
+                $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance").option("disabled", true);
+
+        } else {
+
+            for (var i = 0; i < 3; i++) {
+                tabs.option("items[" + i + "].disabled", false);
+            }
+            if (tabIndex < 2)
+                $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance").option("disabled", false);
+
+            var editing = {
+                allowUpdating: false
+            }
+
+            $("#TestManage_StepSettingProgram1Grid").dxDataGrid("option", "editing", editing);
+
+            _testManageStepSettingProgramChanges = new Array();
+        }
+    }
+
+    // 탭 선택 변경
+    function TestManage_StepSettingChangeTab() {
+
+        TestManage_StepSettingSearch();
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        switch (tabIndex) {
+            case 0:
+                $("#TestManage_StepSettingSelectBox1").show();
+                $("#TestManage_StepSettingSelectBox2").hide();
+                break;
+
+            case 1:
+                $("#TestManage_StepSettingSelectBox1").hide();
+                $("#TestManage_StepSettingSelectBox2").show();
+                break;
+
+            default:
+                return;
+        }
+
+        var grid = $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            grid.option("focusedRowIndex", 0);
+        } else {
+            TestManage_StepSettingFocusChanged();
+        }
+    }
+
+    // 포커스 변경
+    function TestManage_StepSettingFocusChanged() {
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+        UtilView.setDataGridFormBind("TestManage_StepSettingTab" + (tabIndex + 1) + "Grid", "TestManage_StepSettingWriteForm");
+    }
+
+    // 입력폼 비우기
+    function TestManage_StepSettingWriteFormClear() {
+        $('#' + "TestManage_StepSettingWriteForm")[0].reset();
+    }
+
+    // 프로그램 추가/제거
+    function TestManage_StepSettingEditProgram(num) {
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        var grid = $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            grid.option("focusedRowIndex", 0);
+        }
+
+        switch (num) {
+            case 1:
+
+                var key = $("#TestManage_StepSettingProgram2Grid").dxDataGrid("option", "focusedRowKey");
+
+                TestManage_StepSettingEditCheck(true, 'I1');
+                TestManage_StepSettingSave(key);
+
+                break;
+
+            case 2:
+
+                var key = $("#TestManage_StepSettingProgram1Grid").dxDataGrid("option", "focusedRowKey");
+
+                TestManage_StepSettingEditCheck(true, 'D1');
+                TestManage_StepSettingSave(key.program_cd);
+
+                break;
+        }
+    }
+
+    // 복사하기
+    function TestManage_StepSettingCopyDetial() {
+
+        if (!confirm("기존 기록은 삭제됩니다. 복사를 진행하시겠습니까?")) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestManage_StepSettingCopy',
+            data: {
+                test_type: $("#TestManage_StepSettingSearchForm select[name=test_type]").val(),
+                from_test_type: $("#TestManage_StepSettingTabPanel select[name=test_type]").val()
+            },
+            success: function (result) {
+
+                if (result.message.length > 0) {
+
+                    alert(result.message);
+                    TestManage_StepSettingSearch();
+
+                } else {
+                    alert("오류가 발생했습니다.");
+                }
+            }
+        })
+    }
+
+
+    // --- 툴바 클릭 이벤트 관련 START ----------------------------------------------------------------------------------------------------------------
+
+    // 조회
+    function TestManage_StepSettingSearch() {
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        $.ajax({
+            type: 'GET',
+            url: '/LIMSMaster/TestManage_StepSettingSelect',
+            dataType: "json",
+            async: false,
+            data: {
+                test_type: $("#TestManage_StepSettingSearchForm select[name=test_type]").val(),
+                process_kind: (tabIndex + 1)
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData1 = JSON.parse(result[0]);
+                    $("#TestManage_StepSettingTab" + (tabIndex+1) + "Grid").dxDataGrid("option", "dataSource", jsonData1);
+                } catch(e){
+                    $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("option", "dataSource", []);
+                }
+
+                try {
+                    var jsonData2 = JSON.parse(result[1]);
+                    $("#TestManage_StepSettingProgram1Grid").dxDataGrid("option", "dataSource", jsonData2);
+                } catch (e) {
+                    $("#TestManage_StepSettingProgram1Grid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        })
+    }
+
+    // 입력
+    function TestManage_StepSettingInput() {
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        if (tabIndex > 1) {
+            return;
+        }
+
+        TestManage_StepSettingEditCheck(true, 'I');
+        TestManage_StepSettingWriteFormClear();
+    }
+
+    // 수정
+    function TestManage_StepSettingEdit() {
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        if (tabIndex > 1) {
+            return;
+        }
+
+        var grid = $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            grid.option("focusedRowIndex", 0);
+        }
+
+        TestManage_StepSettingEditCheck(true, 'U');
+
+        var editing = {
+            allowUpdating: true,
+            mode: 'batch'
+        }
+
+        $("#TestManage_StepSettingProgram1Grid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 삭제
+    function TestManage_StepSettingDelete() {
+        TestManage_StepSettingEditCheck(true, 'D');
+        TestManage_StepSettingSave();
+    }
+
+    // 저장
+    async function TestManage_StepSettingSave(program_Cd) {
+
+        if (UtilView.checkValidForm("TestManage_StepSettingWriteForm")) {
+            var form = $('#TestManage_StepSettingWriteForm')[0];
+            var formData = new FormData(form);
+
+            if (typeof(program_Cd) === "string") {
+
+                formData.set("program_cd", program_Cd);
+            }
+
+            var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+            // form에 추가할 속성
+            var appendData = {
+                "test_type": $('select[name=test_type]', $('#' + 'TestManage_StepSettingSearchForm')).val(),
+                "process_kind": tabIndex + 1,
+                "gubun": _testManageStepSettingCRUDStatus
+            };
+
+            for (var key in appendData) {
+                formData.append(key, appendData[key]);
+            }
+
+            await $("#TestManage_StepSettingProgram1Grid").dxDataGrid("instance").saveEditData();
+
+            $.ajax({
+                type: 'POST',
+                url: '/LIMSMaster/TestManage_StepSettingTRX',
+                async: false,
+                processData: false,
+                contentType: false,
+                data: formData,
+                success: function (result) {
+
+                    if (result.message.length > 0) {
+
+                        if (_testManageStepSettingProgramChanges.length > 0) {
+                            TestManage_StepSettingSaveProgramCnt();
+                        } else {
+                            alert(result.message);
+                            TestManage_StepSettingSearch();
+                        }
+
+                    } else {
+                        alert("오류가 발생했습니다.");
+                    }
+                }
+            })
+        }
+
+        TestManage_StepSettingEditCheck(false, 'N');
+    }
+
+    // 취소
+    function TestManage_StepSettingUndo() {
+        TestManage_StepSettingEditCheck(false, 'N');
+
+        var tabIndex = $("#TestManage_StepSettingTabPanel").dxTabPanel("instance").option("selectedIndex");
+
+        var grid = $("#TestManage_StepSettingTab" + (tabIndex + 1) + "Grid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            grid.option("focusedRowIndex", 0);
+        } else {
+            TestManage_StepSettingFocusChanged();
+        }
+
+    }
+
+    // --- 툴바 클릭 이벤트 관련 END -------------------------------------------------------------------------------------------------------------------
+
+
+    // --- 프로그램 그리드 수정 START -----------------------------------------------------------------------------------------------------------------
+
+    // 그리드 수정사항 지역변수에 push
+    function TestManage_StepSettingEditProgramCnt(info) {
+
+        var data = info.data;
+
+        data.gubun = "U1";
+
+        _testManageStepSettingProgramChanges.push(data);
+    }
+
+    // 그리드 수정사항 저장
+    function TestManage_StepSettingSaveProgramCnt() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/LIMSMaster/TestManage_StepSettingSaveProgramCnt',
+            async: false,
+            data: {
+                programData: JSON.stringify(_testManageStepSettingProgramChanges)
+            },
+            success: function (result) {
+
+                if (result.message.length > 0) {
+
+                    alert(result.message);
+                    TestManage_StepSettingSearch();
+
+                } else {
+                    alert("오류가 발생했습니다.");
+                }
+            }
+        })
+    }
+
+    // --- 프로그램 그리드 수정 END ------------------------------------------------------------------------------------------------------------------
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)ProgramPopup"></div>
+    <div id="@(pagePrefix)SignSetPopup"></div>
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="test_type" onchange="TestManage_StepSettingSearch()">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "NO", "QC004")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+
+        </div>
+    </div>
+
+    <div class="row">
+
+        <div class="col-3 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().TabPanel()
+                    .ID("TestManage_StepSettingTabPanel")
+                    .Height(869)
+                    .SelectedIndex(0)
+                    .Loop(false)
+                    .AnimationEnabled(false)
+                    .SwipeEnabled(false)
+                    .OnTitleClick("TestManage_StepSettingChangeTab")
+                    .Items(config =>
+                    {
+                        config.Add().Title("시험관리").Template(new JS("$('#TestManage_StepSettingTabContent1')"));
+                        config.Add().Title("샘플관리").Template(new JS("$('#TestManage_StepSettingTabContent2')"));
+                        config.Add().Title("설정복사").Template(new JS("$('#TestManage_StepSettingTabContent3')"));
+                    })
+                )
+
+                @using (Html.DevExtreme().NamedTemplate("TestManage_StepSettingTabContent1"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Tab1Grid")
+                        .KeyExpr(TestManageStepSettingGridKey)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(830)
+                        .ShowBorders(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("test_process_set_seq").Caption("순서");
+                            c.Add().DataField("curr_status_nm").Caption("상태");
+                            c.Add().DataField("next_status_nm").Caption("다음상태");
+                        })
+                        .OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                    )
+                }
+
+                @using (Html.DevExtreme().NamedTemplate("TestManage_StepSettingTabContent2"))
+                {
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Tab2Grid")
+                        .KeyExpr(TestManageStepSettingGridKey)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height(830)
+                        .ShowBorders(true)
+                        .FocusedRowEnabled(true)
+                        .FocusedRowIndex(0)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("test_process_set_seq").Caption("순서");
+                            c.Add().DataField("curr_status_nm").Caption("상태");
+                            c.Add().DataField("next_status_nm").Caption("다음상태");
+                        })
+                        .OnFocusedRowChanged("TestManage_StepSettingFocusChanged")
+                    )
+                }
+
+                @using (Html.DevExtreme().NamedTemplate("TestManage_StepSettingTabContent3"))
+                {
+                    <div class="menuDiv">
+                        <div class="input-wrapper mb-1">
+                            <label class="col-4">시험종류</label>
+                            <div class="input-group col-7">
+                                <select class="form-control" name="test_type">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC004")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="align-end">
+                            <button class="btn btn-secondary" onclick="TestManage_StepSettingCopyDetial()">설정 복사하기</button>
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </div>
+
+        <div class="col-9 pl-0">
+
+            <div class="box-height-auto mb-1">
+
+                <div class="divName">
+                    <p>시험관리단계정보</p>
+                </div>
+
+                <form id="@(pagePrefix)WriteForm" class="required-star menuDiv">
+
+                    <div id="TestManage_StepSettingSelectBox1">
+                        <div class="input-wrapper">
+                            <label class="col-1">단계(상태)</label>
+                            <div class="input-group col-2">
+                                <select class="form-control required" name="curr_status">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC007")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-1">다음단계</label>
+                            <div class="input-group col-2">
+                                <select class="form-control required" name="next_status">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC007")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="TestManage_StepSettingSelectBox2">
+                        <div class="input-wrapper">
+                            <label class="col-1">단계(상태)</label>
+                            <div class="input-group col-2">
+                                <select class="form-control required" name="curr_status">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC021")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-1">다음단계</label>
+                            <div class="input-group col-2">
+                                <select class="form-control required" name="next_status">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC021")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-1">단계순서</label>
+                        <div class="input-group col-2">
+                            <input type="number" class="form-control required" name="test_process_set_seq" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-1">프로그램</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control searchPopupInput required" name="program_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="program_nm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-1">서명코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control searchPopupInput" name="sign_set_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="sign_set_nm" readonly>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+
+            <div class="display-flex" style="height:655px;">
+
+                <div class="box col-5 mr-1 pr-0 pl-0">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Program1Grid")
+                        .KeyExpr(TestManageStepSettingGridKey2)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("100%")
+                        .ShowBorders(true)
+                        .FocusedRowEnabled(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("program_cd").Caption("코드");
+                            c.Add().DataField("program_nm").Caption("출력물");
+                            c.Add().DataField("default_rpt_cnt").Caption("횟수").DataType(GridColumnDataType.Number)
+                                .ValidationRules(vr => vr.AddRange().Min(1)
+                                .Message("횟수는 0보다 커야 합니다."))
+                                .ValidationRules(vr => vr.AddRequired()
+                                .Message("횟수는 필수 입력값 입니다."));
+                        })
+                        .OnRowUpdated("TestManage_StepSettingEditProgramCnt")
+                        .OnToolbarPreparing("HideToolbarButton")
+                    )
+                </div>
+
+                <div class="col-1" style="padding-top:25px;">
+                    <button class="btn btn-primary addBtn" onclick="TestManage_StepSettingEditProgram(1)">
+                        @(Html.DevExtreme().Button()
+                            .ID("TestManageLeftArrow")
+                            .Icon("arrowleft")
+                        )
+                    </button>
+
+                    <button class="btn btn-danger removeBtn" onclick="TestManage_StepSettingEditProgram(2)">
+                        @(Html.DevExtreme().Button()
+                            .ID("TestManageRightArrow")
+                            .Icon("arrowright")
+                        )
+                    </button>
+                </div>
+
+                <div class="box col-6 ml-1 pr-1 pl-0">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID(pagePrefix + "Program2Grid")
+                        .KeyExpr("form_cd")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("100%")
+                        .ShowBorders(true)
+                        .FocusedRowEnabled(true)
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("form_cd").Caption("코드");
+                            c.Add().DataField("form_nm").Caption("프로그램");
+                        })
+                    )
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

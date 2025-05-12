@@ -1,0 +1,1063 @@
+﻿@*포장실적 등록*@
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    var PackingResult_Edit2Auth = Html.Raw(Json.Encode(ViewBag.PackingResult_Edit2Auth.Data));
+    var PackingResultData = Html.Raw(Json.Encode(ViewBag.PackingResultData.Data));
+    var Items = @Html.Raw(Json.Encode(ViewBag.Items.Data));
+}
+
+@{ 
+    string[] PackingResult_Edit2GridKey = { "packing_order_no", "packing_order_work_date" };
+}
+
+@*포장실적 등록*@
+
+    <script id="@(pagePrefix)Js">
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        var _packingResultEdit2FocusdRowData = "";
+        var _packingResultEdit2CRUDStatus = "";
+
+        $(function () {
+            if ((@PackingResultData).length > 0) {
+
+                $("#PackingResult_Edit2Grid").dxDataGrid("option", "dataSource", JSON.parse(@PackingResultData));
+                $("#PackingResult_Edit2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#PackingResult_Edit2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup(PagePrefix + "Item", "제품 조회", @Items, popupColumns);
+
+            setDatePicker("#PackingResult_Edit2 .datepicker");
+
+            PackingResult_Edit2EditCheck(false, 'N');
+
+        });
+
+        // 수정중인지 체크
+        function PackingResult_Edit2EditCheck(nowEdit, status) {
+
+            if (nowEdit) {
+                // 툴바 활성/비활성
+                $('#PackingResult_Edit2Save,   #PackingResult_Edit2Undo').dxButton().parent().parent().removeClass("display-none");
+                $('#PackingResult_Edit2Search,#PackingResult_Edit2Edit').dxButton().parent().parent().addClass("display-none");
+
+                var sGrid = $("#PackingResult_Edit2Grid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("PackingResult_Edit2Grid", sGrid.option("focusedRowKey"));
+
+                //그리드 및 폼 활성/비활성
+                $('#PackingResult_Edit2Grid').dxDataGrid("instance").option("disabled", true);
+                $('input', $("#PackingResult_Edit2WriteForm")).prop("disabled", false);
+
+                $("#PackingResult_Edit2WriteForm" + ' .datepicker').datepicker({
+                    format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                    startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+                    endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+                    autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+                    templates: {
+                        leftArrow: '&laquo;',
+                        rightArrow: '&raquo;'
+                    }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                    showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+                    todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                    toggleActive: true,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                    weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                    language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+                });
+
+            }
+            else {
+                // 툴바 활성/비활성
+                $('#PackingResult_Edit2Save,#PackingResult_Edit2Undo').dxButton().parent().parent().addClass("display-none");
+                $('#PackingResult_Edit2Search,#PackingResult_Edit2Edit').dxButton().parent().parent().removeClass("display-none");
+
+
+                //그리드 및 폼 활성/비활성
+                $('#PackingResult_Edit2Grid').dxDataGrid("instance").option("disabled", false);
+                $("input", $("#PackingResult_Edit2WriteForm")).prop("disabled", true);
+
+            }
+        }
+
+        // 검색용 포장제품 팝업
+        function PackingResult_Edit2SelectItem() {
+            $("#PackingResult_Edit2ItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 포장제품 팝업
+        function PackingResult_Edit2ItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#PackingResult_Edit2SearchForm input[name=s_item_cd]").val(data.item_cd);
+            $("#PackingResult_Edit2SearchForm input[name=s_item_nm]").val(data.item_nm);
+
+            $("#PackingResult_Edit2ItemPopup").dxPopup("instance").hide();
+
+        }
+
+        // 포장지시 그리드 포커스 변경
+        function PackingResult_Edit2FocusChanged() {
+
+            var sGrid = $("#PackingResult_Edit2Grid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("PackingResult_Edit2Grid", sGrid.option("focusedRowKey"));
+
+            _packingResultEdit2FocusdRowData = gridData;
+
+            var data = {
+                packing_order_no: gridData.packing_order_no
+            }
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/PackingResultEdit2SelectPackingResult',
+                async: false,
+                dataType: 'json',
+                data: data,
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingResult_Edit2PackingGrid").dxDataGrid("option", "dataSource", []);
+                        $("#PackingResult_Edit2PackingGrid").dxDataGrid("option", "focusedRowKey", "");
+                        $("#PackingResult_Edit2WriteForm")[0].reset();
+
+                        $('#PackingResult_Edit2Edit').dxButton().parent().parent().addClass("display-none");
+
+                        return;
+                    }
+
+                    $('#PackingResult_Edit2Edit').dxButton().parent().parent().removeClass("display-none");
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#PackingResult_Edit2PackingGrid").dxDataGrid("option", "dataSource", json);
+                    $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            });
+        }
+
+        // 포장실적 그리드 포커스 변경
+        function PackingResult_Edit2PackingFocusChanged() {
+
+            var sGrid = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey(PagePrefix + "PackingGrid", sGrid.option("focusedRowKey"));
+
+            $("#PackingResult_Edit2WriteForm")[0].reset();
+
+            $("#PackingResult_Edit2WriteForm" + " input[name=packing_date]").val(gridData.packing_date).datepicker("update");
+            $("#PackingResult_Edit2WriteForm" + " input[name=lot_date]").val(gridData.lot_date).datepicker("update");
+            $("#PackingResult_Edit2WriteForm" + " input[name=receive_qty]").val(gridData.receive_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=end_date]").val(gridData.end_date).datepicker("update");
+            $("#PackingResult_Edit2WriteForm" + " input[name=bulk_use_qty]").val(gridData.bulk_use_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=remain_qty]").val(gridData.remain_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=packing_qty]").val(gridData.packing_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=disuse_qty]").val(gridData.disuse_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=test_sample_qty]").val(gridData.test_sample_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=deposit_sample_qty]").val(gridData.deposit_sample_qty);
+            $("#PackingResult_Edit2WriteForm" + " input[name=result_emp_cd]").val(gridData.result_emp_cd);
+            $("#PackingResult_Edit2WriteForm" + " input[name=result_emp_nm]").val(gridData.result_emp_nm);
+
+        }
+
+        // 조회
+        function PackingResult_Edit2Search() {
+
+            var data = $("#PackingResult_Edit2SearchForm").serialize();
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/PackingResultEdit2SelectPackingOrder',
+                async: false,
+                dataType: 'json',
+                data: data,
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingResult_Edit2Grid").dxDataGrid("option", "dataSource", []);
+                        $("#PackingResult_Edit2Grid").dxDataGrid("option", "focusedRowKey", "");
+
+                        $("#PackingResult_Edit2PackingGrid").dxDataGrid("option", "dataSource", []);
+                        $("#PackingResult_Edit2PackingGrid").dxDataGrid("option", "focusedRowKey", "");
+
+                        $("#PackingResult_Edit2WriteForm")[0].reset();
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    console.log(json);
+
+                    $("#PackingResult_Edit2Grid").dxDataGrid("option", "dataSource", json);
+                    $("#PackingResult_Edit2Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#PackingResult_Edit2Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            });
+
+        }
+
+        // 수정
+        function PackingResult_Edit2Edit() {
+
+            debugger;
+            _packingResultEdit2FocusdRowData = "";
+
+            var grid1 = $("#PackingResult_Edit2Grid").dxDataGrid("instance");
+            var data1 = getGridRowByKey("PackingResult_Edit2Grid", grid1.option("focusedRowKey"));
+
+            var grid2 = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+            var data2 = getGridRowByKey("PackingResult_Edit2PackingGrid", grid2.option("focusedRowKey"));
+
+            //포장지시상태 완료일 때 수정 못함
+            if (data1.packing_order_status !== "5") {
+                //포장실적등록 리스트의 선택항목이 이미 시험접수가 되었다면 수정 막는다. (END_TESTCONTROL_ID로 판단)    --코스맥스20141031수정
+                if (data2.testrequest_no == null || typeof (data2.testrequest_no) === "undefined" || data2.testrequest_no === "") {
+
+                    PackingResult_Edit2EditCheck(true, 'U');
+
+                    _packingResultEdit2CRUDStatus = "U";
+
+                    _packingResultEdit2FocusdRowData = data1;
+
+                }
+                else {
+                    alert("이미 시험의뢰가 되어 수정하실 수 없습니다.");
+                    return;
+                }
+            }
+            else {
+                alert("포장지시상태가 완료일 경우 수정하실 수 없습니다");
+                return;
+            }
+
+        }
+
+        //삭제
+        //function PackingResult_Edit2Delete() {
+
+        //    var grid1 = $("#PackingResult_Edit2Grid").dxDataGrid("instance");
+        //    var grid2 = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+
+        //    if (grid2.option("dataSource").length < 1) return;         // 그리드 데이타 유무 체크
+
+        //    var data1 = getGridRowByKey("PackingResult_Edit2Grid", grid1.option("focusedRowKey"));
+        //    var data2 = getGridRowByKey(PagePrefix + "PackingGrid", grid2.option("focusedRowKey"));
+
+        //    //시험 의뢰 후 접수전 데이터 삭제 불가하게 막아 놓음.
+        //    if (data1.packing_order_status === "시험중") {
+        //        alert("시험이 의뢰된 데이터는 삭제가 불가능 합니다!!!!");
+        //        return;
+        //    }
+
+        //    //시험의뢰번호가 있을 경우 삭제할 수 없음.
+        //    if (data2.testrequest_no == null || typeof (data2.testrequest_no) === "undefined" || data2.testrequest_no === "") {
+
+        //        if (data2.gubun === 1) //제품라벨출력에서 입력된 "실적미등록" 내용은 삭제할 수 없다.)
+        //        {
+        //            alert("실적미등록 상태는 삭제할 수 없습니다.");
+        //            return;
+        //        }
+        //        if (confirm("삭제하시겠습니까?")) {
+
+        //            //포장지시 상태인데 시험이 승인이 되어 삭제 되는부분 막아 놓음. gv_order만으로 lock 불가능.
+        //            if (data2.TEST_STATUS != null && typeof (data2.TEST_STATUS) !== "undefined" && data2.TEST_STATUS !== "") {
+        //                alert("시험이 의뢰된 데이터는 삭제가 불가능 합니다!!!!");
+        //                return;
+        //            }
+
+        //            $.ajax({
+        //                type: 'POST',
+        //                url: '/PackingManage/PackingResult_Edit2TRX',
+        //                async: false,
+        //                dataType: 'json',
+        //                data: {
+        //                    packing_result_id: data2.packing_result_id,
+        //                    gubun: "D"
+        //                },
+        //                success: function (result) {
+
+        //                    if (result.length < 1) {
+        //                        alert("지함이 이미 생성되었습니다. 포장실적을 수정하거나 삭제할 수 없습니다.");
+        //                        return;
+        //                    }
+
+        //                    var json = JSON.parse(result);
+
+        //                    if (json.hasOwnProperty('sessionLoss')) {
+        //                        alert("세션이 만료되었습니다.");
+        //                        sessionStorage.clear();
+        //                        location.replace("/Comm/Login");
+        //                    }
+
+        //                    PackingResult_Edit2Search();
+
+        //                }
+        //            });
+        //        }
+        //    } else {
+        //        alert("시험의뢰가 되어 삭제할 수 없습니다.");
+        //        return;
+        //    }
+
+        //}
+
+        // 저장
+        function PackingResult_Edit2Save() {
+
+            if (UtilView.checkValidForm(FormNmWrite)) {
+                debugger;
+                var grid = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+                var data = getGridRowByKey(PagePrefix + "PackingGrid", grid.option("focusedRowKey"));
+
+                if (data.gubun === 1) gubun = "I2";
+
+                var form = $("#PackingResult_Edit2WriteForm")[0];
+                var formData = new FormData(form);
+
+                var resValue = 0;
+
+                formData.set("packing_result_id", data.packing_result_id);
+                formData.set("lot_no", _packingResultEdit2FocusdRowData.lot_no);
+                formData.set("item_cd", _packingResultEdit2FocusdRowData.sale_item_cd);
+                formData.set("packing_order_no", _packingResultEdit2FocusdRowData.packing_order_no);
+                formData.set("item_stock_id", data.item_stock_id);
+                formData.set("gubun", "U");
+
+                UtilView.dataGridTRX(formData, () => PackingResult_Edit2Search());
+
+                PackingResult_Edit2EditCheck(false, 'N');
+
+                _packingResultEdit2CRUDStatus = "";
+
+                if (resValue === 0) {
+
+                    //처음 포장실적을 등록한 경우
+                    if  (grid.option("dataSource").length === 1) {
+                        if (confirm("포장실적을 처음 입력하셨습니다. 시험접수 하시겠습니까?")) {
+
+                            PackingResultEdit2TestRequest();
+                        }
+                    }
+                }
+                else if (resValue == -11) {
+                    alert("지함이 이미 생성되었습니다. 포장실적을 수정하거나 삭제할 수 없습니다.");
+                    return;
+                }
+                else if (rValue == -1) {
+                   alert("출고된 자재 정보가 없습니다! \r\n\r\n포장실적을 등록하시려면 자재 출고가 이뤄진후 할 수 있습니다!!");
+                    return;
+                }
+                //20141001 테스트해야함 전승만
+                else if (rValue == -2) {
+                    alert("칭량된 정보가 없습니다! \r\n\r\n포장실적을 등록하시려면 원료칭량이 이뤄진후 할 수 있습니다!!");
+                    return;
+                }
+
+            }
+        }
+
+        // 취소
+        function PackingResult_Edit2Undo() {
+
+            _packingResultEdit2CRUDStatus = "";
+            PackingResult_Edit2EditCheck(false, 'N');
+
+        }
+
+        // 포장완료
+        function PackingResultEditLotEnd(e) {
+
+            if (e.columnIndex !== 9) {
+                return;
+            }
+
+            //0:입력, 1:대기, 2:준비, 3:작업중, 4:승인대기, 5:완료 (RT027)
+            if (_packingResultEdit2FocusdRowData.packing_order_status === "3")
+            {
+                if (confirm("해당 지시의 포장을 완료하시겠습니까?"))
+                {
+                    var data = {
+                        packing_order_no: _packingResultEdit2FocusdRowData.packing_order_no
+                    };
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/PackingManage/PackingResultEdit2LotEnd',
+                        async: false,
+                        dataType: 'json',
+                        data: data,
+                        success: function (result) {
+
+                            if (result.length < 1) {
+
+                            }
+
+                            var json = JSON.parse(result);
+
+                            if (json.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+
+                            PackingResult_Edit2Search();
+
+                        }
+                    });
+                }
+            }
+            else
+            {
+                alert("작업중일때만 완료가 가능합니다.");
+                return;
+            }
+
+        }
+
+        // 신제품 2차 시험접수
+        function PackingResultEdit2TestRequest() {
+
+            var grid = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingResult_Edit2PackingGrid", grid.option("focusedRowKey"));
+
+            console.log(data);
+
+            if (grid.option("dataSource").length < 1) {
+                alert("등록된 포장실적이 없습니다. 시험을 접수할 수 없습니다.");
+                return;
+            }
+
+            if (_packingResultEdit2CRUDStatus === "U") {
+                alert("수정상태에서는 시험접수를 할 수 없습니다.");
+                return;
+            }
+
+            if (data.TEST_STATUS === "0") {
+                alert("이미 시험의뢰가 되었습니다.");
+                return;
+            }
+
+            if (data.TEST_STATUS === "1") {
+                alert("이미 시험의뢰가 완료 되었습니다.");
+                return;
+            }
+
+            if (data.TEST_STATUS === "2") {
+                alert("이미 접수가 되었습니다.");
+                return;
+            }
+
+            PackingResultEditConfirmTestNo(true);
+            //ShowPackingResultEditTestNumberCreate("1", "F", "", '');
+        }
+
+        // 시험번호 생성
+        function ShowPackingResultEditTestNumberCreate(test_type, item_type, dept_type, qcquest_date) {
+
+            var popup = $("#PackingResultEditTestPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#PackingResultEditTestPopupTemplate"));
+            popup.show();
+
+            $("#PackingResultEditTestForm .datepicker").datepicker({
+                format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+                endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+                autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+                templates: {
+                    leftArrow: '&laquo;',
+                    rightArrow: '&raquo;'
+                }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+                todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                toggleActive: true,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+            });
+
+            if (test_type === null || test_type === "") {
+                $("#PackingResultEditTestForm select[name=test_type] option:eq(0)").prop("selected", true);
+            } else {
+                $("#PackingResultEditTestForm select[name=test_type]").val(test_type);
+            }
+
+            if (item_type === null || item_type === "") {
+                $("#PackingResultEditTestForm select[name=item_type] option:eq(0)").prop("selected", true);
+            } else {
+                $("#PackingResultEditTestForm select[name=item_type]").val(item_type);
+            }
+
+            if (dept_type === null || dept_type === "") {
+                $("#PackingResultEditTestForm select[name=dept_type] option:eq(0)").prop("selected", true);
+            } else {
+                $("#PackingResultEditTestForm select[name=dept_type]").val(dept_type);
+            }
+
+            if (!qcquest_date) {
+
+                let today = new Date();
+
+                let year = today.getFullYear();
+                let month = today.getMonth() + 1;
+                let date = today.getDate();
+
+                $("#PackingResultEditTestForm input[name=qcquest_date]").val(year + "-" + (month >= 10 ? month : "0" + month) + "-" + (date >= 10 ? date : "0" + date));
+            } else {
+                $("#PackingResultEditTestForm input[name=qcquest_date]").val(qcquest_date);
+            }
+
+            var qcquest_date = $("#PackingResultEditTestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+            $("#PackingResultEditTestForm input[name=test_no]").val(
+                $("#PackingResultEditTestForm select[name=test_type]").val() +
+                $("#PackingResultEditTestForm select[name=item_type]").val() +
+                $("#PackingResultEditTestForm select[name=dept_type]").val() + "-" +
+                qcquest_date.substring(2, qcquest_date.length)
+            );
+
+        }
+
+        // 시험번호 변경
+        function PackingResultEditChangeTestNo() {
+
+            var qcquest_date = $("#PackingResultEditTestForm input[name=qcquest_date]").val().replaceAll(/-/gi, '');
+
+            $("#PackingResultEditTestForm input[name=test_no]").val(
+                $("#PackingResultEditTestForm select[name=test_type]").val() +
+                $("#PackingResultEditTestForm select[name=item_type]").val() +
+                $("#PackingResultEditTestForm select[name=dept_type]").val() + "-" +
+                qcquest_date.substring(2, qcquest_date.length)
+            );
+
+        }
+
+        // 시험 의뢰
+        function PackingResultEditConfirmTestNo(isOK) {
+
+            var grid = $("#PackingResult_Edit2PackingGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("PackingResult_Edit2PackingGrid", grid.option("focusedRowKey"));
+
+            if (isOK) {
+
+                var request_date = '@DateTime.Now.ToShortDateString()';
+
+                var data = {
+                    test_type: "6",
+                    item_cd: _packingResultEdit2FocusdRowData.sale_item_cd,
+                    //start_date: $("#PackingResult_Edit2WriteForm" + " input[name=lot_date]").val(),
+                    start_no: _packingResultEdit2FocusdRowData.lot_no,
+                    receive_date: request_date,
+                    picking_date: request_date
+                }
+
+                if ($("#PackingResult_Edit2WriteForm" + " input[name=result_emp_cd]").val().trim() === "") {
+                    data.picking_emp_cd = sessionStorage.getItem("loginCD");
+                } else {
+                    data.picking_emp_cd = $("#PackingResult_Edit2WriteForm" + " input[name=result_emp_cd]").val().trim();
+                }
+
+                data.test_sample_qty = $("#PackingResult_Edit2WriteForm" + " input[name=test_sample_qty]").val();
+                data.deposit_sample_qty = $("#PackingResult_Edit2WriteForm" + " input[name=deposit_sample_qty]").val();
+                data.picking_method = "";
+                data.packing_order_no = _packingResultEdit2FocusdRowData.packing_order_no;
+                data.packing_result_id = gridData.packing_result_id;
+
+                // 출하승인 의뢰 생성여부 신제품허가용 Y 이면 N (1차 접수시  2차 접수시:Y ) 나머지 모두 Y
+                if (_packingResultEdit2FocusdRowData.new_ck === "Y") {
+                    data.write_gb = "N";
+                } else {
+                    data.write_gb = "Y";
+                }
+
+                data.item_form_cd = gridData.item_form_cd;
+                data.order_no = _packingResultEdit2FocusdRowData.order_no;
+                //data.request_no = $("#PackingResultEditTestForm input[name=test_no]").val();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/PackingManage/PackingResultEditRequestTest',
+                    data: {
+                        param: JSON.stringify(data),
+                        gubun: "TestReg"
+                    },
+                    dataType: 'json',
+                    success: function (result) {
+
+                        if (result.length <= 0) {
+                            alert("시험의뢰가 정상적으로 처리 되지 않았습니다.다시의뢰해 주세요!");
+                            return;
+                        }
+
+                        alert(result);
+
+                        var popup = $("#PackingResultEditTestPopup").dxPopup("instance");
+                        popup.hide();
+
+                        PackingResult_Edit2Search();
+
+                    }
+                });
+
+            } else {
+
+                var popup = $("#PackingResultEditTestPopup").dxPopup("instance");
+                popup.hide();
+
+                alert("시험의뢰가 정상적으로 선택 되지 않았습니다. 다시의뢰해 주세요!");
+                return;
+
+            }
+
+        }
+
+        // 버튼 컬럼
+        function PackingResultEdit2CellWithButton(container, cellInfo) {
+            $("<div>").html("<div class='icon-check'></div>")
+                .appendTo(container);
+
+            $(".icon-check").dxButton({
+                icon: "more",
+                onClick: function (e) {
+
+                }
+            });
+        }
+
+        function PackingResultEditRowBackgroundColor(e) {
+
+            if (e.rowType == 'data' && e.data.packing_order_no === "-") {
+                e.rowElement[0].style.backgroundColor = 'aliceblue';
+            }
+        }
+
+        function PackingResult_Edit2Excel() {
+            gridExportToExcel("PackingResult_Edit2PackingGrid", "포장실적_등록_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+    </script>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    @* === 시험번호 생성 팝업 === *@
+    @(Html.DevExtreme().Popup()
+            .ID("PackingResultEditTestPopup")
+            .Width(450)
+            .Height(350)
+            .ShowTitle(true)
+            .Title("시험번호 생성 옵션")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+
+    @using (Html.DevExtreme().NamedTemplate("PackingResultEditTestPopupTemplate"))
+    {
+        <form id="PackingResultEditTestForm">
+
+            <div class="input-wrapper">
+                <label class="col-4">시험구분</label>
+                <select class="form-control col-7" name="test_type" onchange="PackingResultEditChangeTestNo()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC602")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-4">제품구분</label>
+                <select class="form-control col-7" name="item_type" onchange="PackingResultEditChangeTestNo()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC603")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-4">부서구분</label>
+                <select class="form-control col-7" name="dept_type" onchange="PackingResultEditChangeTestNo()">
+                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "P", "QC604")).Rows)
+                    {
+                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                    }
+                </select>
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-4">생성일자</label>
+                <input type="text" class="col-7 form-control datepicker" name="qcquest_date" value="@DateTime.Now" onchange="PackingResultEditChangeTestNo()" />
+            </div>
+
+            <div class="input-wrapper">
+                <label class="col-4">생성번호</label>
+                <input type="text" class="col-7 form-control" name="test_no" readonly="readonly" />
+            </div>
+
+        </form>
+
+        <div class="align-center">
+            <button class="btn btn-secondary" onclick="PackingResultEditConfirmTestNo(true)">확인</button>
+            <button class="btn btn-secondary" onclick="PackingResultEditConfirmTestNo(false)">취소</button>
+        </div>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control col-5 datepicker" name="s_sdate" id="s_sdate" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control col-5 datepicker" name="e_sdate" id="e_sdate" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-6">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="s_item_nm" readonly="readonly">
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조번호</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_lot_no">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="s_order_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "RT027")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    @*한풍제약 요청 기능 >> 아오스 요구 없을 시 구현할 필요가 없기 때문에 주석처리*@
+                    @*<div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">생산금액 합계 표시</span>
+                        </div>
+                        <input type="checkbox" class="checkbox form-control" name="showPriceYn" value="true" onclick="PackingResult_Edit2Search()"/>
+                    </div>*@
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12 mb-1">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PackingResult_Edit2Grid")
+                    .KeyExpr(PackingResult_Edit2GridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .HoverStateEnabled(true)
+                    .Height(600)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("packing_order_no").Caption("지시번호");
+                        c.Add().DataField("packing_order_work_date").Caption("제시일자")
+                            .AllowSorting(true)
+                            .SortIndex(0)
+                            .SortOrder(SortOrder.Asc);
+                        c.Add().DataField("sale_item_cd").Caption("포장제품코드");
+                        c.Add().DataField("sale_item_nm").Caption("포장제품명");
+                        c.Add().DataField("item_pack_size").Caption("포장단위");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("packing_order_qty").Caption("지시량");
+                        c.Add().DataField("packing_qty").Caption("생산량");
+                        c.Add().Lookup(lookup => lookup
+                            .DataSource(d => d.WebApi()
+                            .RouteName("Comm")
+                            .LoadAction("GetCommon")
+                            .LoadParams(new
+                            {
+                                pGubun = "공통코드"
+                                ,
+                                pDiv = "S"
+                                ,
+                                pStrWhere = "RT027"
+                                ,
+                                pTableName = "unit"
+                            }
+                            ).Key("keyfield"))
+                            .ValueExpr("keyfield")
+                            .DisplayExpr("displayfield")
+                            ).DataField("packing_order_status")
+                            .Caption("포장상태")
+                            .DataType(GridColumnDataType.String);
+
+                        c.Add().Caption("포장완료")
+                            .CellTemplate(new JS("PackingResultEdit2CellWithButton"))
+                            .Alignment(HorizontalAlignment.Center)
+                            .Width("5%");
+                    })
+                    .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                    .OnCellClick("PackingResultEditLotEnd")
+                    .OnRowPrepared("PackingResultEditRowBackgroundColor")
+                )
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "PackingGrid")
+                    .KeyExpr("item_stock_id")
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().Lookup(lookup => lookup
+                            .DataSource(d => d.WebApi()
+                            .RouteName("Comm")
+                            .LoadAction("GetCommon")
+                            .LoadParams(new
+                            {
+                                pGubun = "공통코드"
+                                ,
+                                pDiv = "S"
+                                ,
+                                pStrWhere = "RT031"
+                                ,
+                                pTableName = "unit"
+                            }
+                            ).Key("keyfield"))
+                            .ValueExpr("keyfield")
+                            .DisplayExpr("displayfield")
+                            ).DataField("gubun")
+                            .Caption("구분")
+                            .DataType(GridColumnDataType.String);
+
+                        c.Add().DataField("packing_date").Caption("포장일자");
+                        c.Add().DataField("packing_qty").Caption("생산량(EA)").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("remain_qty").Caption("잔량").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("disuse_qty").Caption("폐기량").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("result_emp_nm").Caption("작업자");
+                        c.Add().DataField("TEST_STATUS_NM").Caption("시험상태");
+                        c.Add().DataField("testrequest_no").Caption("의뢰번호");
+                        c.Add().DataField("request_date").Caption("시험의뢰일자");
+                    })
+                    .OnFocusedRowChanged(pagePrefix + "PackingFocusChanged")
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        items.Add()
+                            .Column("packing_qty")
+                            .ShowInColumn("packing_qty")
+                            .ValueFormat(Format.Decimal)
+                            .SummaryType(SummaryType.Sum);
+
+                        items.Add()
+                            .Column("remain_qty")
+                            .ShowInColumn("remain_qty")
+                            .ValueFormat(Format.Decimal)
+                            .SummaryType(SummaryType.Sum);
+
+                        items.Add()
+                            .Column("disuse_qty")
+                            .ShowInColumn("disuse_qty")
+                            .ValueFormat(Format.Decimal)
+                            .SummaryType(SummaryType.Sum);
+                    })
+                    )
+                )
+
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <form id="@(pagePrefix)WriteForm">
+
+                    <div class="divName margin-bottom">
+                        <p>포장실적 등록</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">포장일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker required" name="packing_date" required>
+                        </div>
+
+                        <label class="col-2">제조일자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker required" name="lot_date" required>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제조지시수량</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="receive_qty" required>
+                        </div>
+
+                        <label class="col-2">유효기간</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control datepicker required" name="end_date" required>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제조량</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="bulk_use_qty" required>
+                        </div>
+
+                        <label class="col-2">잔량</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="remain_qty" required>
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">포장생산량(EA)</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="packing_qty" required>
+                        </div>
+
+                        <label class="col-2">폐기량</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="disuse_qty" required>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">시험검체수량(EA)</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="test_sample_qty" required>
+                        </div>
+                        <button class="btn btn-secondary col-5" type="button" onclick="PackingResultEdit2TestRequest()">신제품 2차 시험접수</button>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">보관검체수량(EA)</label>
+                        <div class="input-group col-3">
+                            <input type="number" class="form-control required" name="deposit_sample_qty" required>
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">작업자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="result_emp_cd" required>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectEmp()">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <input type="text" class="form-control col-3" name="result_emp_nm" readonly="readonly">
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+

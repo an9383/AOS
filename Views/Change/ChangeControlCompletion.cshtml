@@ -1,0 +1,1236 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+@using HACCP.Libs
+
+@{
+    Layout = null;
+
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    var ChangeControlCompletionSrch = ViewData["ChangeControlCompletionSrch"] as HACCP.Models.Change.ChangeControlCompletion.SrchParam;
+
+    var Employee = @Html.Raw(Json.Encode(ViewBag.Employee.Data));
+    var ChangeControlCompletion = @Html.Raw(Json.Encode(ViewBag.ChangeControlCompletion.Data));
+}
+
+@*변경 진행/완료*@
+
+<script id="ChangeControlCompletionJs">
+
+    var _changeControlCompletionControlNo;
+    var _changeControlCompletionCRUDStatus;
+    var _changeControlCompletionSignCnt = 0;
+    var _changeControlCompletionSignData;
+    var _changeControlCompletionSignGubun;
+    var _changeControlCompletionIsEditing = false;
+    var _changeControlCompletionSignType;
+
+    $(function () {
+
+        if (@ChangeControlCompletion) {
+            $("#ChangeControlCompletionGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ChangeControlCompletion));
+            $("#ChangeControlCompletionGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        var popupColumns = {
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+        };
+
+        createPopup("ChangeControlCompletionEmp1", "사원 조회", @Employee, popupColumns.employee, "emp_cd");
+        createPopup("ChangeControlCompletionEmp2", "사원 조회", @Employee, popupColumns.employee, "emp_cd");
+
+        $('input[name=emp_cd]+div>button', $('#ChangeControlCompletionSearchForm')).click(function (event) {
+            ChangeControlCompletionHelpPopUpSearch(event, "ChangeControlCompletionEmp1");
+        });
+
+        $('input[name=emp_cd]+div>button', $('#ChangeControlCompletionWriteForm3')).click(function (event) {
+            ChangeControlCompletionHelpPopUpSearch(event, "ChangeControlCompletionEmp2");
+        });
+
+        $($("#ChangeControlCompletionAttatchDocInsertBtn")).click(function (event) {
+            ChangeControlCompletionAttatchDocInsert(event);
+        });
+
+        $($("#ChangeControlCompletionAttatchDocDownloadBtn")).click(function (event) {
+            ChangeControlCompletionAttatchDocDownload(event);
+        });
+
+        $($("#ChangeControlCompletionAttatchDocDeleteBtn")).click(function (event) {
+            ChangeControlCompletionAttatchDocDelete(event);
+        });
+
+        setDatePicker("#ChangeControlCompletion .datepicker");
+
+        $("#ChangeControlCompletionSearchForm input[name=sdate]").datepicker("update", '@ChangeControlCompletionSrch.sdate');
+        $("#ChangeControlCompletionSearchForm input[name=edate]").datepicker("update", '@ChangeControlCompletionSrch.edate');
+        $("#ChangeControlCompletionSearchForm input[name=emp_cd]").val('@ChangeControlCompletionSrch.emp_cd');
+        $("#ChangeControlCompletionSearchForm select[name=changecontrol_status]").val('@ChangeControlCompletionSrch.changecontrol_status');
+
+        ChangeControlCompletionEditCheck(false, 'N');
+
+    });
+
+    // 팝업 이벤트 관련 ------------------------------------------------------------------------
+
+    // 검색용 팝업
+    function ChangeControlCompletionHelpPopUpSearch(e, popupId) {
+
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    function ChangeControlCompletionEmp1RowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=emp_cd]", $('#ChangeControlCompletionSearchForm')).val(data.emp_cd);
+
+        $("#ChangeControlCompletionEmp1Popup").dxPopup("instance").hide();
+    }
+
+    function ChangeControlCompletionEmp2RowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=emp_cd]", $('#ChangeControlCompletionWriteForm3')).val(data.emp_cd);
+        $("input[name=emp_nm]", $('#ChangeControlCompletionWriteForm3')).val(data.emp_nm);
+
+        $("#ChangeControlCompletionEmp2Popup").dxPopup("instance").hide();
+    }
+
+    // -----------------------------------------------------------------------------------------
+
+    // 수정중인지 체크
+    function ChangeControlCompletionEditCheck(nowEdit, status) {
+
+        _changeControlCompletionCRUDStatus = status;
+
+        var index = $("#ChangeControlCompletionTab4 .active").parent().index();
+
+        if (nowEdit) {
+
+            // 툴바 활성/비활성
+            $('#ChangeControlCompletionSave, #ChangeControlCompletionUndo').dxButton().parent().parent().removeClass("display-none");
+            $('#ChangeControlCompletionSearch, #ChangeControlCompletionInput, #ChangeControlCompletionEdit, #ChangeControlCompletionDelete, #ChangeControlCompletionPrint, #ChangeControlCompletionExcel').dxButton().parent().parent().addClass("display-none");
+
+            //그리드 및 폼 활성/비활성
+            $('#ChangeControlCompletionGrid').dxDataGrid("instance").option("disabled", true);
+
+            $("#ChangeControlCompletionTab4 .nav-item:nth-child(" + (index === 0 ? 2 : 1) + ") a").addClass("disabled");
+
+            $('input[name=emp_cd]', $('#ChangeControlCompletionWriteForm3')).prop("readonly", false);
+            $('button', $('#ChangeControlCompletionWriteForm3')).prop("disabled", false);
+
+            if (index === 0) {
+                $('input[name=change_action_plan_contents]', $('#ChangeControlCompletionWriteForm3')).prop("readonly", false);
+                $('textarea[name=change_schedule_plan]', $('#ChangeControlCompletionWriteForm3')).prop("readonly", false);
+            } else if (index === 1) {
+                $('input[name=change_result_plan_contents]', $('#ChangeControlCompletionWriteForm3')).prop("readonly", false);
+                $('textarea[name=change_schedule_result]', $('#ChangeControlCompletionWriteForm3')).prop("readonly", false);
+            }
+
+        }
+        else {
+
+            // 툴바 활성/비활성
+            $('#ChangeControlCompletionSave, #ChangeControlCompletionUndo').dxButton().parent().parent().addClass("display-none");
+            $('#ChangeControlCompletionSearch, #ChangeControlCompletionInput, #ChangeControlCompletionEdit, #ChangeControlCompletionDelete, #ChangeControlCompletionPrint, #ChangeControlCompletionExcel').dxButton().parent().parent().removeClass("display-none");
+
+            $("#ChangeControlCompletionTab4 .nav-item:nth-child(" + (index === 0 ? 2 : 1) + ") a").removeClass("disabled");
+
+            //그리드 및 폼 활성/비활성
+            $('#ChangeControlCompletionGrid').dxDataGrid("instance").option("disabled", false);
+
+            $('select', $('#ChangeControlCompletionWriteForm1')).readonly(true);
+            $('input', $('#ChangeControlCompletionWriteForm1')).prop("readonly", true);
+            $('textarea', $('#ChangeControlCompletionWriteForm1')).prop("readonly", true);
+
+            $('select', $('#ChangeControlCompletionWriteForm2')).readonly(true);
+            $('input', $('#ChangeControlCompletionWriteForm2')).prop("readonly", true);
+            $('textarea', $('#ChangeControlCompletionWriteForm2')).prop("readonly", true);
+
+            $('select', $('#ChangeControlCompletionWriteForm3')).readonly(true);
+            $('input', $('#ChangeControlCompletionWriteForm3')).prop("readonly", true);
+            $('textarea', $('#ChangeControlCompletionWriteForm3')).prop("readonly", true);
+
+            $('button', $('#ChangeControlCompletionWriteForm3')).prop("disabled", true);
+
+        }
+    }
+
+    // 메인 그리드 포커스 변경
+    function ChangeControlCompletionFocusChanged() {
+
+        var gridId = "ChangeControlCompletionGrid";
+
+        var grid = $('#' + gridId).dxDataGrid("instance");
+        var gridData = getGridRowByKey(gridId, grid.option("focusedRowKey"));
+
+        _changeControlCompletionControlNo = gridData.changecontrol_no;
+        _changeControlCompletionSignCnt = 0;
+
+        $('#ChangeControlCompletionWriteForm1')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm1')).text("");
+
+        $('#ChangeControlCompletionWriteForm2')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm2')).text("");
+
+        UtilView.setDataGridFormBind(gridId, "ChangeControlCompletionWriteForm1");
+        UtilView.setDataGridFormBind(gridId, "ChangeControlCompletionWriteForm2");
+
+        $.ajax({
+            type: 'GET',
+            url: '/Change/ChangeControlCompletionSelectDetailData',
+            data: {
+                changecontrol_no: _changeControlCompletionControlNo,
+            },
+            success: function (result) {
+
+                var jsonData = JSON.parse(result);
+
+                // 문서
+                if (jsonData[0].length > 0) {
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "dataSource", JSON.parse(jsonData[0]));
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                } else {
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "dataSource", []);
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+
+                // 서명
+                if (jsonData[1].length > 0) {
+                    var signJson = JSON.parse(jsonData[1]);
+
+                    for (var i = 0; i < signJson.length; i++) {
+                        _changeControlCompletionSignCnt += parseInt(signJson[i].sign_yn);
+                    }
+
+                    $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "dataSource", signJson.splice(3,3));
+                    $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "dataSource", signJson.splice(0, 3));
+
+                    $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "focusedRowIndex", 0);
+                    $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "focusedRowIndex", 0);
+
+                } else {
+                    $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "dataSource", []);
+                    $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "dataSource", []);
+
+                    $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "focusedRowKey", "");
+                    $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "focusedRowKey", "");
+                }
+
+                // 디테일
+                if (jsonData[2].length > 0) {
+                    $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "dataSource", JSON.parse(jsonData[2]));
+                    $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "focusedRowIndex", 0);
+                } else {
+                    $('#ChangeControlCompletionWriteForm3')[0].reset();
+                    $("textarea", $('#ChangeControlCompletionWriteForm3')).text("");
+
+                    $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "dataSource", []);
+                    $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "focusedRowKey", "");
+                }
+            }
+        });
+    }
+
+    // 서브 그리드 포커스 변경
+    function ChangeControlCompletionSubFocusChanged() {
+
+        var gridId = "ChangeControlCompletionSubGrid";
+
+        $('#ChangeControlCompletionWriteForm3')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm3')).text("");
+
+        UtilView.setDataGridFormBind(gridId, "ChangeControlCompletionWriteForm3");
+    }
+
+    // 모든 디테일 비우기
+    function ChangeControlCompletionFormGridClear() {
+
+        // 그리드 비우기
+        $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "dataSource", []);
+        $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "focusedRowKey", "");
+
+        $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "dataSource", []);
+        $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "dataSource", []);
+
+        $("#ChangeControlCompletionSignGrid1").dxDataGrid("option", "focusedRowKey", "");
+        $("#ChangeControlCompletionSignGrid2").dxDataGrid("option", "focusedRowKey", "");
+
+        $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "dataSource", []);
+        $("#ChangeControlCompletionSubGrid").dxDataGrid("option", "focusedRowKey", "");
+
+        // 폼 비우기
+        $('#ChangeControlCompletionWriteForm1')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm1')).text("");
+
+        $('#ChangeControlCompletionWriteForm2')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm2')).text("");
+
+        $('#ChangeControlCompletionWriteForm3')[0].reset();
+        $("textarea", $('#ChangeControlCompletionWriteForm3')).text("");
+    }
+
+    // 문서 조회
+    function ChangeControlCompletionSelectDocList() {
+
+        $.ajax({
+            type: 'GET',
+            url: '/Change/ChangeControlReviewSelectDocGridData',
+            data: {
+                changecontrol_no: _changeControlCompletionControlNo
+            },
+            success: function (result) {
+
+                if (result.length > 0) {
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "dataSource", JSON.parse(result));
+                } else {
+                    $("#ChangeControlCompletionDocGrid").dxDataGrid("option", "dataSource", []);
+                }
+
+            }
+        });
+    }
+
+    // 문서 업로드 버튼
+    function ChangeControlCompletionAttatchDocInsert() {
+
+        if (_changeControlCompletionCRUDStatus !== "Update1" && _changeControlCompletionCRUDStatus !== "Update2") {
+            alert("수정중일때만 파일 첨부가 가능합니다.");
+            return;
+        }
+
+        var fileUploader = $('#ChangeControlCompletionAttatch').dxFileUploader('instance');
+        fileUploader._isCustomClickEvent = true;
+        fileUploader._$fileInput.click();
+    }
+
+    // 문서 업로드
+    function ChangeControlCompletionUploadAttachedFile(e) {
+
+        var name = e.component.option("name");
+
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "changecontrol_no", _changeControlCompletionControlNo);
+        url = updateQueryStringParameter(url, "name", name);
+
+        e.component.option("uploadUrl", url);
+    }
+
+    // 문서 다운로드
+    function ChangeControlCompletionAttatchDocDownload() {
+
+        var grid = $("#ChangeControlCompletionDocGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ChangeControlCompletionDocGrid", grid.option("focusedRowKey"));
+
+        var fileId = gridData.doc_file_id;
+
+        if (fileId != "") {
+
+            document.location.assign('/Change/ChangeControlRequestDownload?file_id=' + fileId);
+        }
+    }
+
+    // 문서 삭제
+    function ChangeControlCompletionAttatchDocDelete() {
+
+        if (!confirm("선택한 문서를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        if (_changeControlCompletionSignCnt > 0) {
+            alert("서명이 완료된 자료의 문서는 삭제 할 수 없습니다.");
+            return;
+        }
+
+        var grid = $("#ChangeControlCompletionDocGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ChangeControlCompletionDocGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/Change/ChangeControlDeleteDoc',
+            data: {
+                changecontrol_no: gridData.changecontrol_no,
+                changecontrol_attatch_doc_id: gridData.changecontrol_attatch_doc_id
+            },
+            success: function (result) {
+
+                alert(result);
+
+                ChangeControlCompletionSelectDocList();
+
+            }
+        });
+
+    }
+
+    // 전자 서명
+    function ChangeControlCompletionSign(e) {
+
+        if (_changeControlCompletionIsEditing) {
+            alert("저장후 서명하십시요!!!");
+            return;
+        }
+
+        _changeControlCompletionSignData = e.data;
+
+        if (e.columnIndex == 3) {
+
+            _changeControlCompletionSignGubun = "U";
+
+            if (e.data.prev_sign_yn == "0") {
+                alert("먼저 앞 단계 승인이 필요합니다.");
+                return;
+            }
+
+            if (e.data.sign_yn == "1") {
+
+                if (e.data.next_sign_yn == "1") {
+                    alert("이미 다음 단계가 승인 되어 있습니다.\n먼저 다음 단계 승인을 삭제(취소)해주세요. ");
+                    return;
+                }
+
+                if (confirm("이미 승인 되었습니다. 서명을 삭제하시겠습니까?")) {
+                    _changeControlCompletionSignGubun = "D";
+                } else {
+                    return;
+                }
+            }
+
+            var popup = $("#ChangeControlCompletionSignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#ChangeControlCompletionSignPopupTemplate"));
+            popup.show();
+        }
+    }
+
+    // 전자서명 입력
+    function ChangeControlCompletionSignSubmit() {
+
+        var data = new FormData($('#ChangeControlCompletionSignForm')[0]);
+
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    alert("잘못된 ID,PW 입니다.");
+                    return;
+                }
+
+                var isOK = false;
+
+                console.log(_changeControlCompletionSignData);
+
+                if (_changeControlCompletionSignData.responsible_emp_cd !== JSON.parse(result)[0].emp_cd) {
+
+                    $.ajax({
+                        type: 'GET',
+                        url: '/Comm/DelegateCheck',
+                        data: {
+                            emp_cd: JSON.parse(result)[0].emp_cd,
+                            sign_set_cd: "5104",
+                            sign_set_seq: _changeControlCompletionSignData.sign_set_dt_seq
+                        },
+                        async: false,
+                        success: function (result) {
+
+                            if (result.length > 0) {
+                                isOK = true;
+                            } else {
+                                isOK = false;
+                            }
+                        }
+                    });
+                } else {
+                    isOK = true;
+                }
+
+                if (!isOK) {
+                    alert("권한이 없는 사용자입니다.");
+                    return;
+                }
+
+                $("#ChangeControlCompletionSignConfirmForm input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+                $("#ChangeControlCompletionSignConfirmForm input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+
+                var grid = $("#ChangeControlCompletionGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("ChangeControlCompletionGrid", grid.option("focusedRowKey"));
+
+                var paramData = {
+                    gubun: _changeControlCompletionSignGubun,
+                    changecontrol_no: gridData.changecontrol_no,
+                    emp_cd: JSON.parse(result)[0].emp_cd,
+                    emp_type: "2",
+                    sign_type: _changeControlCompletionSignData.sign_set_dt_seq
+                };
+
+                setTimeout(function () {
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/Change/ChangeControlCompletionSignTRX',
+                        data: paramData,
+                        success: function (result) {
+
+                            alert(result);
+
+                            ChangeControlCompletionFocusChanged();
+                        }
+                    });
+
+                    _changeControlCompletionSignGubun = "";
+
+                    var popup = $("#ChangeControlCompletionSignPopup").dxPopup("instance");
+                    popup.hide();
+                }, 1000);
+
+            }
+
+        });
+
+    }
+
+    // 서명 폼 비우기
+    function ClearChangeControlCompletionSignInput() {
+        $('#ChangeControlCompletionSignForm')[0].reset();
+        $('#ChangeControlCompletionSignConfirmForm')[0].reset();
+    }
+
+    // 조회
+    function ChangeControlCompletionSearch() {
+
+        _changeControlCompletionControlNo = "";
+
+        ChangeControlCompletionFormGridClear();
+
+        UtilView.dataGridSelect('ChangeControlCompletionGrid', "ChangeControlCompletionSearchForm");
+    }
+
+    // 수정
+    function ChangeControlCompletionEdit() {
+
+        if ($("#ChangeControlCompletionSubGrid").dxDataGrid("instance").totalCount() <= 0) {
+            return;
+        }
+
+        var index = $("#ChangeControlCompletionTab4 .active").parent().index();
+
+        //if (_changeControlCompletionSignCnt === 4) {
+        //    menutab('ChangeControlCompletionTab4', 'ChangeControlCompletionTabContent4', 2);
+        //    ChangeControlCompletionEditCheck(true, 'Update2');
+        //}
+
+        if (_changeControlCompletionSignCnt === 8) {
+
+            alert("이미 변경완료 승인이 완료되었습니다.");
+            return;
+        }
+
+        if (_changeControlCompletionSignCnt >= 0 && _changeControlCompletionSignCnt < 4) {
+            menutab('ChangeControlCompletionTab4', 'ChangeControlCompletionTabContent4', 1);
+            ChangeControlCompletionEditCheck(true, 'Update1');
+        } else if (_changeControlCompletionSignCnt >= 4 && _changeControlCompletionSignCnt < 8) {
+            menutab('ChangeControlCompletionTab4', 'ChangeControlCompletionTabContent4', 2);
+            ChangeControlCompletionEditCheck(true, 'Update2');
+        }
+    }
+
+    // 저장
+    function ChangeControlCompletionSave() {
+
+        if (!UtilView.checkValidForm("ChangeControlCompletionWriteForm3")) {
+            return;
+        }
+
+        var form = $("#ChangeControlCompletionWriteForm3")[0];
+        var formData = new FormData(form);
+
+        var grid = $('#ChangeControlCompletionSubGrid').dxDataGrid("instance");
+        var gridData = getGridRowByKey('ChangeControlCompletionSubGrid', grid.option("focusedRowKey"));
+
+        formData.set("gubun", _changeControlCompletionCRUDStatus);
+        formData.set("changecontrol_no", _changeControlCompletionControlNo);
+        formData.set("changecontrol_action_id", gridData.changecontrol_action_id);
+
+        UtilView.m_controller = 'Change';
+        UtilView.m_actionPrefix = 'ChangeControlCompletion';
+
+        UtilView.dataGridTRX(formData, () => ChangeControlCompletionSearch());
+
+        ChangeControlCompletionEditCheck(false, 'N');
+    }
+
+    // 취소
+    function ChangeControlCompletionUndo() {
+        ChangeControlCompletionFocusChanged();
+        ChangeControlCompletionEditCheck(false, 'N');
+    }
+
+    function ChangeControlCompletionPrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        var grid = $("#ChangeControlCompletionGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("ChangeControlCompletionGrid", grid.option("focusedRowKey"));
+
+        var tabIndex = $("#ChangeControlCompletionTab2 .active").parent().index();
+
+        var changecontrol_no = data.changecontrol_no;
+
+        if (tabIndex === 0) {
+
+            var para_check1 = "";
+            var para_check2 = "";
+
+            //
+            if (data.change_level2 == "1") {
+                para_check1 = "■ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+            else if (data.change_level2 == "2") {
+                para_check1 = "□ 중요한 변경 1, ■ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+            else if (data.change_level2 == "3") {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,■ 일반적 변경, □ 기타";
+            }
+            else if (data.change_level2 == "4") {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, ■ 기타";
+            }
+            else {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+
+            //첨부문서
+            if ($("#ChangeControlCompletionDocGrid").dxDataGrid("instance").totalCount() > 0) {
+                para_check2 = "□ 없음, ■ 있음";
+            }
+            else {
+                para_check2 = "■ 없음, □ 있음";
+            }
+
+            var subParamStr = 'para_check1=' + para_check1
+                + ';para_check2=' + para_check2;
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "Change", RptFileName: "ChangeControlExecutionR" },
+                objSp: { SpName: "SP_ChangeControlExecution_Y", gubun: "SR", reportParam: "changecontrol_no:" + changecontrol_no },
+                objEtcInfo: { subParam: subParamStr },
+                objTblNm: { tblName: "ChangeControl_actionT,ChangeControl_action_beforeT,ChangeControl_action_doingT,ChangeControl_action_afterT" },
+                objSub: { subRptName: "first_work_R,changing_work_R,changed_work_R" } 
+            });
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+
+        } else {
+
+            var para_check1 = "";
+            var para_check2 = "";
+
+            //
+            if (data.change_final_result == "1") {
+                para_check1 = "■ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+            else if (data.change_final_result == "2") {
+                para_check1 = "□ 중요한 변경 1, ■ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+            else if (data.change_final_result == "3") {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,■ 일반적 변경, □ 기타";
+            }
+            else if (data.change_final_result == "4") {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, ■ 기타";
+            }
+            else {
+                para_check1 = "□ 중요한 변경 1, □ 중요한 변경 2,□ 일반적 변경, □ 기타";
+            }
+
+            //첨부문서
+            if ($("#ChangeControlCompletionDocGrid").dxDataGrid("instance").totalCount() > 0) {
+                para_check2 = "□ 없음, ■ 있음";
+            }
+            else {
+                para_check2 = "■ 없음, □ 있음";
+            }
+
+            var subParamStr = 'para_check1=' + para_check1
+                + ';para_check2=' + para_check2;
+
+            // report 출력
+            var report = new ReportHelper();
+            report.addParam({
+                objFile: { path: "Change", RptFileName: "ChangeControlExecutionR2" },
+                objSp: { SpName: "SP_ChangeControlExecution_Y", gubun: "SR2", reportParam: "changecontrol_no:" + changecontrol_no },
+                objEtcInfo: { subParam: subParamStr },
+                objTblNm: { tblName: "ChangeControl_resultT,ChangeControl_result_beforeT,ChangeControl_result_doingT,ChangeControl_result_afterT" },
+                objSub: { subRptName: "first_work_R,changing_work_R,changed_work_R" }
+
+            });
+
+            if (btnType.indexOf('Preview') > -1) {
+                report.preview();
+            } else if (btnType.indexOf('Print') > -1) {
+                report.print();
+            }
+
+        }
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)">
+
+    <div id="ChangeControlCompletionEmp1Popup"></div>
+    <div id="ChangeControlCompletionEmp2Popup"></div>
+
+    <div>
+        @(Html.DevExtreme().Popup()
+            .ID("ChangeControlCompletionSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("ClearChangeControlCompletionSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("ChangeControlCompletionSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="ChangeControlCompletionSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-end">
+            <button class="btn btn-secondary" onclick="ChangeControlCompletionSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <form id="ChangeControlCompletionSignConfirmForm">
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+
+        </form>
+    }
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="ChangeControlCompletionSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">처리기한</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="sdate">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">신청자</span>
+                        </div>
+                        <input type="text" class="form-control" name="emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">변경단계</span>
+                        </div>
+                        <select class="custom-select" name="changecontrol_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "CH015")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Preview;Print");}
+        </div>
+
+    </div>
+
+    <div class="row mb-1">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlCompletionGrid")
+                    .KeyExpr("changecontrol_no")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(420)
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("changecontrol_no").Caption("접수번호");
+                        c.Add().DataField("change_title").Caption("제목");
+                        c.Add().DataField("request_date").Caption("신청일자");
+                        c.Add().DataField("request_emp_nm").Caption("신청자");
+                        c.Add().DataField("changecontrol_status_nm").Caption("변경상태");
+                    })
+                    .OnFocusedRowChanged("ChangeControlCompletionFocusChanged")
+                    )
+
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box mb-0">
+
+                <form id="ChangeControlCompletionWriteForm1">
+                    <div class="divName">
+                        <p>변경 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제목</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12 required" name="change_title" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">적용범위</label>
+                        <div class="input-group col-4">
+                            <select class="form-control" name="changecontrol_cd">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CH001")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경사유 및 내용</label>
+                        <div class="input-group  col-8">
+                            <textarea class="form-control" cols="100" rows="3" name="request_contents" readonly="readonly"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">변경근거</label>
+                        <div class="input-group  col-8">
+                            <textarea class="form-control" cols="100" rows="3" name="change_evidence" readonly="readonly"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">진행상태</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12 required" name="changecontrol_status_nm" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <ul class="nav nav-tabs" id="ChangeControlCompletionTab1">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('ChangeControlCompletionTab1', 'ChangeControlCompletionTabContent1', 1);">첨부파일</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('ChangeControlCompletionTab1', 'ChangeControlCompletionTabContent1', 2);">특기사항</a>
+                        </li>
+                    </ul>
+
+                    <div id="ChangeControlCompletionTabContent1">
+
+                        <div id="ChangeControlCompletionTabContent1_1">
+
+                            <div class="align-end-only input-wrapper">
+                                <button id="ChangeControlCompletionAttatchDocInsertBtn" class="btn btn-sm btn-secondary" type="button">문서첨부</button>
+                                <button id="ChangeControlCompletionAttatchDocDownloadBtn" class="btn btn-sm btn-secondary" type="button">다운로드</button>
+                                <button id="ChangeControlCompletionAttatchDocDeleteBtn" class="btn btn-sm btn-secondary" type="button">삭제</button>
+                                @(Html.DevExtreme().FileUploader()
+                                    .Visible(false)
+                                    .ID("ChangeControlCompletionAttatch")
+                                    .Name("changeControlAttatchedFile2")
+                                    .Multiple(false)
+                                    .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                                    .UploadUrl(Url.Action("UploadChangeAttachedFile", "Change"))
+                                    .UploadMode(FileUploadMode.Instantly)
+                                    .MaxFileSize(int.MaxValue)
+                                    .OnValueChanged("ChangeControlCompletionUploadAttachedFile")
+                                    .OnUploaded("ChangeControlCompletionSelectDocList")
+                                    )
+                            </div>
+
+                            @(Html.DevExtreme().DataGrid()
+                                .ID("ChangeControlCompletionDocGrid")
+                                .KeyExpr("changecontrol_attatch_doc_id")
+                                .OnRowDblClick("ChangeControlCompletionAttatchDocDownload")
+                                .FocusedRowEnabled(true)
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(150)
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("doc_name").Caption("문서명");
+                                    c.Add().DataField("attatch_emp_cd").Caption("등록사원");
+                                    c.Add().DataField("attatch_date").Caption("등록일자");
+                                })
+                            )
+                        </div>
+
+                        <div id="ChangeControlCompletionTabContent1_2" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-4">특기사항</label>
+                                <div class="input-group col-7">
+                                    <textarea class="form-control" cols="100" rows="8" name="change_special" readonly="readonly"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-4">최종결론</label>
+                                <div class="input-group col-7">
+                                    <select class="form-control" name="change_final_result">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CH001")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1">
+
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ChangeControlCompletionSubGrid")
+                    .KeyExpr("changecontrol_action_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(160)
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_work_process_nm").Caption("진행업무");
+                        c.Add().DataField("order_dept_nm").Caption("진행부서");
+                        c.Add().DataField("emp_nm").Caption("담당자명");
+                        c.Add().DataField("changecontrol_action_status_nm").Caption("처리단계");
+                    })
+                    .OnFocusedRowChanged("ChangeControlCompletionSubFocusChanged")
+                    )
+
+                <ul class="nav nav-tabs" id="ChangeControlCompletionTab2">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('ChangeControlCompletionTab2', 'ChangeControlCompletionTabContent2', 1);">서명(변경진행)</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('ChangeControlCompletionTab2', 'ChangeControlCompletionTabContent2', 2);">서명(변경완료)</a>
+                    </li>
+                </ul>
+
+                <div id="ChangeControlCompletionTabContent2">
+
+                    <div id="ChangeControlCompletionTabContent2_1">
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("ChangeControlCompletionSignGrid1")
+                            .KeyExpr("sign_set_dt_id")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .HoverStateEnabled(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .FocusedRowEnabled(true)
+                            .Height(180)
+                            .OnCellClick("ChangeControlCompletionSign")
+                            .Columns(columns =>
+                            {
+                            columns.Add().DataField("displayfield").Caption("구분");
+                            columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                            columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                            columns.Add().DataField("sign_image").Caption("서명")
+                                .AllowFiltering(false)
+                                .AllowSorting(false)
+                                .CellTemplate(@<text>
+                                        <div>
+                                            <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                        </div>
+                                    </text>);
+                            })
+                        )
+                    </div>
+
+                    <div id="ChangeControlCompletionTabContent2_2" class="display-none">
+
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("ChangeControlCompletionSignGrid2")
+                            .KeyExpr("sign_set_dt_id")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .HoverStateEnabled(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .FocusedRowEnabled(true)
+                            .Height(180)
+                            .OnCellClick("ChangeControlCompletionSign")
+                            .Columns(columns =>
+                            {
+                            columns.Add().DataField("displayfield").Caption("구분");
+                            columns.Add().DataField("sign_emp_nm").Caption("서명자");
+                            columns.Add().DataField("sign_time").Width(185).Caption("서명일자");
+                            columns.Add().DataField("sign_image").Caption("서명")
+                                .AllowFiltering(false)
+                                .AllowSorting(false)
+                                .CellTemplate(@<text>
+                                        <div>
+                                            <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                        </div>
+                                    </text>);
+                            })
+                        )
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box">
+
+                <form id="ChangeControlCompletionWriteForm2">
+
+                    <ul class="nav nav-tabs" id="ChangeControlCompletionTab3">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('ChangeControlCompletionTab3', 'ChangeControlCompletionTabContent3', 1);">품질관리책임자 변경승인 의견</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('ChangeControlCompletionTab3', 'ChangeControlCompletionTabContent3', 2);">GMP위원장 변경승인 의견</a>
+                        </li>
+                    </ul>
+
+                    <div id="ChangeControlCompletionTabContent3">
+
+                        <div id="ChangeControlCompletionTabContent3_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">변경분류</label>
+                                <div class="input-group col-9">
+                                    <select class="form-control" name="change_level">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CH012")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">의견</label>
+                                <div class="input-group col-9">
+                                    <textarea class="form-control" cols="100" rows="4" name="change_contents" readonly="readonly"></textarea>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div id="ChangeControlCompletionTabContent3_2" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">변경분류</label>
+                                <div class="input-group col-9">
+                                    <select class="form-control" name="change_level2">
+                                        @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CH012")).Rows)
+                                        {
+                                            <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">의견</label>
+                                <div class="input-group col-9">
+                                    <textarea class="form-control" cols="100" rows="4" name="change_contents2" readonly="readonly"></textarea>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <hr />
+
+                </form>
+
+                <form id="ChangeControlCompletionWriteForm3">
+
+                    <div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">진행업무</label>
+                            <div class="input-group col-3">
+                                <select class="form-control" name="order_work_process">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "CH013")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <label class="col-2">진행부서</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="order_dept_nm" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">담당자</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control required" name="emp_cd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-5">
+                                <input type="text" class="form-control col-12 required" name="emp_nm" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-2">지시내용</label>
+                            <div class="input-group col-9">
+                                <textarea class="form-control" cols="100" rows="4" name="order_contents" readonly="readonly"></textarea>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <hr />
+
+                    <ul class="nav nav-tabs" id="ChangeControlCompletionTab4">
+                        <li class="nav-item">
+                            <a class="nav-link active" onclick="menutab('ChangeControlCompletionTab4', 'ChangeControlCompletionTabContent4', 1);">진행부서 변경진행 정보</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" onclick="menutab('ChangeControlCompletionTab4', 'ChangeControlCompletionTabContent4', 2);">진행부서 변경 완료 정보</a>
+                        </li>
+                    </ul>
+
+                    <div id="ChangeControlCompletionTabContent4">
+
+                        <div id="ChangeControlCompletionTabContent4_1">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">일정계획</label>
+                                <div class="input-group col-9">
+                                    <input type="text" class="form-control col-12 required" name="change_action_plan_contents" readonly="readonly">
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">진행계획</label>
+                                <div class="input-group col-9">
+                                    <textarea class="form-control required" cols="100" rows="4" name="change_schedule_plan" readonly="readonly"></textarea>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div id="ChangeControlCompletionTabContent4_2" class="display-none">
+
+                            <div class="input-wrapper">
+                                <label class="col-2">진행완료일</label>
+                                <div class="input-group col-9">
+                                    <input type="text" class="form-control col-12 datepicker" name="change_result_plan_contents" readonly="readonly">
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-2">진행결과</label>
+                                <div class="input-group  col-9">
+                                    <textarea class="form-control" cols="100" rows="4" name="change_schedule_result" readonly="readonly"></textarea>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

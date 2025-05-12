@@ -1,0 +1,970 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.QualityControl.TestReceiptMulti.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+    mainGrid = ("".Equals(mainGrid)) ? mainGrid : "null";
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeTest_type = (DataTable)ViewBag.le_test_type;
+    var codeTest_status = (DataTable)ViewBag.le_test_status;
+    var codeItem_form_cd = (DataTable)ViewBag.le_item_form_cd;
+
+    //var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    //var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+
+    // 1. 화면 Load 영역
+    $(function () {
+         // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+            // 툴바객체 default 설정
+            $("#" + "TestReceiptMulti" + "Grid").dxDataGrid({
+                // [툴바 기본속성정의]
+                dataSource: JSON.parse(@mainGrid),
+                focusedRowEnabled: true,
+                focusedRowIndex: 0,
+
+                // [툴바 이벤트 정의]
+                // (1) 툴바 save,revert 버튼 제거
+                onToolbarPreparing: (e) => {
+                    var toolbarItems = e.toolbarOptions.items;
+                    $.each(toolbarItems, (_, item) => { if (item.name == "saveButton" || item.name == "revertButton") item.visible = false });
+                },
+                onFocusedRowChanged: (_) => TestReceiptMultiFocusChanged(),
+                onCellPrepared: (e) => TestReceiptMulti_CellPrepared(e),
+                onEditorPreparing: (e) => TestReceiptMulti_EditorPreparing(e),
+                onRowUpdated:        (e) => TestReceiptMulti_RowUpdated(e),
+                onRowUpdating:       (e) => TestReceiptMulti_RowUpdating(e)
+              });
+        }
+
+        // 1.2. 검색 설정
+        $('input:radio[name=rg_ReqorRec][value=@srch.rg_ReqorRec]', $('#'+"TestReceiptMultiSearchForm")).prop('checked', true);
+        $('select[name=le_test_type]', $('#' + "TestReceiptMultiSearchForm")).val('@srch.le_test_type');
+        $('select[name=ce_gubun_number]', $('#' + "TestReceiptMultiSearchForm")).val('@srch.ce_gubun_number');
+        $('select[name=le_test_status]', $('#' + "TestReceiptMultiSearchForm")).val('@srch.le_test_status');
+
+        //1.3. help팝업설정
+        @*var TestReceiptMultiPopupColumns = {
+            "equip"    : [{ dataField: "equip_cd", caption: "기계코드" }, { dataField: "equip_nm", caption: "기계명" }]
+         ,  "employee":  [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+
+        };
+
+        createPopup("TestReceiptMulti" + "Equip", "기계기구조회 조회", @equipPopupData, TestReceiptMultiPopupColumns.equip);
+        createPopup("TestReceiptMulti" + "Emp", "사원 조회", @empPopupData, TestReceiptMultiPopupColumns.employee);*@
+
+        //1.4 툴바 활성/비활성
+        TestReceiptMultiEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=rb_gb],input[name*=date], select[name=status]', $('#'+"TestReceiptMultiSearchForm")).change(function () {
+            TestReceiptMultiSelect();
+        });
+        $('input[name=equipment]+div>button',$('#'+"TestReceiptMultiSearchForm")).click(function (event) {
+            TestReceiptMultiHelpPopUpSearch(event);
+        });
+
+        $('input[name=btnSelectYnAll]').click(() => TestReceiptMultiGridCheckBoxToggle('TestReceiptMultiGrid', 'select_yn', true));
+        $('input[name=btnSelectYnNothing]').click(() => TestReceiptMultiGridCheckBoxToggle('TestReceiptMultiGrid', 'select_yn', false));
+
+
+        //1.5.2 form
+        $('input[name=equip_cd]+div>button, input[name*=_emp_cd]+div>button', $('#'+"TestReceiptMultiWriteForm")).click(function (event) {
+            TestReceiptMultiHelpPopUpSearch(event);
+        });
+
+        $('input[type=button][name=TestReceiptMultiEmptyLabelBtn]').click(function (event) {
+            TestReceiptMultiEmptyLabelBtn_click(event);
+        });
+
+        $('input[type=button][name=TestReceiptMultiUnderTestLabelBtn]').click(function (event) {
+            TestReceiptMultiUnderTestLabelBtn_click(event);
+        });
+
+        // 파일관리 설정
+        $($("#TestReceiptMultiUploadFileBtn")).click(function (event) {TestReceiptMultiUploadFileBtn(event); });
+        $($("#TestReceiptMultiDownloadFileBtn")).click(function (event) {TestReceiptMultiDownloadFileBtn(event);});
+        $($("#TestReceiptMultiDeleteFileBtn")).click(function (event) {TestReceiptMultiDeleteFileBtn(event); });
+
+        //1.5.3 공통객체
+        //datepicker
+        $('#TestReceiptMulti .datepicker').datepicker({
+             format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+             clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+             autoclose: true,
+             templates: {
+                 leftArrow: '&laquo;',
+                 rightArrow: '&raquo;'
+             }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+             todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+             weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+             language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+         });
+
+        // 화면 resize
+        //screenResize();
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    //var TestReceiptMultiHelpPopUpCurInputName = "";
+
+
+    // help popup 공통 검색창 오픈
+    //function TestReceiptMultiHelpPopUpSearch(e) {
+    //    //TestReceiptMultiHelpPopUpCurInputName = $(e.target).parent().parent().prev().attr('name');
+    //    TestReceiptMultiHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+    //    var popupId = "";
+
+    //    switch (TestReceiptMultiHelpPopUpCurInputName)
+    //    {
+    //        case "equipment":
+    //        case "equip_cd":
+    //            popupId = "TestReceiptMulti"+"Equip";
+    //            break;
+    //        case "TestReceiptMulti_emp_cd":
+    //            popupId = "TestReceiptMulti"+"Emp";
+    //            break;
+    //        default:
+    //            popupId = "";
+    //            break;
+    //    }
+    //    //console.log("poupId :" + popupId);
+    //    if (popupId == "") {
+    //        alert("(오류) popup ID 미설정 오류!");
+    //    }
+    //    $('#' + popupId + 'Popup').dxPopup("instance").show();
+    //}
+
+    // help popup 이벤트 정의
+    //function TestReceiptMultiEquipRowDblClick(selectedItems) {
+    //    var data = selectedItems.data;
+
+    //    if (TestReceiptMultiHelpPopUpCurInputName == "equipment") {
+    //        $("input[name="+TestReceiptMultiHelpPopUpCurInputName+"]",$('#'+"TestReceiptMultiSearchForm")).val(data.equip_nm);
+    //    } else if (TestReceiptMultiHelpPopUpCurInputName == "equip_cd") {
+    //        $("input[name=equip_cd]", $('#'+"TestReceiptMultiWriteForm")).val(data.equip_cd);
+    //        $("input[name=equip_nm]",$('#'+"TestReceiptMultiWriteForm")).val(data.equip_nm);
+    //    }
+    //    $("#"+"TestReceiptMulti"+"EquipPopup").dxPopup("instance").hide();
+    //}
+
+    //function TestReceiptMultiEmpRowDblClick(selectedItems) {
+    //    var data = selectedItems.data;
+    //    var strIndex = TestReceiptMultiHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+    //    if (strIndex > -1) {
+    //        var inputPrefix = TestReceiptMultiHelpPopUpCurInputName.substring(0, strIndex);
+    //        var inputSubfix = TestReceiptMultiHelpPopUpCurInputName.substring(strIndex);
+
+    //        $('input[name='+inputPrefix+'_emp_cd]', $('#' + "TestReceiptMultiWriteForm")).val(data.emp_cd);
+    //        $('input[name='+inputPrefix+'_emp_nm]', $('#' + "TestReceiptMultiWriteForm")).val(data.emp_nm);
+    //    }
+    //    $("#" + "TestReceiptMulti" + "EmpPopup").dxPopup("instance").hide();
+
+    //}
+
+    // 3. 툴바영역
+    //조회
+    function TestReceiptMultiSearch() {
+        TestReceiptMultiSelect();
+    }
+    //입력
+    function TestReceiptMultiInput() {}
+    //수정
+    function TestReceiptMultiEdit() {
+        TestReceiptMultiEditCheck(true,'U');
+    }
+    //삭제
+    async function TestReceiptMultiDelete() {
+        TestReceiptMultiEditCheck(false, 'D');
+
+        var objGrid = $('#' + 'TestReceiptMultiGrid').dxDataGrid('instance');
+        var rowIndex = objGrid.option("focusedRowIndex");
+        if (rowIndex < 0) return;
+
+        var rowData = objGrid.option("dataSource")[rowIndex];
+        var tmp_test_status = parseInt(rowData.test_status);
+        var tmp_test_type = parseInt(rowData.test_type);
+
+        if (tmp_test_status < 2) {
+            alert("[불가] 시험접수가 진행되지 않았습니다.");
+            return;
+        } else if (tmp_test_status == 13) {
+            alert("의뢰 취소 상태에서는 시험 접수 취소를 할 수 없습니다.");
+            return;
+        } else if (tmp_test_status > 2) {
+            alert("시험이 다음단계가 진행되어 시험접수를 취소 할 수 없습니다.");
+            return;
+        }
+
+        //삭제(취소) 가능한 상태인지 체크한다.
+        var chkParams = { "test_type": tmp_test_type, "test_status": tmp_test_status };
+        var chkFlag = await ESStatusCheck(chkParams);
+        if (chkFlag == "Y") {
+            if (confirm("[주의] 접수를 취소 하시겠습니까?")) {
+                var objDatas;
+                var tmp_testcontrol_id = rowData.testcontrol_id;
+                var tmp_item_cd = rowData.item_cd;
+                objDatas = [{ "row_status": "D", "testcontrol_id": tmp_testcontrol_id, "test_type": tmp_test_type, "item_cd": tmp_item_cd }];
+                //return;
+                TestReceiptMultiTrx(objDatas)
+            }
+        } else {
+            alert("접수인 상태에서만 취소가 가능합니다.");
+        }
+    }
+    //저장
+     async function TestReceiptMultiSave() {
+        // 그리드에 저장된 row => 전송객체로 리턴
+        var objGrid;
+        var objDatas, fields, rowFilterFn;
+         objGrid = $('#' + 'TestReceiptMultiGrid').dxDataGrid('instance');
+         fields = ["row_status", "receive_date", "result_plan_date", "testcontrol_id", "test_type", "test_no", "test_standard", "all_test_check", "test_result_value0", "select_yn", "bigo"];
+         beforeSaveGridFn = async () => {
+            var objRows = objGrid.getVisibleRows();
+            for (var index in objRows) {
+                // checkbox 값 update
+                objGrid.cellValue(index,"teststandardYandN", (objGrid.cellValue(index, "teststandardYandN")) ? "Y" : "N");
+                objGrid.cellValue(index,"asepsis_item_ck", (objGrid.cellValue(index, "asepsis_item_ck")) ? "Y" : "N");
+                objGrid.cellValue(index, "select_yn", (objGrid.cellValue(index, "select_yn")) ? "Y" : "N");
+
+                // row_status update
+                objGrid.cellValue(index,"row_status", (objGrid.cellValue(index, "select_yn")) ? "U" : "");
+                //console.log("test_status_1 :" + objRows[index].data["test_status"]);
+                //console.log("test_status_2 :" + objGrid.cellValue(index, "test_status"));
+            }
+         };
+
+        rowFilterFn = (row, index) => { if (objGrid.cellValue(index, "select_yn")) return true };
+        objDatas =  await UtilView.dataGridSave('TestReceiptMultiGrid', fields, beforeSaveGridFn, rowFilterFn);
+
+        //console.log(objGrid.getVisibleRows());
+        //console.log(JSON.stringify(objDatas));
+        //return;
+        TestReceiptMultiTrx(objDatas);
+    }
+    //취소
+    function TestReceiptMultiUndo() {
+        TestReceiptMultiEditCheck(false, 'N');
+        TestReceiptMultiFocusChanged();
+    }
+    // 프린트
+    function TestReceiptMultiPrint() {
+        // <report pre check>
+        var gridName = "TestReceiptMultiGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        var gridFocusRowKey = grid.option("focusedRowKey")
+        if (!gridFocusRowKey) {
+            alert("출력할 품목을 선택하세요!");
+            return;
+        }
+        var gridData = getGridRowByKey(gridName, gridFocusRowKey);
+
+        var testcontrol_id = gridData.testcontrol_id;
+        var test_type = gridData.test_type;
+        // </report pre check>
+
+        // report 출력 객체 생성
+        var report = new ReportHelper($(event.target));
+        //var report = new ReportHelper();
+
+        report.addParam({
+            objFile: { path: "QualityControl", RptFileName: "rptTest_Receipt" },
+            objSp: { SpName: "SP_TestInformReport", gubun: "S1", reportParam: "testcontrol_id:" + testcontrol_id },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+            // dataset(다중테이블)  사용시, 아래주석을 풀어서 사용한다.
+            //objTblNm: { tblName: "Header,TotalRate" },
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+
+        report.run();
+    }
+    // 엑셀다운로드
+    function TestReceiptMultiExcel() {
+        var m;        
+        try { m = UtilView.getCurMenuInfo('menuname'); } catch (e) { m = '이름없음' };        
+        m += "_" + '@DateTime.Now.ToShortDateString()';
+        gridExportToExcel("TestReceiptMultiGrid", m);
+    }
+    // 즐겨찾기
+    function TestReceiptMultiFavorite() {
+
+    }
+    // 트랜잭션처리
+    function TestReceiptMultiTrx(objDatas) {
+        let jsonData = JSON.stringify(objDatas);
+        //console.log("jsondata :" + jsonData);
+        UtilView.dataGridSaveTRX({ dto: jsonData }, (result) => TestReceiptMultiSelect());
+    }
+    // 수정중인지 체크
+    function TestReceiptMultiEditCheck(nowEdit, status) {
+        var programId = UtilView.getCurMenuInfo("pid");
+        //console.log("nowEidt 호출!!");
+        // (공통) 툴바 활성/비활성
+        UtilView.setActiveElementToolbar(nowEdit, "@(pagePrefix)Toolbar", programId);
+
+        // (공통) 그리드 활성/비활성
+        //var editing;
+
+        var editing = { allowUpdating: nowEdit,   mode: 'batch'   }
+        UtilView.setActiveElementGrids2(false, editing, "TestReceiptMultiGrid");
+
+        // (공통) 화면영역별 element 활성/비활성처리
+        @*UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "TestReceiptMultiGrid"
+            , "@(pagePrefix)WriteForm"
+            , "afterservice_no;equip_cd;TestReceiptMulti_emp_nm"
+        );*@
+
+    }
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function TestReceiptMultiSelect() {
+        // form claear
+        //TestReceiptMultiWriteFormClear();
+        // edit 해제
+        TestReceiptMultiEditCheck(false, 'N');
+        // 메인grid
+        UtilView.dataGridSelect('TestReceiptMulti' + 'Grid', 'TestReceiptMulti'+'SearchForm');
+    }
+    // 3.2 Row focus changed    
+    function TestReceiptMultiFocusChanged() {        
+        TestReceiptMultiSelectFileList();
+        // data 객체, 폼에 바인딩
+        //UtilView.setDataGridFormBind("TestReceiptMulti" + "Grid", "TestReceiptMulti" + "WriteForm");
+
+        // 우측 gird바인딩
+        //TestReceiptMultiSelectSub(gridId, "TestReceiptMulti" + "SubGrid");
+    }
+    // 5. 우측 Form
+    // 5.1. clear form
+    function TestReceiptMultiWriteFormClear() {
+        $('#'+"TestReceiptMultiWriteForm")[0].reset();
+        $("textarea",$('#'+"TestReceiptMultiWriteForm")).text("");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid ($기능입력$)
+    //function TestReceiptMultiSelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { afterservice_no: gridData.afterservice_no };
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: UtilView.getActionUrl('SelectSub'),
+    //        data: data,
+    //        success: function (result) {
+    //            if (result[0] == "") clear();
+    //            else {
+    //                var jsonResult = JSON.parse(result);
+    //                $('#' + tGridId).dxDataGrid("option", "dataSource", jsonResult);
+    //            }
+    //        }
+    //    })
+    //}
+
+    //#region 파일관리 영역
+    // 파일목록만 조회
+    function TestReceiptMultiSelectFileList() {
+        var grid = $("#TestReceiptMultiGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestReceiptMultiGrid", grid.option("focusedRowKey"));
+                
+        //var testcontrol_id = $("#TestReceiptMultiWriteForm input[name=testcontrol_id]").val();
+        
+        $.ajax({
+            type: 'GET',
+            url: '/QualityControl/TestReceiptMultiSelectFile',
+            data: {
+                testcontrol_id: gridData.testcontrol_id                
+            },
+            success: function (result) {
+                try {
+                    var json = JSON.parse(result);
+                    $("#TestReceiptMultiFileGrid").dxDataGrid("option", "dataSource", json);
+                } catch (e) {
+                    $("#TestReceiptMultiFileGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 파일 업로드 버튼
+    function TestReceiptMultiUploadFileBtn(event) {
+        //if ($("#TestReceiptMultiWriteForm input[name=gubun]").val() !== "U") {
+        //    alert("수정중일때만 파일 첨부가 가능합니다.");
+        //    return;
+        //}
+        var grid = $("#TestReceiptMultiGrid").dxDataGrid("instance");
+        if (grid.option("focusedRowKey")) {
+            var fileUploader = $('#TestReceiptMultiFileUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        } else {
+            alert("첨부할 항목을 선택하십시오!")
+        }
+    }
+
+    // 파일 업로드
+    function TestReceiptMultiUploadFile(e) {
+        var grid = $("#TestReceiptMultiGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestReceiptMultiGrid", grid.option("focusedRowKey"));
+
+        var name = e.component.option("name");
+        var url = e.component.option("uploadUrl");
+        url = updateQueryStringParameter(url, "testcontrol_id", gridData.testcontrol_id);        
+        url = updateQueryStringParameter(url, "name", name);
+        e.component.option("uploadUrl", url);
+    }
+
+    // 파일 다운로드
+    function TestReceiptMultiDownloadFileBtn(e) {
+        var grid = $("#TestReceiptMultiFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestReceiptMultiFileGrid", grid.option("focusedRowKey"));
+
+        var fileId = gridData.file_id;
+
+        if (fileId != "") {
+            var url = "";
+            url = updateQueryStringParameter(url, "testcontrol_id", gridData.testcontrol_id);
+            url = updateQueryStringParameter(url, "file_id", gridData.file_id);
+            document.location.assign('/QualityControl/TestReceiptMultiDownloadFile' + url);
+        }
+    }
+
+    // 파일 삭제
+    function TestReceiptMultiDeleteFileBtn() {
+
+        if (!confirm("선택한 파일을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        var grid = $("#TestReceiptMultiFileGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("TestReceiptMultiFileGrid", grid.option("focusedRowKey"));
+
+        $.ajax({
+            type: 'POST',
+            url: '/QualityControl/TestReceiptMultiDeleteFile',
+            data: {
+                testcontrol_id: gridData.testcontrol_id,
+                file_id: gridData.file_id
+            },
+            success: function (result) {
+                alert("삭제하였습니다.");
+                TestReceiptMultiSelectFileList();
+            }
+        });
+    }
+
+    //#endregion
+    // NEW 페이지함수 > 1. 전체선택/해제
+    function TestReceiptMultiGridCheckBoxToggle(gridId, dataField, chkFlag) {
+        $('#' + "TestReceiptMultiGrid").dxDataGrid('instance')
+        var gridObj = $('#' + gridId).dxDataGrid('instance');
+
+        if (!gridObj.option("editing.allowUpdating")) {
+            alert("수정상태에서만 사용할수 있습니다!");
+            return;
+        }
+        var objRows = gridObj.getVisibleRows();
+        for (var index in objRows) {
+            gridObj.cellValue(index, dataField, chkFlag);
+        }
+    }
+
+    /// <summary>
+        /// 작성일:2006.06.01
+        /// 작성자:최석중
+        /// 설  명:삭제(취소) 가능한 상태인지 체크한다.
+        /// </summary>
+    async function ESStatusCheck(objParam)
+    {
+        const result = await $.ajax({
+            type: 'POST',
+            url: '/QualityControl/TestReceiptMultiESStatusCheck',
+            data: {
+                 dto: JSON.stringify(objParam)
+            }
+        });
+        return result;
+    }
+        
+    // NEW REV > 1. 그리드 이벤트핸들러지정
+    function TestReceiptMulti_CellPrepared(e) {
+        // eobj 변수 설정
+        var dataField = e.column.dataField;
+        var rowType = e.rowType;
+        var cellElement = e.cellElement;
+
+        // css색상지정
+        var objColor_1 = {
+            "1": { "background-color": "LightCyan", "color": "black" },             //원료시험
+            "2": { "background-color": "Khaki", "color": "black" },                 //자재
+            "3": { "background-color": "PaleGreen", "color": "black" },             //반제품
+            "4": { "background-color": "LightSalmon", "color": "black" },           //용출시험
+            "5": { "background-color": "LightGoldenrodYellow", "color": "black" },  //재포장
+            "6": { "background-color": "NavajoWhite", "color": "black" },           //포장
+            "7": { "background-color": "Gray", "color": "black" },                  //출하
+            "8": { "background-color": "DarkCyan", "color": "black" },              //정제수
+            "9": { "background-color": "SkyBlue", "color": "black" }                //청정도
+        };
+        var objColor_2 = {
+            "0": { "background-color": "White", "color": "black" },                 // 상태 : "---"
+            "1": { "background-color": "Silver", "color": "black" },                // 상태 : "의뢰"
+            "2": { "background-color": "Khaki", "color": "black" },                 // 상태 : "접수"
+            "3": { "background-color": "NavajoWhite", "color": "black" },           // 상태 : "채취지시"
+            "4": { "background-color": "Gray", "color": "black" },                  // 상태 : "채취중"
+            "5": { "background-color": "PaleTurquoise", "color": "black" },         // 상태 : "검체채취"
+            "6": { "background-color": "Thistle", "color": "black" },               // 상태 : "시험중"
+            "7": { "background-color": "CornflowerBlue", "color": "black" },        // 상태 : "시험완료"
+            "8": { "background-color": "PaleGreen", "color": "black" },             // 상태 : "확인"
+            "9": { "background-color": "", "color": "" },                           // 상태 : "승인"
+            "10": { "background-color": "Tan", "color": "black" },                  // 상태 : "통보"
+            "11": { "background-color": "LightSlateGray", "color": "black" },       // 상태 : "출하"
+            "12": { "background-color": "Pink", "color": "black" },                 // 상태 : "일정"
+            "13": { "background-color": "Silver", "color": "black" },               // 상태 : "의뢰취소"
+            "14": { "background-color": "Goldenrod", "color": "black" },            // 상태 : "미생물시험완료"
+        };
+
+        // cell 색상지정
+        var printField, valueField, fieldValue;
+        var fieldColorCss;
+        var tmpFieldValue;
+
+        if (rowType != 'data') return;
+        switch (dataField) {
+            case "test_type_nm":
+                printField = dataField;
+                valueField = 'test_type';
+                fieldValue = e.data[valueField];
+                fieldColorCss = objColor_1;
+                break;
+            case "test_status_nm":
+                printField = dataField;
+                valueField = 'test_status';
+                fieldValue = e.data[valueField];
+                fieldColorCss = objColor_2;
+                // 조건추가시사용..
+                tmpFieldValue = e.data['test_result_yn'];
+                break;
+        }
+
+        // 색상지정
+        if (!UtilView.isEmpty(printField)) {
+            var cssConfig = fieldColorCss[fieldValue];
+            // 예외설정
+            if (printField == "test_status_nm") {
+                if (fieldValue == '9') {
+                    if (tmpFieldValue == 'Y') { //적합판정일경우
+                        cssConfig = { "background-color": "LimeGreen", "color": "black" };
+                    } else if (tmpFieldValue == 'N') { //부적합 판정일경우
+                        cssConfig = { "background-color": "LightCoral", "color": "black" };
+                    } else if (tmpFieldValue == 'C') {  //조건부 적합일 경우
+                        cssConfig = { "background-color": "GreenYellow", "color": "black" };
+                    }
+                } else if (fieldValue == '13') {
+                    cssConfig['color'] = 'Crimson';
+                }
+            }
+            cellElement.css(cssConfig);
+        }
+    }
+
+    function TestReceiptMulti_EditorPreparing(e) {
+        // 수정대상필드
+        //debugger;
+        editableFields = ["select_yn", "test_result_value0", "bigo"];
+        if (e.parentType === "dataRow") {
+            // 미수정대상 필드
+            if (editableFields.indexOf(e.dataField) == -1) {
+                e.editorOptions.disabled = true;
+            }
+            // 수정대상 필드
+            else {
+                if (e.dataField == "select_yn") {
+                    const defaultValueChangeHandler = e.editorOptions.onValueChanged;
+                    e.editorOptions.onValueChanged = function (args) { // Override the default handler
+                        if (e.value) {
+                            alert("삭제 버튼을 클릭하여 접수 취소를 진행하십시오");
+                            e.setValue(true);
+                            return;
+                        } else {                           
+                            var temp_date = Date.parse("2015-06-04");
+                            var temp_request_date = Date.parse(e.row.data["request_date"]);
+                            var temp_test_status = e.row.data["test_status"];
+
+                            //console.log(temp_test_status);
+                            if ( (temp_request_date >= temp_date) && (temp_test_status=="1") ) {
+                                alert("시험 단계 간소화로 해당 데이터는\n 시험지시 화면에서 진행되어야 합니다.");
+                                e.setValue(false);
+                                return;
+                                //e.setValue(false);
+                            }
+
+                            // 시험의뢰가 진행 되지 않으면, 접수 할 수 없도록 수정.
+                            if (temp_test_status == "0") {
+                                alert("시험접수는 의뢰상태에서만 가능합니다.");
+                                e.setValue(false);
+                                return;
+                            }
+                        }
+                        defaultValueChangeHandler(args);
+                    }
+                }
+
+            }
+        }
+    }
+    function TestReceiptMulti_RowUpdating(row) {
+        //console.log(row.data);
+
+    }
+
+    function TestReceiptMulti_RowUpdated(e) {
+        //var objGrid = $('#' + gridId).dxDataGrid('instance');
+        //console.log(e);
+        var objGrid = e.component;
+        var objRow = e.data;
+
+        //console.log("grid teset :" + objGrid.getRowIndexByKey(e.key));
+
+        objGrid.cellValue(e.key, "row_status", "U");
+    }
+
+    //공라벨 출력
+    function TestReceiptMultiEmptyLabelBtn_click() {
+        // report 선언
+        var report = new ReportHelper();
+        var subParam = "";
+
+        report.addParam({
+            objFile: { path: "QualityControl/LabelView", RptFileName: "UnderTestLabel_note" },
+            objSp: { SpName: "", gubun: "", reportParam: "" },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: subParam, viewerName: "", nCopies: 1 },
+            //objTblNm: { tblName: "ProducttransferT" }
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+
+        report.print();
+    }
+
+    //시험증 라벨 인쇄
+    function TestReceiptMultiUnderTestLabelBtn_click() {
+        // <report pre check>
+        var gridName = "TestReceiptMultiGrid";
+        var grid = $("#" + gridName).dxDataGrid("instance");
+        var gridFocusRowKey = grid.option("focusedRowKey")
+
+        //debugger;
+        if (!gridFocusRowKey) {
+            alert("출력할 품목을 선택하세요!");
+            return;
+        }
+        var gridData = getGridRowByKey(gridName, gridFocusRowKey);
+
+        var testcontrol_id = gridData.testcontrol_id;
+        var test_type = gridData.test_type;
+
+        if (gridData.test_status == "0" || gridData.test_status == "1") {
+            alert("시험중 라벨은 접수후 출력 가능합니다.");
+            return;
+        }
+        // </report pre check>
+
+        // report 출력 객체 생성
+        var report = new ReportHelper();
+        //var report = new ReportHelper();
+        var reportParams = "testcontrol_id:" + testcontrol_id + ";test_type:" + test_type + ";form_cd:UndertestLabel";
+
+        report.addParam({
+            objFile: { path: "QualityControl/LabelView", RptFileName: "UndertestLabel" },
+            objSp: { SpName: "SP_PickingCompleteE", gubun: "SD", reportParam: reportParams },
+            // objEtcInfo 속성정의
+            //  - viewerNanme => report뷰어명, 기본값: ReportViewer, 별도의 viewer사용시적용(DayOrderWork.cshtml 참조)
+            //  - nCopies     => 프린트할 수량,  기본값:1, 수량지정시 해당수량만큼 프린트함
+            objEtcInfo: { subParam: "", viewerName: "", nCopies: 1 }
+            // dataset(다중테이블)  사용시, 아래주석을 풀어서 사용한다.
+            //objTblNm: { tblName: "Header,TotalRate" },
+            //sub report필요시, 아래주석을 풀어서 사용한다.
+            //objSub: { subRptName: "Process,FinishDate,OrderQty,OrderQty2,Receive,ReceiveEA,Real,RealEA,Rate,Rate2,Remark" },
+        });
+        report.print();
+    }
+
+</script>
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="N">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)EquipPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">고장신고 등록</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">고장신고</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="request" id="rg_ReqorRec1" name="rg_ReqorRec" />
+                        </div>
+                        <span class="form-control-sm"><label for="rg_ReqorRec1">의뢰일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="receipt" id="rg_ReqorRec2" name="rg_ReqorRec" />
+                        </div>
+                        <span class="form-control-sm"><label for="rg_ReqorRec2">접수일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center col-3" name="de_start_date" value="@srch.de_start_date">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center col-3" name="de_end_date" value="@srch.de_end_date">
+                    </div>
+
+                </div>
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="le_test_type" value="">
+                            @foreach (DataRow row in codeTest_type.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control col-4" name="ce_gubun_number" value="">
+                            <option value="0">의뢰품목</option>
+                            <option value="1">의뢰번호</option>
+                            <option value="2">제조(관리)번호</option>
+                        </select>
+                        <input type="text" class="form-control col-8" name="te_number" value="@srch.te_number">
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="le_test_status" value="">
+                            @foreach (DataRow row in codeTest_status.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제형</span>
+                        </div>
+                        <select class="form-control" name="le_item_form_cd" value="">
+                            @foreach (DataRow row in codeItem_form_cd.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Edit;Delete;Save;Undo;Print;Preview;Excel");}
+
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-2">
+            <span>승인구분 </span>
+            <span class="mt-1 p-2 badge badge-success">적합</span>
+            <span class="mt-1 p-2 badge badge-danger">부적합</span>
+
+        </div>
+        <div class="col-5">
+            <input type="button" name="TestReceiptMultiEmptyLabelBtn" class="m-1 btn btn-sm btn-primary" value="공라벨 출력" />
+            <input type="button" name="TestReceiptMultiUnderTestLabelBtn" class="m-1 btn btn-sm btn-primary" value="시험중 라벨 인쇄" />
+        </div>
+        <div class="col-4">
+            <input type="button" name="btnSelectYnAll" class="m-1 btn btn-sm btn-secondary" value="접수(전체선택)" />
+            <input type="button" name="btnSelectYnNothing" class="m-1 btn btn-sm btn-secondary" value="접수(전체해제)" />
+        </div>
+    </div>
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets-->
+        <div class="col-10 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                                .ID("TestReceiptMulti" + "Grid")
+                                .KeyExpr("testcontrol_id")
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height("820")
+                                .ShowBorders(true)
+                                //.Selection(s => s.Mode(SelectionMode.Multiple))
+                                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                                .ShowColumnLines(true)
+                                .HoverStateEnabled(true)
+                                .AllowColumnResizing(true)
+                                .AllowColumnReordering(true)
+                                .ColumnAutoWidth(true)
+                                .Editing((editing) =>
+                                {
+                                    editing.Mode(GridEditMode.Batch);
+                                    //editing.AllowAdding(false);
+                                    //editing.AllowDeleting(false);
+                                    editing.AllowUpdating(false);
+                                    //editing.Texts(edit => edit.EditRow("test"));
+                                })
+                            .Columns(c =>
+                            {
+                                var mergeIndex = 0;
+                                c.Add().Caption("기본정보").IsBand(true);
+                                c.Add().DataField("test_type_nm").Caption("시험종류").OwnerBand(mergeIndex);
+                                c.Add().DataField("process_nm").Caption("공정").OwnerBand(mergeIndex);
+                                c.Add().DataField("request_date").Caption("의뢰일").OwnerBand(mergeIndex);
+                                c.Add().DataField("testrequest_no").Caption("의뢰번호").OwnerBand(mergeIndex);
+                                c.Add().DataField("item_cd").Caption("품목코드").OwnerBand(mergeIndex);
+                                c.Add().DataField("item_nm").Caption("품목").OwnerBand(mergeIndex);
+                                c.Add().DataField("start_no").Caption("제조번호").OwnerBand(mergeIndex);
+                                c.Add().DataField("start_no").Caption("제조번호").OwnerBand(mergeIndex);
+                                c.Add().DataField("start_qty").Caption("의뢰량").OwnerBand(mergeIndex);
+                                c.Add().DataField("start_qty_unit").Caption("단위").OwnerBand(mergeIndex);
+                                c.Add().DataField("teststandardYandN").Caption("시험규격").DataType(GridColumnDataType.Boolean).OwnerBand(mergeIndex)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.teststandardYandN == 'Y' || rowData.teststandardYandN == true); }");
+                                c.Add().DataField("asepsis_item_ck").Caption("무균원료여부").DataType(GridColumnDataType.Boolean).OwnerBand(mergeIndex)
+                                    .CalculateCellValue(@"function(rowData) {return (rowData.asepsis_item_ck == 'Y' || rowData.asepsis_item_ck == true); }");
+                                mergeIndex = 13;
+                                c.Add().Caption("접수처리").IsBand(true);
+                                c.Add().DataField("select_yn").Caption("접수선택").DataType(GridColumnDataType.Boolean).OwnerBand(mergeIndex)
+                                   .CalculateCellValue(@"function(rowData) { return (rowData.select_yn == ""Y"" || rowData.select_yn == true); }");
+                                c.Add().DataField("test_status_nm").Caption("상태").OwnerBand(mergeIndex);
+                                mergeIndex = 16;
+                                c.Add().Caption("참고사항").IsBand(true);
+                                c.Add().DataField("result_hope_date").Caption("통보요청일자").OwnerBand(mergeIndex);
+                                c.Add().DataField("receive_date").Caption("접수일").OwnerBand(mergeIndex);
+                                c.Add().DataField("request_remark").Caption("비고").OwnerBand(mergeIndex);
+                                c.Add().DataField("valid_period").Caption("유효기한").OwnerBand(mergeIndex);
+                                c.Add().DataField("pack_type").Caption("포장용기").OwnerBand(mergeIndex);
+                                c.Add().DataField("test_result_value0").Caption("CA역가").OwnerBand(mergeIndex);
+                                c.Add().DataField("bigo").Caption("비고").OwnerBand(mergeIndex);
+
+
+
+                                #region visable false 데이터 주석처리
+                                // visible false컬럼 정의
+                                c.Add().DataField("row_status").Caption("row_status").Visible(false);   // row상태값
+
+                                #endregion
+                            })
+                        .OnEditorPreparing("TestReceiptMulti_EditorPreparing")
+                        .OnFocusedRowChanged("TestReceiptMultiFocusChanged")
+
+                   )
+                  
+            </div>
+        </div>
+        <div class="col-2 pl-1">
+            <div class="box mb-0">
+                <div class="align-end-only p-1">
+                    <span class="align-center pr-3">첨부자료</span>
+                    <button class="btn btn-secondary" id="TestReceiptMultiUploadFileBtn">등록</button>
+                    <button class="btn btn-secondary" id="TestReceiptMultiDownloadFileBtn">다운로드</button>
+                    <button class="btn btn-secondary" id="TestReceiptMultiDeleteFileBtn">삭제</button>
+                </div>
+
+                @(Html.DevExtreme().FileUploader()
+                                .Visible(false)
+                                .ID("TestReceiptMultiFileUploader")
+                                .Name("TestReceiptMultiAttatchedFile")
+                                .Multiple(false)
+                                .AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot", ".pdf", ".rtf"})
+                                .UploadUrl(Url.Action("TestReceiptMultiUploadFile", "QualityControl"))
+                                .UploadMode(FileUploadMode.Instantly)
+                                .MaxFileSize(int.MaxValue)
+                                .OnValueChanged("TestReceiptMultiUploadFile")
+                                .OnUploaded("TestReceiptMultiSelectFileList")
+                            )
+                @(Html.DevExtreme().DataGrid()
+                                .ID("TestReceiptMultiFileGrid")
+                                .ShowBorders(true)
+                                .ShowColumnLines(true)
+                                .ShowRowLines(true)
+                                .FocusedRowEnabled(true)
+                                .FocusedRowIndex(0)
+                                .KeyExpr(new string[] { "testcontrol_id", "file_id" })
+                                .Height(790)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Columns(columns =>
+                                {
+                                    columns.Add()
+                                        .DataField("doc_file_name")
+                                        .Caption("파일명");
+                                })
+                            )
+            </div>
+        </div>
+    </div>
+
+</div>

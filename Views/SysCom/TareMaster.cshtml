@@ -1,0 +1,434 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "TareMaster";
+
+    var tareMasterData = @Html.Raw(Json.Encode(ViewBag.tareMasterData.Data));
+}
+
+@*반제품 용기 관리*@
+
+<script id="TareMasterJs">
+
+        var _tareMasterCRUDGubun;
+        let today = new Date();
+
+        let year = today.getFullYear();
+        let month = today.getMonth() + 1;
+        let date = today.getDate();
+
+        $(function () {
+            setDatePicker("#TareMaster .datepicker");
+
+            var tare_data = @tareMasterData;
+
+            if (tare_data.length > 0) {
+                $("#TareMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@tareMasterData));
+                $("#TareMasterGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#TareMasterGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            tareMasterEditCheck(false);
+        });
+
+        // 수정중인지 체크
+        function tareMasterEditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#TareMasterSave").dxButton().parent().parent().removeClass("display-none");
+                $("#TareMasterUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#TareMasterSearch").dxButton().parent().parent().addClass("display-none");
+                $("#TareMasterInput").dxButton().parent().parent().addClass("display-none");
+                $("#TareMasterEdit").dxButton().parent().parent().addClass("display-none");
+                $("#TareMasterDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#tareMasterForm :disabled").attr('disabled', false);
+                $("#TareMasterGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#TareMasterSave").dxButton().parent().parent().addClass("display-none");
+                $("#TareMasterUndo").dxButton().parent().parent().addClass("display-none");
+                $("#TareMasterSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#TareMasterInput").dxButton().parent().parent().removeClass("display-none");
+                $("#TareMasterEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#TareMasterDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#tareMasterForm :enabled").attr('disabled', true);
+                $("#TareMasterGrid").dxDataGrid("option", "disabled", false);
+            }
+
+            $("#tareMasterForm input[name=tareMaster_cd]").readonly(true);
+
+        }
+
+        function tareMasterSelectTare() {
+
+            var grid = $("#TareMasterGrid").dxDataGrid("instance");
+
+            var data = getGridRowByKey('TareMasterGrid', grid.option("focusedRowKey"));
+
+            $("#tareMasterForm")[0].reset();
+
+            $("#tareMasterForm input[name=tare_cd]").val(data.tare_cd);
+            $("#tareMasterForm select[name=taremaster_type]").val(data.taremaster_type);
+            $("#tareMasterForm select[name=taremaster_material]").val(data.taremaster_material);
+            $("#tareMasterForm select[name=taremaster_class]").val(data.taremaster_class);
+            $("#tareMasterForm input[name=taremaster_volume]").val(data.taremaster_volume);
+            $("#tareMasterForm input[name=taremaster_dimension]").val(data.taremaster_dimension);
+            $("#tareMasterForm input[name=taredetail_cd]").val(data.taredetail_cd);
+            $("#tareMasterForm input[name=taredetail_mass]").val(data.taredetail_mass);
+            $("#tareMasterForm input[name=taredetail_use_date]").val(data.taredetail_use_date);
+            $("#tareMasterForm input[name=taredetail_disuse_date]").val(data.taredetail_disuce_date);
+
+            if (data.taredetail_use_ck === "Y") {
+                $("#tareMasterForm input[name=taredetail_use_ck][value=Y]").prop("checked", true);
+            } else {
+                $("#tareMasterForm input[name=taredetail_use_ck][value=N]").prop("checked", true);
+            }
+
+            if (data.taredetail_gb === "Y") {
+                $("#tareMasterForm input[name=taredetail_gb][value=Y]").prop("checked", true);
+            } else {
+                $("#tareMasterForm input[name=taredetail_gb][value=N]").prop("checked", true);
+            }
+        }
+
+        function createTareMastreCd() {
+
+            var cd1 = $("#tareMasterForm select[name=taremaster_type]").val();
+            var cd2 = $("#tareMasterForm select[name=taremaster_material]").val();
+            var cd3 = $("#tareMasterForm select[name=taremaster_class]").val();
+
+            $("#tareMasterForm input[name=tare_cd]").val(cd1 + cd2 + cd3);
+
+        }
+
+        function TareMasterSearch() {
+
+            var formData = new FormData($("#tareMasterSearchForm")[0]);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysCom/SelectTare',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#TareMasterGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#TareMasterGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "TareMasterGrid");
+        }
+
+        function TareMasterInput() {
+            tareMasterEditCheck(true);
+            _tareMasterCRUDGubun = "I";
+            $("#tareMasterForm")[0].reset();
+
+            $("#tareMasterForm input[name=taredetail_use_date]").val(year + '-' + month + '-' + date);
+            $("#tareMasterForm input[name=taredetail_disuse_date]").val(year + '-' + month + '-' + date);
+            $("#tareMasterForm input[name=taredetail_use_ck][value=N]").prop("checked", true);
+            $("#tareMasterForm input[name=taredetail_gb][value=N]").prop("checked", true);
+            $("#tareMasterForm input[name=taredetail_use_ck]").readonly(true);
+            $("#tareMasterForm input[name=taredetail_gb]").readonly(true);
+        }
+
+        function TareMasterEdit() {
+            tareMasterEditCheck(true);
+            _tareMasterCRUDGubun = "U";
+
+            $("#tareMasterForm select[name=taremaster_type]").readonly(true);
+            $("#tareMasterForm select[name=taremaster_material]").readonly(true);
+            $("#tareMasterForm select[name=taremaster_class]").readonly(true);
+            $("#tareMasterForm input[name=taredetail_use_ck]").readonly(true);
+            $("#tareMasterForm input[name=taredetail_gb]").readonly(true);
+        }
+
+        function TareMasterDelete() {
+            _tareMasterCRUDGubun = "D";
+
+        }
+
+        function TareMasterSave() {
+
+            var form = $("#tareMasterForm")[0];
+            var formData = new FormData(form);
+
+            if (UtilView.checkValidForm("tareMasterForm")) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysCom/TareMasterTRX',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (result) {
+                        $("#tareMasterForm select[name=taremaster_type]").readonly(false);
+                        $("#tareMasterForm select[name=taremaster_material]").readonly(false);
+                        $("#tareMasterForm select[name=taremaster_class]").readonly(false);
+
+                        tareMasterEditCheck(false);
+                        tareMasterSelectTare();
+                    }
+                })
+            }
+        }
+
+        function TareMasterUndo() {
+
+            $("#tareMasterForm select[name=taremaster_type]").readonly(false);
+            $("#tareMasterForm select[name=taremaster_material]").readonly(false);
+            $("#tareMasterForm select[name=taremaster_class]").readonly(false);
+
+            tareMasterEditCheck(false);
+            tareMasterSelectTare();
+        }
+
+
+</script>
+
+
+<div id="TareMaster" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="tareMasterSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">종류</span>
+                        </div>
+                        <select class="form-control" name="taremaster_type">
+                            @foreach (DataRow row in ((DataTable)ViewBag.tareMasterType).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">재질</span>
+                        </div>
+                        <select class="form-control" name="taremaster_material">
+                            @foreach (DataRow row in ((DataTable)ViewBag.tareMasterMaterial).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <select class="form-control" name="taremaster_class">
+                            @foreach (DataRow row in ((DataTable)ViewBag.tareMasterClass).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+
+    </div>
+
+
+    <div class="row">
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TareMasterGrid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .HoverStateEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .KeyExpr("tare_cd")
+                    .OnFocusedRowChanged("tareMasterSelectTare")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("tare_cd").Caption("코드");
+                        c.Add().DataField("taremaster_type_nm").Caption("종류");
+                        c.Add().DataField("taremaster_material_nm").Caption("재질");
+                        c.Add().DataField("taremaster_class_nm").Caption("구분");
+                        c.Add().DataField("taredetail_use_ck").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.taredetail_use_ck == ""Y"" || rowData.taredetail_use_ck == true); }");
+                        c.Add().DataField("taredetail_gb").Caption("수동입력")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.taredetail_gb == ""Y"" || rowData.taredetail_gb == true); }");
+                    })
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box">
+
+                <form id="tareMasterForm">
+
+                    <div class="divName">
+                        <p>용기마스터 정보</p>
+                    </div>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="tare_cd" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">종류 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="taremaster_type" onchange="createTareMastreCd()">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.tareMasterTypeForm).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">재질 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="taremaster_material" onchange="createTareMastreCd()">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.tareMasterMaterialForm).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">구분 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12 required" name="taremaster_class" onchange="createTareMastreCd()">
+                                    <option value="" selected disabled hidden> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.tareMasterClassForm).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">용량</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="taremaster_volume" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">규격</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="taremaster_dimension" />
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="divName">
+                        <p>용기 정보</p>
+                    </div>
+
+                    <div class="menuDiv">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">용기코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="taredetail_cd" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">용기무게</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="taredetail_mass" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">등록일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="taredetail_use_date" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">폐기일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="taredetail_disuse_date" readonly="readonly">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">수동입력</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="taredetail_use_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="taredetail_use_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부</label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv col-12">
+                                    <label><input type="radio" name="taredetail_gb" value="Y" />예 </label>
+                                    <label><input type="radio" name="taredetail_gb" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

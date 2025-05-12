@@ -1,0 +1,431 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ProgramUserManage";
+
+    var programGridData = @Html.Raw(Json.Encode(ViewBag.programGridData.Data));
+}
+
+@*프로그램 권한 설정*@
+
+<script id="ProgramUserManageJs">
+    var _programUserIsEdited = false;
+
+    $(function () {
+
+        var ds = @programGridData;
+
+        if (ds) {
+            $("#ProgramUserManageProgramGrid").dxTreeList("instance").option("dataSource", JSON.parse(ds));
+        }
+        else {
+            $("#ProgramUserManageProgramGrid").dxTreeList("instance").option("dataSource", []);
+        }
+        ProgramUserManage_EditCheck(false);
+
+    });
+
+    // 프로그램 그리드 선택 변경
+    function selectProgram(selectedItems) {
+
+        var data = selectedItems.selectedRowsData[0];
+
+        if (selectedItems.selectedRowsData.length <= 0 || data.gubun != "1") {
+            $("#ProgramUserManageUserGrid").dxDataGrid("instance").option("dataSource", []);
+            return;
+        }
+
+        selectUser($("input[name='programUserFilter']:checked").val(), data.form_cd);
+
+    }
+
+    // 특정 프로그램별 사용자 권한 조회
+    function selectUser(gubun, formCd) {
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectUser',
+            data: {
+                gubun: gubun,
+                formCd: formCd
+            },
+            success: function (result) {
+
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#ProgramUserManageUserGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                } else {
+                    $("#ProgramUserManageUserGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 모듈 구분에 해당하는 프로그램 리스트 조회
+    function selectProgramUserList() {
+
+        var moduleGb = $("select[name=moduleGb]").val();
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectrogramUserManageProgram',
+            data: {
+                moduleGb: moduleGb
+            },
+            success: function (result) {
+
+                var treeList = $("#ProgramUserManageProgramGrid").dxTreeList("instance");
+
+                if (moduleGb === "1") {
+                    console.log(1);
+                    treeList.option("rootValue", "G-00000000");
+                } else if (moduleGb === "2") {
+                    console.log(2);
+                    treeList.option("rootValue", "C-00000000");
+                } else if (moduleGb === "3") {
+                    console.log(3);
+                    treeList.option("rootValue", "P00000000");
+                }
+
+                treeList.option("dataSource", JSON.parse(result));
+            }
+        });
+
+    }
+
+    // 권한, 전체 라디오 그룹 선택 변경
+    $(function () {
+        $('input:radio[name="programUserFilter"]').change(function () {
+
+            var treeList = $("#ProgramUserManageProgramGrid").dxTreeList("instance");
+
+            if (treeList.getSelectedRowsData().length > 0) {
+                selectUser($("input[name='programUserFilter']:checked").val(), treeList.getSelectedRowsData()[0].form_cd);
+            }
+
+        });
+    });
+
+    // 수정중인지 체크
+    function ProgramUserManage_EditCheck(nowEdit) {
+
+        if (nowEdit) {
+            _programUserIsEdited = true;
+            $("#ProgramUserManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramUserManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramUserManageUndo").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ProgramUserManageProgramGrid").dxTreeList("option", "disabled", true);
+        }
+        if (!nowEdit) {
+            _programUserIsEdited = false;
+            $("#ProgramUserManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ProgramUserManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#ProgramUserManageUndo").dxButton().parent().parent().addClass("display-none");
+
+            $("#ProgramUserManageProgramGrid").dxTreeList("option", "disabled", false);
+        }
+
+    }
+
+        // 조회 버튼 클릭
+        function ProgramUserManageSearch() {
+
+            selectProgramUserList();
+        }
+
+    // 수정 버튼 클릭
+    function ProgramUserManageEdit() {
+
+        ProgramUserManage_EditCheck(true);
+
+        var editing = {
+            allowUpdating: true,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+        $("#ProgramUserManageUserGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 사용자 권한 데이터 그리드 수정 가능 컬럼 조정
+    function userEditableColumn(cellElement) {
+
+        if (cellElement.rowType != "data" || !cellElement.isEditing)
+            return;
+        if (cellElement.column.dataField === "dept_nm" && !cellElement.row.inserted) {
+            cellElement.element.find('input').prop('readonly', true);
+        }else if (cellElement.column.dataField === "emp_nm" && !cellElement.row.inserted) {
+            cellElement.element.find('input').prop('readonly', true);
+        }
+    }
+
+    async function ProgramUserManageSave() {
+
+        await $("#ProgramUserManageUserGrid").dxDataGrid("instance").saveEditData();
+
+        var editing = {
+            allowUpdating: false,
+            selectTextOnEditStart: false
+        }
+        $("#ProgramUserManageUserGrid").dxDataGrid("option", "editing", editing);
+
+        ProgramUserManage_EditCheck(false);
+    }
+
+    // 취소 버튼 클릭
+    function ProgramUserManageUndo() {
+
+        $("#ProgramUserManageUserGrid").dxDataGrid("instance").cancelEditData();
+
+        var editing = {
+            allowUpdating: false,
+            selectTextOnEditStart: false
+        }
+        $("#ProgramUserManageUserGrid").dxDataGrid("option", "editing", editing);
+
+        ProgramUserManage_EditCheck(false);
+    }
+
+    // 프로그램별 사용자 권한 수정
+    function userUpdate(info) {
+
+        var data = info.data;
+        var treeList = $("#ProgramUserManageProgramGrid").dxTreeList("instance");
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/UpdateUser',
+            data: {
+                empCd: data.emp_cd,
+                formCd: treeList.getSelectedRowsData()[0].form_cd,
+                formQuery: data.form_query,
+                formEdit: data.form_edit,
+                formInsert: data.form_insert,
+                formPrint: data.form_print,
+                formDelete: data.form_delete,
+                formTransmission: data.form_transmission,
+                formFavoriteOk: data.form_favorite_ok
+            },
+            success: function (result) {
+                selectUser($("input[name='programUserFilter']:checked").val(), treeList.getSelectedRowsData()[0].form_cd);
+            }
+        });
+
+    }
+
+    // 전체 선택 (상태에 따라 전체 선택, 전체 해제)
+    function ProgramUserSelectAll(e) {
+
+        if (!_programUserIsEdited) {
+            return;
+        }
+
+        var data = e.row.data;
+        var grid = e.component;
+
+        if (
+            (data.form_query === "Y" || data.form_query === true) &&
+            (data.form_edit === "Y" || data.form_edit === true) &&
+            (data.form_insert === "Y" || data.form_insert === true) &&
+            (data.form_delete === "Y" || data.form_delete === true) &&
+            (data.form_print === "Y" || data.form_print === true) &&
+            (data.form_transmission === "Y" || data.form_transmission === true) &&
+            (data.form_favorite_ok === "Y" || data.form_favorite_ok === true)
+        ) {
+            console.log("selectedAll");
+
+            grid.cellValue(e.row.rowIndex, "form_query", false);
+            grid.cellValue(e.row.rowIndex, "form_edit", false);
+            grid.cellValue(e.row.rowIndex, "form_insert", false);
+            grid.cellValue(e.row.rowIndex, "form_delete", false);
+            grid.cellValue(e.row.rowIndex, "form_print", false);
+            grid.cellValue(e.row.rowIndex, "form_transmission", false);
+            grid.cellValue(e.row.rowIndex, "form_favorite_ok", false);
+
+            return;
+
+        } else {
+            grid.cellValue(e.row.rowIndex, "form_query", true);
+            grid.cellValue(e.row.rowIndex, "form_edit", true);
+            grid.cellValue(e.row.rowIndex, "form_insert", true);
+            grid.cellValue(e.row.rowIndex, "form_delete", true);
+            grid.cellValue(e.row.rowIndex, "form_print", true);
+            grid.cellValue(e.row.rowIndex, "form_transmission", true);
+            grid.cellValue(e.row.rowIndex, "form_favorite_ok", true);
+        }
+
+    }
+
+</script>
+
+
+<div id="ProgramUserManage" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="ProgramUserManageSearchForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분1</span>
+                        </div>
+                        <select class="form-control" name="moduleGb" onchange="selectProgramUserList()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.moduleGubun).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분2</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="S3" name="programUserFilter" checked="checked" />
+                        </div>
+                        <span class="form-control-sm"><label>권한</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="S2" name="programUserFilter" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-3 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().TreeList()
+                    .ID("ProgramUserManageProgramGrid")
+                    .Scrolling(scrolling => scrolling.Mode(TreeListScrollingMode.Virtual))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .ShowRowLines(true)
+                    .RootValue("G-00000000")
+                    .KeyExpr("ID")
+                    .ParentIdExpr("ParentID")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .OnSelectionChanged("selectProgram")
+                    .Columns(c =>
+                    {
+                        c.Add()
+                            .DataField("display_nm")
+                            .Caption("프로그램");
+
+                    })
+                )
+
+            </div>
+        </div>
+
+        <div class="col-9 pl-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ProgramUserManageUserGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .ShowRowLines(true)
+                    .OnRowUpdated("userUpdate")
+                    .OnCellPrepared("userEditableColumn")
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(c =>
+                    {
+                        c.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서");
+                        c.Add()
+                            .DataField("emp_nm")
+                            .Caption("사원");
+
+                        c.Add()
+                            .DataField("form_query")
+                            .Caption("조회")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_query == ""Y"" || rowData.form_query == true); }");
+
+                        c.Add()
+                            .DataField("form_edit")
+                            .Caption("수정")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_edit == ""Y"" || rowData.form_edit == true); }");
+
+                        c.Add()
+                            .DataField("form_insert")
+                            .Caption("입력")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_insert == ""Y"" || rowData.form_insert == true); }");
+
+                        c.Add()
+                            .DataField("form_delete")
+                            .Caption("삭제")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_delete == ""Y"" || rowData.form_delete == true); }");
+
+                        c.Add()
+                            .DataField("form_print")
+                            .Caption("출력")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_print == ""Y"" || rowData.form_print == true); }");
+
+                        c.Add()
+                            .DataField("form_transmission")
+                            .Caption("변환")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_transmission == ""Y"" || rowData.form_transmission == true); }");
+
+                        c.Add()
+                            .DataField("form_favorite_ok")
+                            .Caption("즐겨찾기")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.form_favorite_ok == ""Y"" || rowData.form_favorite_ok == true); }");
+
+                        c.Add()
+                            .Caption("전체선택")
+                            .Type(GridCommandColumnType.Buttons)
+                            .Buttons(btn =>
+                            {
+                                btn.Add()
+                                .Hint("selectAll")
+                                .Icon("check")
+                                .OnClick(@<text>ProgramUserSelectAll</text>);
+                        });
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

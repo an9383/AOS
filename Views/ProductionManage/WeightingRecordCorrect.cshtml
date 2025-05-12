@@ -1,0 +1,891 @@
+﻿@*칭량 기록 조회*@
+@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "WeightingRecordCorrect";
+
+    var itemJson = @Html.Raw(Json.Encode(ViewBag.items.Data));
+    var WeightingRecordCorrectData = @Html.Raw(Json.Encode(ViewBag.WeightingRecordCorrectData.Data));
+}
+@{
+    var tabs = new[] {
+        new { id = 1, text = "칭량 정보" },
+        new { id = 2, text = "작업 인증"},
+        new { id = 3, text = "작업 기록"},
+        new { id = 4, text = "칭량 기록"},
+        new { id = 5, text = "소분 내역"}
+    };
+}
+@{
+    string[] WeightingRecordGridKey = { "weighing_no", "process_cd" };
+
+}
+
+@*칭량 기록 조회 - WeightingRecordCorrect*@
+
+<script id="WeightingRecordCorrectJs">
+
+    var tab_num = '1';
+    var _WeightingRecordCorrectSignCnt = 0;
+    var _WeightingRecordCorrectCellClickEvent;
+    var _WeightingRecordCorrectIsEditable = false;
+    var _WeightingRecordCorrectChanges = new Array();
+    var _WeightingRecordCorrectOrderID = 0;
+    var _WeightingRecordCorrectSignGubun = "";
+    var _WeightingRecordCorrectCRUDGubun = "";
+    var _WeightingRecordCorrectSignData;
+    var _WeightingRecordCorrectIsValid = false;
+
+    $(function () {
+
+        var WRC_data = @WeightingRecordCorrectData;
+        var ds = @itemJson;
+
+        var columns = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+
+        createPopup("WeightingRecordCorrectItem", "제품 조회", ds, columns, "item_cd");
+
+        setDatePicker("#WeightingRecordCorrect .datepicker");
+
+        WeightingRecordCorrectEditCheck(false);
+
+        if (WRC_data.length <= 0) {
+            $("#WeightingRecordCorrectGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#WeightingRecordCorrectGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        }
+        else {
+            $("#WeightingRecordCorrectGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@WeightingRecordCorrectData));
+            $("#WeightingRecordCorrectGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#WeightingRecordCorrectGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+            var Grid = $("#WeightingRecordCorrectGrid").dxDataGrid("instance");
+            if (Grid.length > 0) {
+                var SelData = getGridRowByKey("WeightingRecordCorrectGrid", Grid.option("focusedRowKey"));
+                //우측 채우기
+            }
+        }
+
+    });
+
+    // 수정중인지 체크
+    function WeightingRecordCorrectEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "WeightingRecordCorrectToolbar"
+            , "WeightingRecordCorrectGrid"
+            , "WeightingRecordCorrectTab_1Form"
+            , ""
+        );
+        UtilView.setActiveElementFormId(nowEdit, status, "WeightingRecordCorrectTab_1Form2", "");
+        UtilView.setActiveElementFormId(nowEdit, status, "WeightingRecordCorrectTab_4Form", "");
+        UtilView.setActiveElementFormId(nowEdit, status, "WeightingRecordCorrectTab_5Form", "");
+    }
+
+    function WeightingRecordCorrectSearch() {
+        UtilView.setActiveElementToolbar(false, "WeightingRecordCorrectToolbar", "WeightingRecordCorrect");
+
+        //테이블 초기화
+        $("#WeightingRecordCorrectGrid").dxDataGrid("option", "dataSource", []);
+
+        var item_cd = $("#WeightingRecordCorrect_Form input[name=item_cd]").val();
+        var order_no = $("#WeightingRecordCorrect_Form input[name=order_no]").val();
+        var start_date = $("#WeightingRecordCorrect_Form input[name=start_date]").val();
+        var end_date = $("#WeightingRecordCorrect_Form input[name=end_date]").val();
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/ProductionManage/WeightingRecordCorrectSelect',
+            data: {
+                item_cd: item_cd,
+                order_no: order_no,
+                start_date: start_date,
+                end_date: end_date
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    if (json.length > 0) {
+                        $("#WeightingRecordCorrectGrid").dxDataGrid("option", "dataSource", json);
+                        $("#WeightingRecordCorrectGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                        $("#WeightingRecordCorrectGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                        WeightingRecordCorrectSearchDetail(json[0]);
+
+                    } else {
+                        $("#WeightingRecordCorrectGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                    }
+
+                } else {
+                    $("#WeightingRecordCorrectGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                }
+            }
+        });
+
+    }
+
+
+    function WeightingRecordCorrectEdit() {
+
+        var order_status = $("#WeightingRecordCorrectTab_1Form select[name='input_order_status'] option:selected").val();
+        if (order_status != 4) {
+            alert("작업상태가 '완료'일 때만 수정할 수 있습니다.");
+
+            return;
+        }
+
+        UtilView.setActiveElementToolbar(true, "WeightingRecordCorrectToolbar", "WeightingRecordCorrect");
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_start_time'").attr("disabled", false);
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_end_time']").attr("disabled", false);
+    }
+
+
+    function WeightingRecordCorrectUndo() {
+
+        UtilView.setActiveElementToolbar(false, "WeightingRecordCorrectToolbar", "WeightingRecordCorrect");
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_start_time'").attr("disabled", true);
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_end_time']").attr("disabled", true);
+    }
+
+
+    function WeightingRecordCorrectSave() {
+
+        UtilView.setActiveElementToolbar(false, "WeightingRecordCorrectToolbar", "WeightingRecordCorrect");
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_start_time'").attr("disabled", true);
+        $("#WeightingRecordCorrectTab_1 input[name*='weighing_end_time']").attr("disabled", true);
+
+        var grid = $("#WeightingRecordCorrectGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("WeightingRecordCorrectGrid", grid.option("focusedRowKey"));
+        var start_time = WeightingRecordCorrect_getFormatDate("s");
+        var end_time = WeightingRecordCorrect_getFormatDate("e");
+
+        if (start_time > end_time) {
+            alert("시작일시가 종료일시보다 느립니다.");
+
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/ProductionManage/WeightingRecordCorrectSave',
+            data: {
+                start_time: start_time,
+                end_time: end_time,
+                order_no: gridData.order_no,
+                lot_no: gridData.lot_no,
+                input_order_id: gridData.input_order_id,
+                weighing_no: gridData.weighing_no
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    console.log(JSON.parse(result).message);
+                }
+            }
+        })
+
+
+
+    }
+
+
+    function fillFormData(data) {
+
+        if (tab_num == '1') {//칭량정보 조회 - S2
+            $("#WeightingRecordCorrectTab_1Form")[0].reset();
+            //Form1
+            $("#WeightingRecordCorrectTab_1Form select[name='input_order_status']").val(data.input_order_status);
+            $("#WeightingRecordCorrectTab_1Form select[name='input_status']").val(data.input_status);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_year']").val((data.weighing_start_time_date).substr(0, 4));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_month']").val((data.weighing_start_time_date).substr(5, 2));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_date']").val((data.weighing_start_time_date).substr(8, 2));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_hh']").val(data.weighing_start_time_hh);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_mm']").val(data.weighing_start_time_mm);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_start_time_ss']").val(data.weighing_start_time_ss);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_year']").val((data.weighing_end_time_date).substr(0, 4));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_month']").val((data.weighing_end_time_date).substr(5, 2));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_date']").val((data.weighing_end_time_date).substr(8, 2));
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_hh']").val(data.weighing_end_time_hh);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_mm']").val(data.weighing_end_time_mm);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_end_time_ss']").val(data.weighing_end_time_ss);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_total_time_hh']").val(data.weighing_total_time_hh);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_total_time_mm']").val(data.weighing_total_time_mm);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_rest_time_hh']").val(data.weighing_rest_time_hh);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_rest_time_mm']").val(data.weighing_rest_time_mm);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_rest_cnt']").val(data.weighing_rest_cnt);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_unable_time_hh']").val(data.weighing_unable_time_hh);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_unable_time_mm']").val(data.weighing_unable_time_mm);
+            $("#WeightingRecordCorrectTab_1Form input[name='weighing_unable_cnt']").val(data.weighing_unable_cnt);
+            $("#WeightingRecordCorrectTab_1Form textarea[name='weighing_remark']").val(data.weighing_remark);
+
+            $("#WeightingRecordCorrectTab_1Form2")[0].reset();
+            //Form2
+            $("#WeightingRecordCorrectTab_1Form2 input[name='input_order_date']").val(data.input_order_date);
+            $("#WeightingRecordCorrectTab_1Form2 textarea[name='input_order_remark']").val(data.input_order_remark);
+
+        }
+        else if (tab_num == '4') {//칭량기록 정보 조회 - S5
+            $("#WeightingRecordCorrectTab_4Form")[0].reset();
+
+            $("#WeightingRecordCorrectTab_4Form input[name='child_nm']").val(data.child_nm);
+            $("#WeightingRecordCorrectTab_4Form input[name='qc_no']").val(data.qc_no);
+            $("#WeightingRecordCorrectTab_4Form input[name='material_real_inspector']").val(data.material_real_inspector);
+            $("#WeightingRecordCorrectTab_4Form input[name='material_real_inspector_nm']").val(data.material_real_inspector_nm);
+        }
+    }
+
+    function WeightingRecordCorrectFocusChanged(e) {
+        WeightingRecordCorrectSearchDetail(e.row.data);
+    }
+
+    function WeightingRecordCorrectGrid_Tab_4FocusChanged(e) {
+        fillFormData(e.row.data);
+    }
+
+    function WeightingRecordCorrectSearchDetail(data) {
+
+        var gubun = "";
+        var dataTableName1 = "";
+        var dataTableName2 = "";
+        var weighing_detailproc_id = "";
+
+        if (tab_num == '1') {//칭량정보 조회 - S2
+            gubun = "S2";
+            //테이블 없음
+        }
+        else if (tab_num == '2') {//작업인증 정보 - S3 -- 테이블 2개!
+            gubun = "S3";
+            dataTableName1 = "WeightingRecordCorrectGrid_Tab_2";
+            dataTableName2 = "WeightingRecordCorrectGrid_Tab_2_detail";
+
+        }
+        else if (tab_num == '3') {//작업기록 정보 조회 -S4
+            gubun = "S4";
+            dataTableName1 = "WeightingRecordCorrectGrid_Tab_3";
+
+            weighing_detailproc_id = "-1";
+
+        }
+        else if (tab_num == '4') {//칭량기록 정보 조회 - S5
+            gubun = "S5";
+            dataTableName1 = "WeightingRecordCorrectGrid_Tab_4";
+
+        }
+        else if (tab_num == '5') {//소분 내역 조회 - S6
+            gubun = "S6";
+            dataTableName1 = "WeightingRecordCorrectGrid_Tab_5";
+            dataTableName2 = "WeightingRecordCorrectGrid_Tab_5_detail";
+
+        }
+
+        //테이블 초기화
+        if (dataTableName1 != "") {
+            $('#' + dataTableName1).dxDataGrid("instance").option("dataSource", []);
+        }
+        if (dataTableName2 != "") {
+            $('#' + dataTableName2).dxDataGrid("instance").option("dataSource", []);
+        }
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/ProductionManage/SelectWeighingInfo',
+            data: {
+                gubun: gubun,
+                order_no: data.order_no,
+                input_order_id: data.input_order_id,
+                weighing_no: data.weighing_no,
+                weighing_detailproc_id: weighing_detailproc_id
+            },
+            success: function (result) {
+                var DataList = new Array();
+                for (var i = 0; i < result.length; i++) {
+                    DataList[i] = JSON.parse(result[i]);
+                    if (tab_num == '1') {//칭량정보 조회 - S2 //테이블 없음
+                        fillFormData(DataList[i][0]);
+
+                        return;
+                    }
+
+                    if (DataList[i].data === "empty") {
+                        if (i == 0) {
+                            $('#' + dataTableName1).dxDataGrid("instance").option("dataSource", []);
+                        } else if (i == 1) {
+                            $('#' + dataTableName2).dxDataGrid("instance").option("dataSource", []);
+                        }
+                    } else {
+                        if (i == 0) {
+                            gridDataSource = DataList[i];
+                            $('#' + dataTableName1).dxDataGrid("instance").option("dataSource", DataList[i]);
+
+
+                        } else if (i == 1) {
+                            $('#' + dataTableName2).dxDataGrid("instance").option("dataSource", DataList[i]);
+                        }
+                    }
+
+                    if (tab_num == '4') {//칭량기록 정보 조회 - S5
+                        fillFormData(DataList[i][0]);
+                    }
+                }
+            }
+        });
+    }
+
+    // 제품 팝업
+    function SearchItem() {
+        var popup = $("#WeightingRecordCorrectItemPopup").dxPopup("instance");
+
+        popup.show();
+    }
+
+    // 제품 팝업 데이터로우 더블클릭
+    function WeightingRecordCorrectItemRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        $("#WeightingRecordCorrect_Form input[name='item_nm']").val(data.item_nm);
+        $("#WeightingRecordCorrect_Form input[name='item_cd']").val(data.item_cd);
+
+        var popup = $("#WeightingRecordCorrectItemPopup").dxPopup("instance");
+
+        popup.hide();
+
+    }
+
+    // 탭 클릭 시, 탭 이동
+    function Tabs_itemClick(e) {
+
+        var formData = new FormData($("#WeightingRecordCorrect_Form")[0]);
+
+        // 현재 보여지고 있는 Tab 이외의 Tab을 선택 했을 시,
+        if (e.itemData.id !== tab_num) {
+
+            // 이전 Tab display-none
+            $("#WeightingRecordCorrectTab_" + tab_num).addClass("display-none");
+
+            // 1. 칭량 정보
+            if (e.itemData.id != null && e.itemData.id != undefined) {
+                tab_num = e.itemData.id;
+            }
+
+            $("#WeightingRecordCorrectTab_" + tab_num).removeClass("display-none");
+
+            // Tab Number
+            formData.set("tab_num", tab_num);
+
+            var grid = $("#WeightingRecordCorrectGrid").dxDataGrid("instance");
+            var data = getGridRowByKey('WeightingRecordCorrectGrid', grid.option("focusedRowKey"));
+
+            WeightingRecordCorrectSearchDetail(data);
+
+        }
+
+    }
+
+    function clearItem() {
+
+        $("#WeightingRecordCorrect_Form input[name=item_cd]").val("");
+        $("#WeightingRecordCorrect_Form input[name=item_nm]").val("");
+    }
+
+
+
+
+
+    function WeightingRecordCorrect_getFormatDate(type) {
+        var year, month, date, hour, min, sec;
+
+        if (type == "s") {
+            year = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_year").val());
+            year = year >= 10 ? year : "0" + year;
+
+            month = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_month").val());
+            month = month >= 10 ? month : "0" + month;
+
+            date = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_date").val());
+            date = date >= 10 ? date : "0" + date;
+
+            hour = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_hh").val());
+            hour = hour >= 10 ? hour : "0" + hour;
+
+            min = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_mm").val());
+            min = min >= 10 ? min : "0" + min;
+
+            sec = parseInt($("#WeightingRecordCorrectTab_1 #weighing_start_time_ss").val());
+            sec = sec >= 10 ? sec : "0" + sec;
+        }
+        else if (type == "e") {
+            year = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_year").val());
+            year = year >= 10 ? year : "0" + year;
+
+            month = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_month").val());
+            month = month >= 10 ? month : "0" + month;
+
+            date = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_date").val());
+            date = date >= 10 ? date : "0" + date;
+
+            hour = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_hh").val());
+            hour = hour >= 10 ? hour : "0" + hour;
+
+            min = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_mm").val());
+            min = min >= 10 ? min : "0" + min;
+
+            sec = parseInt($("#WeightingRecordCorrectTab_1 #weighing_end_time_ss").val());
+            sec = sec >= 10 ? sec : "0" + sec;
+        }
+
+
+        return year + '-' + month + '-' + date + " " + hour + ":" + min + ":" + sec;
+    }
+
+</script>
+
+<div id="WeightingRecordCorrect">
+
+    @* === 제품 팝업 === *@
+    <div id="WeightingRecordCorrectItemPopup"></div>
+
+
+    <div id="WeightingRecordCorrect_Top" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="WeightingRecordCorrect_Form">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="start_date" id="start_date" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()">
+                        <input type="text" class="form-control datepicker" name="end_date" id="end_date" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_nm" id="item_nm" onchange="clearItem()">
+                        <input type="hidden" class="form-control" name="item_cd" id="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="searchItemBtn" onclick="SearchItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조번호</span>
+                        </div>
+                        <input type="text" class="form-control col-8" name="order_no" id="order_no">
+                    </div>
+
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("WeightingRecordCorrectGrid")
+                    .KeyExpr(WeightingRecordGridKey)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowIndex(0)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(869)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add().DataField("weighing_start_time").Caption("작업일자");
+                        columns.Add().DataField("item_nm").Caption("제품");
+                        columns.Add().DataField("order_no").Caption("제조지시번호");
+                        columns.Add().DataField("lot_no").Caption("제조번호");
+                        columns.Add().DataField("process_nm").Caption("투입공정");
+                    })
+                    .OnFocusedRowChanged("WeightingRecordCorrectFocusChanged")
+                )
+            </div>
+
+        </div>
+
+        <div class="col-4 pl-0">
+
+            <div class="box-height-auto mb-0" style="height: auto;">
+                <!-- DevExtreme Tab -->
+                <div id="WeightingRecordCorrect_Tab_div">
+                    @(Html.DevExtreme().Tabs()
+                        .ID("WeightingRecordCorrect_Tab_gap")
+                        .DataSource(tabs)
+                        .SelectedIndex(0)
+                        .OnItemClick("Tabs_itemClick")
+                    )
+                </div>
+
+                <div id="WeightingRecordCorrectTab_1">
+
+                    <p></p>
+                    <!-- 1. 칭량 정보 -->
+                    <form id="WeightingRecordCorrectTab_1Form" name="WeightingRecordCorrectTab_1Form" enctype="multipart/form-data" style="height:400px;" readonly>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">작업상태</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="input_order_status" id="input_order_status">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.InputOrderStatus).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">인수인계상태</label>
+                            <div class="input-group col-4">
+                                <select class="col-12 form-control" name="input_status" id="input_status">
+                                    @foreach (DataRow row in ((DataTable)ViewBag.InputStatus).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">시작일자</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_start_time_year" id="weighing_start_time_year" />
+                                <label class="p-1">년&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_start_time_month" id="weighing_start_time_month" />
+                                <label class="p-1">월&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_start_time_date" id="weighing_start_time_date" />
+                                <label class="p-1">일</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">시작시간</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_start_time_hh" id="weighing_start_time_hh" />
+                                <label class="p-1">시&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_start_time_mm" id="weighing_start_time_mm" />
+                                <label class="p-1">분&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_start_time_ss" id="weighing_start_time_ss" />
+                                <label class="p-1">초</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">완료일자</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_end_time_year" id="weighing_end_time_year" />
+                                <label class="p-1">년&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_end_time_month" id="weighing_end_time_month" />
+                                <label class="p-1">월&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_end_time_date" id="weighing_end_time_date" />
+                                <label class="p-1">일</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">완료시간</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_end_time_hh" id="weighing_end_time_hh" />
+                                <label class="p-1">시&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_end_time_mm" id="weighing_end_time_mm" />
+                                <label class="p-1">분&nbsp;&nbsp;&nbsp;</label>
+                                <input type="text" class="form-control col-2" name="weighing_end_time_ss" id="weighing_end_time_ss" />
+                                <label class="p-1">초</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">소요시간</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_total_time_hh" id="weighing_total_time_hh" />
+                                <label class="p-1">시간</label>
+                                <input type="text" class="form-control col-2" name="weighing_total_time_mm" id="weighing_total_time_mm" />
+                                <label class="p-1">분</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">휴지시간</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_rest_time_hh" id="weighing_rest_time_hh" />
+                                <label class="p-1">시간</label>
+                                <input type="text" class="form-control col-2" name="weighing_rest_time_mm" id="weighing_rest_time_mm" />
+                                <label class="p-1">분</label>
+                                <input type="text" class="form-control col-2" name="weighing_rest_cnt" id="weighing_rest_cnt" />
+                                <label class="p-1">회(휴지횟수)</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">중지시간</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-2" name="weighing_unable_time_hh" id="weighing_unable_time_hh" />
+                                <label class="p-1">시간</label>
+                                <input type="text" class="form-control col-2" name="weighing_unable_time_mm" id="weighing_unable_time_mm" />
+                                <label class="p-1">분</label>
+                                <input type="text" class="form-control col-2" name="weighing_unable_cnt" id="weighing_unable_cnt" />
+                                <label class="p-1">회(중지횟수)</label>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">작업정보</label> @*값 없음. SP에서 안보내줌...*@
+                            <div class="input-group col-8">
+                                <textarea type="text" rows="3" class="col-12" name="weighing_remark" id="weighing_remark" />
+                            </div>
+                        </div>
+
+                    </form>
+                    <!-- 지시 정보 -->
+                    <div class="divName">
+                        <p>지시 정보</p>
+                    </div>
+                    <p></p>
+
+                    <form id="WeightingRecordCorrectTab_1Form2" name="WeightingRecordCorrectTab_1Form2" enctype="multipart/form-data" style="height:368px">
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">지시일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 datepicker" name="input_order_date" id="input_order_date" />
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-3" align="center">지시정보</label>
+                            <div class="input-group col-8">
+                                <textarea type="text" rows="3" class="col-12" name="input_order_remark" id="input_order_remark" />
+                            </div>
+                        </div>
+                    </form>
+
+                </div>
+
+                <div class="display-none" id="WeightingRecordCorrectTab_2">
+
+                    <!-- 2. 작업 인증 -->
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_2")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .WordWrapEnabled(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("detailproc_seq")
+                        .Height(400)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("detailproc_nm").Caption("작업").Alignment(HorizontalAlignment.Center);
+                            columns.Add().DataField("detailproc_real_worker_nm").Caption("작업자");
+                            columns.Add().DataField("detailproc_real_work_time").Caption("작업일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm:ss");
+                            columns.Add().DataField("detailproc_real_work_type_nm").Caption("작업자 인증방식");
+                            columns.Add().DataField("detailproc_real_inspector_nm").Caption("확인자");
+                            columns.Add().DataField("detailproc_real_inspect_time").Caption("확인일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm:ss");
+                            columns.Add().DataField("detailproc_real_inspect_type_nm").Caption("확인자 인증방식");
+                        })
+                    )
+                    <!-- 작업 일시 -->
+                    <div class="divName">
+                        <p>작업 일시</p>
+                    </div>
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_2_detail")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("detailproc_seq")
+                        .Height(400)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("detailproc_nm").Caption("작업").Alignment(HorizontalAlignment.Center);
+                            columns.Add().DataField("detailproc_start_time").Caption("시작일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm:ss");
+                            columns.Add().DataField("detailproc_end_time").Caption("종료일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd HH:mm:ss");
+                        })
+                    )
+                </div>
+
+                <div class="display-none" id="WeightingRecordCorrectTab_3">
+
+                    <!-- 3. 작업 기록 -->
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_3")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .WordWrapEnabled(true)
+                        .KeyExpr("work_seq")
+                        .Height(835)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("work_seq").Caption("순서");
+                            columns.Add().DataField("work_method").Caption("작업방법");
+                            columns.Add().DataField("work_manual_data").Caption("기록");
+                            columns.Add().DataField("work_data_type_nm").Caption("단위");
+                        })
+                    )
+                </div>
+
+                <div class="display-none" id="WeightingRecordCorrectTab_4">
+
+                    <!-- 4. 칭량 기록 -->
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_4")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .WordWrapEnabled(true)
+                        .KeyExpr("weighing_seq")
+                        .Height(400)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("weighing_seq").Caption("순서");
+                            columns.Add().DataField("child_nm").Caption("칭량원료");
+                            columns.Add().DataField("qc_no").Caption("시험번호");
+                            columns.Add().DataField("use_qty").Caption("사용량");
+                            columns.Add().DataField("data_type_nm").Caption("단위");
+                        })
+                        .ColumnFixing(cf => cf.Enabled(true))
+                        .Summary(s =>
+                            s.TotalItems(items =>
+                                items.Add()
+                                    .Name("sum_qty")
+                                    .ShowInColumn("use_qty")
+                                    .DisplayFormat("{0}")
+                                    .ValueFormat("#,##0.000")
+                                    .SummaryType(SummaryType.Custom)
+                            )
+                        )
+                        .OnFocusedRowChanged("WeightingRecordCorrectGrid_Tab_4FocusChanged")
+                    )
+                    <!-- 칭량 인증 -->
+                    <div class="divName">
+                        <p>칭량 인증</p>
+                    </div>
+                    <p></p>
+                    <form id="WeightingRecordCorrectTab_4Form" name="WeightingRecordCorrectTab_4Form" enctype="multipart/form-data" style="height:385px">
+
+                        <div class="input-wrapper">
+                            <label class="col-2" align="center">칭량원료</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="child_nm" id="child_nm" />
+                            </div>
+                            <label class="col-2" align="center">시험번호</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control col-12" name="qc_no" id="qc_no" />
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <label class="col-2" align="center">칭량자코드</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="material_real_inspector" id="material_real_inspector">
+                            </div>
+                            <label class="col-2" align="center">칭량자명</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="material_real_inspector_nm" id="material_real_inspector_nm">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="display-none" id="WeightingRecordCorrectTab_5">
+
+                    <!-- 5. 소분 내역 -->
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_5")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .KeyExpr("weighing_seq")
+                        .Height(400)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("child_nm").Caption("원료");
+                            columns.Add().DataField("qc_no").Caption("시험번호");
+                            columns.Add().DataField("subdivision_manual_data").Caption("원료중량");
+                            columns.Add().DataField("subdivision_vessel").Caption("용기중량");
+                            columns.Add().DataField("subdivision_barcode").Caption("소분바코드");
+                        })
+                    )
+                    <!-- 팩 투입 중량 -->
+
+                    <div class="divName">
+                        <p>팩 투입 중량</p>
+                    </div>
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("WeightingRecordCorrectGrid_Tab_5_detail")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .ShowRowLines(true)
+                        .AllowColumnResizing(true)
+                        .ColumnAutoWidth(true)
+                        .FocusedRowEnabled(true)
+                        .WordWrapEnabled(true)
+                        .KeyExpr("weighing_seq")
+                        .Height(400)
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Columns(columns =>
+                        {
+                            columns.Add().DataField("child_nm").Caption("원료");
+                            columns.Add().DataField("qc_no").Caption("시험번호");
+                            columns.Add().DataField("receipt_no").Caption("입고번호");
+                            columns.Add().DataField("receipt_pack_barcode").Caption("바코드");
+                            columns.Add().DataField("material_qty").Caption("투입량");
+                        })
+                    )
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

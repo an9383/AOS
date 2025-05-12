@@ -1,0 +1,772 @@
+﻿@*설비 가동 현황*@
+@using System.Data
+@using HACCP.Libs
+
+@{
+    Layout = null;
+
+    var EquipmentOperationStatusData = @Html.Raw(Json.Encode(ViewBag.EquipmentOperationStatusData.Data));
+    //var EquipmentOperationStatusAuth = @Html.Raw(Json.Encode(ViewBag.EquipmentOperationStatusAuth.Data));
+
+    //var equipPopupData = @Html.Raw(Json.Encode(ViewBag.equipPopupData.Data));
+    //var departmentData = @Html.Raw(Json.Encode(ViewBag.departmentData.Data));
+}
+
+
+<script type="text/javascript" id="EquipmentOperationStatusJs">
+    var gridName = "";
+    var toDay = new Date();
+
+
+    // 새로고침 객체
+    var EquipmentOperationStatus_intervalSet = {
+        EquipmentOperationStatus_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(EquipmentOperationStatus_intervalSet).length;
+                var _thisViewId = "EquipmentOperationStatus";
+
+                var time = 30;
+                if ($("#EquipmentOperationStatusSearchForm #refresh_time").val() == 0) $("#EquipmentOperationStatusSearchForm #refresh_time").val(1);
+                time = $("#EquipmentOperationStatusSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "EquipmentOperationStatus";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        EquipmentOperationStatus_interval_0: function () {
+            DataSearch();
+
+            EquipmentOperationStatus_intervalSet.EquipmentOperationStatus_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+
+
+    $(document).ready(function () {
+        $('#equpimentOperationStatus [data-toggle="tooltip"]').tooltip()
+
+        $("#EquipmentOperationStatusSearchForm #operate_all").attr("checked", true);
+        $("#EquipmentOperationStatusSearchForm #category_equip").attr("checked", true);
+
+        if (@Html.Raw(Json.Encode(ViewBag.EquipmentOperationStatusData.Data)) != "") {
+            $("#EquipmentOperationStatusSearchForm p").text("최근 조회시간 :  " + toDay.toLocaleString());
+            DataInsert(JSON.parse(@EquipmentOperationStatusData), "0");
+        }
+
+    })
+
+
+
+    $("#EquipmentOperationStatusSearchForm input[name='operate_type']").change(function () {
+        DataSearch();
+    })
+
+
+    $("#EquipmentOperationStatusSearchForm #refresh_time").blur(function () {
+
+        EquipmentOperationStatus_intervalSet.EquipmentOperationStatus_intervalMaster.intervalDelete(0, 1);
+        EquipmentOperationStatus_intervalSet.EquipmentOperationStatus_intervalMaster.intervalExcute();
+    });
+
+
+    $("#EquipmentOperationStatusSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#EquipmentOperationStatusSearchForm #refresh_time").blur();
+        }
+    });
+
+    function DataSearch() {
+
+        var operate_type = $("#EquipmentOperationStatusSearchForm input[name='operate_type']:checked").val();
+
+        //$("div[id*='EquipmentOperationStatus_infoRow_']").remove();
+
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/OperationStatusSearch',
+            data: {
+                operate_type: operate_type,
+                equipt_category: 0
+            },
+            success: function (result) {
+                if (result <= 0) {
+                    $("#EquipmentOperationStatus div[id*='EquipmentOperationStatus_infoRow_']").remove();
+
+                    return;
+                }
+
+                var json = JSON.parse(result);
+
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                var nowTime = new Date();
+
+                DataInsert(json);
+            }
+        })
+    }
+
+
+    function DataInsert(data) {
+        var $rowDiv = "";
+        
+        $("#EquipmentOperationStatus div[id*='EquipmentOperationStatus_infoRow_']").remove();
+
+        for (var i in data) {
+            if (i % 4 == 0) {
+                $rowDiv = $("<div class='row' id='EquipmentOperationStatus_infoRow_" + (i / 4) + "' style='margin-bottom: 10px;'>");
+
+            } else {
+                var text = "div #EquipmentOperationStatus_infoRow_" + parseInt(i / 4);
+                $rowDiv = $(text);
+
+            }
+
+            equipDivCreate($rowDiv, data[i], i);
+                
+        }
+    }
+
+
+    function equipDivCreate(mainDiv, data, count) {
+
+        var $mainDiv = $("#EquipmentOperationStatus");
+        var $rowDiv = mainDiv;
+
+        var $colDiv = $("<div class='col-3'>");
+        var $boxDiv = $("<div class='box box_style' id='equip_info_" + count + "'>");
+
+        var $inputDiv1 = $("<div class='input-wrapper mb-1'>");
+        var $label1 = $("<label class='col-8 equip_title' id='equip_nm_" + count + "'> ").text(data.equip_nm);
+        var $label1_2 = $("<label class='col-4 equip_status'>").text(data.work_status_nm == "휴지" ? "정지중" : data.work_status_nm);
+        //var $label1_2 = $("<label class='col-4 equip_status'>").text(data.equip_status == "0" ? "정지중" : data.equip_status == "1" ? "작동중" : "");
+
+
+        var $inputDiv2 = $("<div class='input-wrapper mb-1'>");
+        var $label2 = $("<label class='col-12 order_content text_over' data-toggle='tooltip' title='" + data.item_nm + "'>").text(data.item_nm);
+
+        var $inputDiv3 = $("<div class='input-wrapper mb-2'>");
+        var $label3 = $("<label class='col-12 order_content text_over' data-toggle='tooltip' title='" + data.order_no + "'>").text(data.order_no);
+
+
+        var $inputDiv4 = $("<div class='input-wrapper mb-2'>");
+        var $label4;
+        var $content4;
+        if (data.data_type == 0) {
+            $label4 = $("<label class='col-3 text_title'>").text(data.label1);
+            $content4 = $("<label class='text_content'>").text(data.order_qty + " " + data.qty_content);
+        } else if (data.data_type == 1) {
+            $label4 = $("<label class='col-3 text_title'>").text(data.label1);
+            $content4 = $("<label class='text_content'>").text(data.order_qty + " " + data.qty_content);
+        }
+
+
+        var $inputDiv5 = $("<div class='input-wrapper mb-2'>");
+        var $label5;
+        var $content5;
+        if (data.data_type == 0) {
+            $label5 = $("<label class='col-3 text_title'>").text(data.label2);
+            $content5 = $("<label class='text_content'>").text(data.qty + " " + data.qty_content);
+        } else if (data.data_type == 1) {
+            $label5 = $("<label class='col-3 text_title'>").text(data.label2);
+            $content5 = $("<label class='text_content'>").text(data.operate_time + " " + data.qty_content);
+        }
+
+
+        var $inputDiv6 = $("<div class='input-wrapper mb-2'>");
+        var $label6;
+        var $content6;
+        if (data.data_type == 0) {
+            $label6 = $("<label class='col-3 text_title'>").text(data.label3);
+            $content6 = $("<label class='text_content'>").text(Number_Format(Number_Change(((data.qty / data.order_qty) * 100), 0)) + "%");
+        } else if (data.data_type == 1) {
+            $label6 = $("<label class='col-3 text_title'>").text(data.label3);
+            $content6 = $("<label class='text_content'>").text(Number_Format(Number_Change(((data.operate_time / data.order_qty) * 100), 0)) + "%");
+        }
+
+        
+        var $inputDiv7 = $("<div class='input-wrapper mb-3'>");
+        var $label7;
+        var $content7
+        if (data.data_type == 0) {
+            $label7 = $("<label class='col-3 text_title'>").text("");
+            $content7 = $("<label class='text_content'>").text("");
+        } else if (data.data_type == 1) {
+            $label7 = $("<label class='col-3 text_title'>").text(data.label4);
+
+            var qty = data.qty == 0 ? '-' : Number_Format(Number_Change(data.qty, 2));
+            $content7 = $("<label class='text_content'>").text(qty + " " + data.qty_content2);
+        }
+
+
+
+        var $btn_div = $("<div class='input-wrapper btn_style container'>");
+        var $btn_item = $("<div class='item' style='flex-grow: 1'>");
+        var $button = $("<button class='btn btn-outline-secondary infoSearch' id='infoSearch_" + count + "_btn'>상세보기</button>");
+
+        var $time_item = $("<div class='item' style='flex-grow: 3'>");
+        var $time_div = $("<div class='input-wrapper' style='float: right; margin-right: 10px;'>");
+
+        var nowTime = new Date(data.end_time);
+        var $time_span = $("<span style='color: grey; font-size: 1.25em; font-weight: 500;' class='ml-4'>").text(nowTime.toLocaleString());
+
+        @* <p class="col-2" style="display: inline-block;">최근 조회시간 : 2020-10-23 10:30</p> *@
+
+        var $chartDiv = $("<div class='chart_div'></div>");
+
+        var $type_hidden = $("<input type='hidden' id='type_" + count + "'>").val(data.type);
+        var $order_no_hidden = $("<input type='hidden' id='order_no_" + count + "'>").val(data.order_no);
+        var $process_no_hidden = $("<input type='hidden' id='process_no_" + count + "'>").val(data.process_cd);
+        var $equip_cd_hihdden = $("<input type='hidden' id='equip_cd_" + count + "'>").val(data.equip_cd);
+
+        $inputDiv1.append($label1);
+        $inputDiv1.append($label1_2);
+
+        $inputDiv2.append($label2);
+
+        $inputDiv3.append($label3);
+
+        $inputDiv4.append($label4);
+        $inputDiv4.append($content4);
+
+        $inputDiv5.append($label5);
+        $inputDiv5.append($content5);
+
+        $inputDiv6.append($label6);
+        $inputDiv6.append($content6);
+
+        $inputDiv7.append($label7);
+        $inputDiv7.append($content7);
+
+        $btn_item.append($button);
+
+        $time_div.append($time_span);
+        $time_item.append($time_div);
+
+        $btn_div.append($btn_item);
+        $btn_div.append($time_item);
+
+
+
+        $boxDiv.append($inputDiv1);
+        $boxDiv.append($inputDiv2);
+        $boxDiv.append($inputDiv3);
+        $boxDiv.append($inputDiv4);
+        $boxDiv.append($inputDiv5);
+        $boxDiv.append($inputDiv6);
+        $boxDiv.append($inputDiv7);
+        $boxDiv.append($btn_div);
+        //$boxDiv.append($time_div);
+        $boxDiv.append($type_hidden);
+        $boxDiv.append($order_no_hidden);
+        $boxDiv.append($process_no_hidden);
+        $boxDiv.append($equip_cd_hihdden);
+        $boxDiv.append($chartDiv);
+
+        $colDiv.append($boxDiv);
+        $rowDiv.append($colDiv);
+        $mainDiv.append($rowDiv);
+
+
+        // order_proc_status :: 1 = 작업대기, 3 = 작업중, 4 = 작업완료, 6 = 휴지
+        var state = data.work_status;
+        if (state == "1") {
+            $boxDiv.css("border", "3px solid #5CC69C");
+            $label1_2.css("color", "#5CC69C");
+        } else if (state == "3") {
+            $boxDiv.css("border", "3px solid #56E742");
+            $label1_2.css("color", "#56E742");
+        } else if (state == "4") {
+            $boxDiv.css("border", "3px solid gray");
+            $label1_2.css("color", "gray");
+        } else if (state == "6") {
+            $boxDiv.css("border", "3px solid #FF7D31");
+            $label1_2.css("color", "#FF7D31")
+        }
+
+
+        //if (data.equip_status == "0") {
+        //    $boxDiv.css("border", "3px solid #FF7D31");
+        //    $label1_2.css("color", "#FF7D31")
+        //} else if (data.equip_status == "1") {
+        //    $boxDiv.css("border", "3px solid #56E742");
+        //    $label1_2.css("color", "#56E742");
+        //} else {
+
+        //    $boxDiv.css("border", "3px solid gray");
+        //    $label1_2.css("color", "gray");
+        //}
+
+
+        var endValue;
+        var value;
+        if (data.data_type == 0) {
+            endValue = parseFloat(data.order_qty) > parseFloat(data.qty) ? (data.order_qty) : (data.qty);
+            value = [data.order_qty, data.qty]
+        } else if (data.data_type == 1) {
+            endValue = parseFloat(data.order_qty) > parseFloat(data.operate_time) ? (data.order_qty) : (data.operate_time);
+            value = [data.order_qty, data.operate_time]
+        }
+
+        var palatte = data.work_status == 4 ? "Soft Blue" : "Dark Moon";
+        $chartDiv.dxBarGauge({
+            startValue: 0,
+            endValue: endValue,
+            backgroundColor: "white",
+            barSpacing: 0,
+            relativeInnerRadius: 0.2,
+            values: value,
+            size: {
+                width: 135,
+                height: 135
+            },
+            label: {
+                visible: false
+            },
+            geometry: {
+                endAngle: 180,
+                startAngle: 180
+            },
+            palette: palatte,
+            tooltip: {
+                enabled: true,
+                customizeTooltip: function (arg) {
+                    return {
+                        text: getText(arg, arg.valueText, data.label1, data.label2, data.qty_content)
+                    };
+                }
+            }
+        });
+
+
+        function getText(item, text, label1, label2, content) {
+
+            return (item.index == 0 ? label1 + ": " : label2 + ": ") + text + " " + content;
+        }
+
+        $('#infoSearch_' + count + '_btn').click(function (e) {
+            var id_no = e.target.getAttribute('id').replace("infoSearch_", "").replace("_btn", "");
+            var equip_cd = $("#EquipmentOperationStatus #equip_cd_" + id_no).val();
+            var equip_nm = $("#EquipmentOperationStatus #equip_nm_" + id_no).text();
+            var equip_type = $("#EquipmentOperationStatus #type_" + id_no).val();
+
+            searchGridData(equip_cd, equip_type);
+            $("#EquipmentOperationStatusPopup").dxPopup("instance").show();
+
+
+            $("#popup_equip_cd").text(equip_cd);
+            $("#popup_equip_nm").text(equip_nm);
+        });
+    }
+
+
+
+    function environmentDivCreate(mainDiv, data, count) {
+        var $mainDiv = $("#EquipmentOperationStatus");
+        var $rowDiv = mainDiv;
+
+        var $colDiv = $("<div class='col-3'>");
+        var $boxDiv = $("<div class='box' id='environment_info_" + count + "' style='border: 2px solid #BDBCBA; border-radius: 5px; padding-top: 10px; position: relative;'>");
+
+        var $inputDiv1 = $("<div class='input-wrapper' style='margin-bottom: 2%; height: 20px;'>");
+        var $label1 = $("<label class='col-8' style='font-weight: 900; font-size: 15.5px;' id='workroom_nm_" + count + "'> ").text(data.workroom_nm);
+
+        var $card_header1 = $("<div class='card-header'>");
+        var $img1 = $("<img src='https://img.icons8.com/color/48/000000/thermometer.png' style='width: 40%; margin-top:20px;'>");
+        var $card_content1 = $("<div class='card-title' style='margin-bottom: 10px;'>");
+        var $font1_1 = $("<font color='#15213B' style='font-weight: 600;'>").text("온도");
+        var work_temp = data.EQT_TEMPERATURE == null ? "-" : Number_Format(Number_Change(data.EQT_TEMPERATURE, 2));
+        var $font1_2 = $("<font color='#15213B' id='temp_" + count + "' style='font-size: 15px; font-weight: 700;'>").text(work_temp + " °C");
+
+        var $card_header2 = $("<div class='card-header'>");
+        var $img2 = $("<img src='https://img.icons8.com/ultraviolet/40/000000/wet.png' style='width: 40%; margin-top:20px;'>");
+        var $card_content2 = $("<div class='card-title' style='margin-bottom: 10px;'>");
+        var $font2_1 = $("<font color='#15213B' style='font-weight: 600;'>").text("습도");
+        var work_hum = data.EQT_HUMIDITY == null ? "-" : Number_Format(Number_Change(data.EQT_HUMIDITY, 2));
+        var $font2_2 = $("<font color='#15213B' id='humd_" + count + "' style='font-size: 15px; font-weight: 700;'>").text(work_hum + " %");
+
+        var $card_header3 = $("<div class='card-header'>");
+        var $img3 = $("<img src='https://img.icons8.com/color/50/000000/pressure.png' style='width: 40%; margin-top:20px;'>");
+        var $card_content3 = $("<div class='card-title' style='margin-bottom: 10px;'>");
+        var $font3_1 = $("<font color='#15213B' style='font-weight: 600;'>").text("차압");
+        var work_press = data.EQT_PRESSURE == null ? "-" : Number_Format(Number_Change(data.EQT_PRESSURE, 2));
+        var $font3_2 = $("<font color='#15213B' id='pres" + count + "' style='font-size: 15px; font-weight: 700;'>").text(work_press + " Pa");
+
+        var $inputDiv2 = $("<div class='input-wrapper' style='float: right; margin-right: 10px; margin-bottom: 5px'>");
+
+        var nowTime = new Date(data.O_DATE);
+        var $time_span = $("<span style='color: grey; font-size: 1.25em; font-weight: 500;' class='ml-4'>").text(nowTime.toLocaleString());
+
+        $inputDiv1.append($label1);
+
+        $card_header1.append($img1);
+        $card_header1.append($card_content1);
+        $card_header1.append($font1_1);
+        $card_header1.append("<hr />");
+        $card_header1.append($font1_2);
+
+        $card_header2.append($img2);
+        $card_header2.append($card_content2);
+        $card_header2.append($font2_1);
+        $card_header2.append("<hr />");
+        $card_header2.append($font2_2);
+
+        $card_header3.append($img3);
+        $card_header3.append($card_content3);
+        $card_header3.append($font3_1);
+        $card_header3.append("<hr />");
+        $card_header3.append($font3_2);
+
+        $inputDiv2.append($time_span);
+
+        $boxDiv.append($inputDiv1);
+        $boxDiv.append($card_header1);
+        $boxDiv.append($card_header2);
+        $boxDiv.append($card_header3);
+        $boxDiv.append($inputDiv2);
+
+        $colDiv.append($boxDiv);
+        $rowDiv.append($colDiv);
+        $mainDiv.append($rowDiv);
+
+    }
+
+
+    function searchGridData(equip_cd, equip_type) {
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/OperationGridSearch',
+            data: {
+                equip_cd: equip_cd,
+                equip_type: equip_type
+            },
+            success: function (result) {
+
+                if (result.length <= 0) {
+                    $("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("focusedRowKey", "");
+
+                    return;
+                }
+
+                $("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+            }
+        });
+    }
+
+
+    function EquipmentOperationStatusSelect() {
+        var grid = $("#EquipmentOperationStatusGrid").dxDataGrid("instance");
+        var data = getGridRowByKey("EquipmentOperationStatusGrid", grid.option("focusedRowKey"));
+
+        var urlInfo = {
+            tabName: "설비 수집 데이터",
+            tabId: "EquipmentCollectData",
+            url: "/Mont/EquipmentCollectData"
+        };
+
+
+        // 당월 생산지시 정보 그리드의 시작일시, 종료일시 여부를 체크 후 값이"-" 일 경우 현재 시간을 입력
+        var start_date;
+        var end_date;
+        if (data.operate_start_time == "-") {
+            var date = new Date();
+            start_date = date.format("yyyy-MM-dd HH:mm:ss");
+        } else {
+            var date = new Date(data.operate_start_time);
+            start_date = date.format("yyyy-MM-dd HH:mm:ss");
+        }
+
+        if (data.operate_end_time == "-") {
+            var date = new Date();
+            end_date = date.format("yyyy-MM-dd HH:mm:ss");
+        } else {
+            var date = new Date(data.operate_end_time);
+            end_date = date.format("yyyy-MM-dd HH:mm:ss");
+        }
+
+
+        var param = {
+            equip_cd: $("#popup_equip_cd").text(),
+            equip_nm: $("#popup_equip_nm").text(),
+            equip_type: data.type_cd,
+            workroom_cd: data.workroom_cd,
+            workroom_nm: data.workroom_nm,
+            start_date: start_date,
+            end_date: end_date
+        };
+
+        urlInfo.param = param;
+
+        $("#EquipmentOperationStatusPopup").dxPopup("instance").hide();
+
+        openOtherPage(urlInfo);
+
+    }
+
+
+    function EquipmentOperationStatusGrid_BackgroundColor(e) {
+        if (e.rowType == "header") return;
+
+        if (e.rowType == "data") {
+            if (e.data.work_status == "3") {
+
+                e.rowElement[0].style.backgroundColor = '#56E742';
+            } else if (e.data.work_status == "4") {
+                e.rowElement[0].style.backgroundColor = '#D3D3D3';
+            }
+        }
+    }
+
+
+    function EquipmentOperationStatusGrid_FocusReset() {
+        $("#EquipmentOperationStatusGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+    }
+
+
+    // 3자리 ,
+    function Number_Format(number) {
+        return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+
+    function Number_Change(number1, number2) {
+
+        if (number2 == 0) {
+            var result = Math.floor(number1);
+
+            return result;
+        } else {
+            var count = Math.pow(10, number2);
+            var num = Math.floor(number1 * count) / count;
+            var result = num.toFixed(number2)// 0을 채워주기 toFixed를 이용
+
+            return result;
+        }
+    }
+</script>
+
+
+<style>
+    .box_style {
+        border: 3px solid black;
+        border-radius: 5px;
+        padding-top: 10px;
+        padding-bottom: 0.55em;
+        position: relative;
+        height: auto !important;
+    }
+
+    .equip_title {
+        font-weight: 900;
+        font-size: 18px;
+    }
+
+    .equip_status {
+        font-weight: 800;
+        font-size: 16px;
+    }
+
+
+    .text_title {
+        font-weight: 800;
+        font-size: 12px;
+    }
+
+
+
+    .order_content {
+        position: relative;
+        z-index: 10;
+        font-weight: 800;
+        font-size: 15px;
+    }
+
+
+    .text_content {
+        position: relative;
+        z-index: 10;
+        font-weight: 800;
+        font-size: 12px;
+    }
+
+    .btn_style {
+        margin-left: 10px;
+/*        display: inline-flex;*/
+    }
+
+    .chart_div {
+        position: absolute;
+        top: 22%;
+        left: 59%;
+    }
+
+    .card-header {
+        border: 1px solid #BDBCBA;
+        border-radius: 2%;
+        width: 30%;
+        float: left;
+        text-align: center;
+        margin-left: 10px;
+        margin-bottom: 10px;
+        background-color: #fdfdfc;
+    }
+
+
+    #EquipmentOperationStatus div.container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        margin: 0;
+        margin-left: 0.5em;
+    }
+
+    #EquipmentOperationStatus .text_over {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
+
+
+<div id="EquipmentOperationStatus">
+    <div>
+        @(Html.DevExtreme().Popup()
+        .ID("EquipmentOperationStatusPopup")
+        .Width(1000)
+        .Height(600)
+        .ShowTitle(true)
+        .Title("당월 생산지시 정보")
+        .Visible(false)
+        .DragEnabled(true)
+        .ContentTemplate(new TemplateName("EquipmentOperationStatusTemplate"))
+        .OnHiding("EquipmentOperationStatusGrid_FocusReset")
+        )
+    </div>
+
+    @using (Html.DevExtreme().NamedTemplate("EquipmentOperationStatusTemplate"))
+    {
+
+        <div class="input-wrapper">
+            <label class="col-2" style="font-size: 20px; font-weight: 800; color: #5385DB;">작업설비</label>
+            <label class="col-2" style="font-size: 15px; font-weight: 800;" id="popup_equip_cd"></label>
+            <label class="col-3" style="font-size: 15px; font-weight: 800;" id="popup_equip_nm"></label>
+        </div>
+
+        @(Html.DevExtreme().DataGrid()
+            .ID("EquipmentOperationStatusGrid")
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .ShowRowLines(true)
+            .ColumnAutoWidth(true)
+            .KeyExpr("order_no")
+            .FocusedRowEnabled(true)
+            //.SearchPanel(s => s.Visible(true))
+            .Selection(s => s.Mode(SelectionMode.Single))
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .Height(450)
+            .Columns(c =>
+            {
+                c.Add().DataField("status").Caption("공정상태").Alignment(HorizontalAlignment.Center).Width("10%");
+                c.Add().DataField("item_cd").Caption("제품코드").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("item_nm").Caption("제품명").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("qty").Caption("지시수량").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("order_no").Caption("지시번호").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("lot_no").Caption("제조번호").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("operate_start_time").Caption("시작일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd hh:mm").Alignment(HorizontalAlignment.Center);
+                c.Add().DataField("operate_end_time").Caption("종료일시").DataType(GridColumnDataType.DateTime).Format("yyyy-MM-dd hh:mm").Alignment(HorizontalAlignment.Center);
+            })
+            .NoDataText("금일 제조지시 또는 작업중인 제조지시가 존재하지 않습니다.")
+            .OnRowPrepared("EquipmentOperationStatusGrid_BackgroundColor")
+            .OnRowDblClick("EquipmentOperationStatusSelect")
+        )
+    }
+
+
+    @*<h4 class="divTitle">설비 가동 현황</h4>*@
+
+
+    <div id="EquipmentOperationStatus_Top" class="mainTop row">
+        <div class="col-12">
+            <form id="EquipmentOperationStatusSearchForm" onsubmit="return false;">
+                <div class="input-wrapper">
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" id="operate_all" name="operate_type" />
+                        </div>
+                        <span class="form-control-sm"><label for="operate_type">전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="3" id="operate_start" name="operate_type" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="operate_type">작업중</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="operate_start" name="operate_type" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="operate_type">작업대기</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="4" id="operate_stop" name="operate_type" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="operate_type">정지중</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="5" id="operator_clear" name="operate_type" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="operate_type">작업완료</label></span>
+                    </div>
+
+
+                    <label style="display: inline-block;">새로고침</label>
+                    <input type="number" min="1" value="30" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">초
+
+
+                    @*<p class="col-2" style="display: inline-block;">최근 조회시간 : 2020-10-23 10:30</p>*@
+                </div>
+            </form>
+        </div>
+
+    </div>
+
+
+</div>

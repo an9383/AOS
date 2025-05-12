@@ -1,0 +1,1880 @@
+﻿@model HACCP.Models.PrdOut.DespatchManageOrder2
+@using System.Data
+@using HACCP.Libs.Views
+@{
+    Layout = null;
+    ViewData["Title"] = "DespatchManageOrder2";
+}
+@{
+    var DespatchManageOrder2Data = @Html.Raw(Json.Encode(ViewBag.DespatchManageOrder2Data.Data));
+    var DespatchManageOrder2Auth = @Html.Raw(Json.Encode(ViewBag.DespatchManageOrder2Auth.Data));
+    var DO2_s_cust_Popup = @Html.Raw(Json.Encode(ViewBag.DO2_s_cust_Popup.Data));
+    var DO2_s_item_Popup = @Html.Raw(Json.Encode(ViewBag.DO2_s_item_Popup.Data));
+    var DO2_item_cd_Popup = @Html.Raw(Json.Encode(ViewBag.DO2_item_cd_Popup.Data));
+    var DO2_i_cust_Popup = @Html.Raw(Json.Encode(ViewBag.DO2_i_cust_Popup.Data));
+    var DO2_i_custIn_Popup = @Html.Raw(Json.Encode(ViewBag.DO2_i_custIn_Popup.Data));
+}
+@{
+    string[] DO2_gridKey_Main = { "DESPATCH_ORDER_NO", "ITEM_ISSUE_SEQ", "ITEM_CD" };
+    string[] DO2_gridKey = { "item_cd", "lot_no" };
+}
+
+<script id="DespatchManageOrder2Js" type="text/javascript">
+
+    // SP 구문, gubun 변수
+    var DO2_despatchGubun = "";
+
+    //메뉴 권한
+    var _DespatchManageOrder2Auth;
+    var DespatchManageOrder2Data = @DespatchManageOrder2Data;
+
+    var _DespatchManageOrder2CellClickEvent;
+
+    //좌측 하단 그리드 데이터 변화 내용 담는 array
+    var _DespatchManageOrder2Changes = new Array();
+
+    //좌측 하단 출고전표상세 row 개수 및 Grid 추가 function
+    var _DespatchManageOrder2Count = 0;
+    var DO2_addFunction;
+
+    //우측 하단 Lot번호별 데이터 array
+    var DO2_LotNoList = new Array();
+
+    //Validation check
+    var _despatchManageOrder2Valid = true;
+
+    $(function () {
+        setDatePicker("#DespatchManageOrder2 .datepicker");
+
+        //좌측 그리드 생성
+        if (DespatchManageOrder2Data.length <= 0) {
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@DespatchManageOrder2Data));
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //수정중인지 체크
+        DO2_PEditCheck(false);
+
+        //사용자 권한
+        _DespatchManageOrder2Auth = JSON.parse(@DespatchManageOrder2Auth)[0];
+
+        if (_DespatchManageOrder2Auth.form_query != "Y") {
+            $("#DespatchManageOrder2Search").remove();
+        }
+        if (_DespatchManageOrder2Auth.form_insert != "Y") {
+            $("#DespatchManageOrder2Input").remove();
+        }
+        if (_DespatchManageOrder2Auth.form_edit != "Y") {
+            $("#DespatchManageOrder2Edit").remove();
+        }
+        if (_DespatchManageOrder2Auth.form_delete != "Y") {
+            $("#DespatchManageOrder2Delete").remove();
+        }
+
+        //배송처 radio타입 선택으로 추가
+        $("#DespatchManageOrder2Detail_form input:radio[name=issue_trans_gb]").click(function () {
+
+            if ($("#DespatchManageOrder2Detail_form input[name=issue_trans_gb]:checked").val() == "1") {
+                if (UtilView.isEmpty($("#DespatchManageOrder2Detail_form input[name=cust_cd]").val())) {
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val("");
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val("");
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val("");
+                    alert("거래처를 선택해주세요"); return;
+                }
+                var cust_cd = $("#DespatchManageOrder2Detail_form input[name=cust_cd]").val();
+                var cust_nm = $("#DespatchManageOrder2Detail_form input[name=cust_nm]").val();
+                var cust_ad1 = $("#DespatchManageOrder2Detail_form input[name=cust_ad1]").val();
+
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val(cust_cd);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val(cust_nm);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val(cust_ad1);
+
+            } else if ($("#DespatchManageOrder2Detail_form input[name=issue_trans_gb]:checked").val() == "2") {
+                if (UtilView.isEmpty($("#DespatchManageOrder2Detail_form input[name=pass_cust_cd]").val())) {
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val("");
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val("");
+                    $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val("");
+                    alert("간납처를 선택해주세요"); return;
+                }
+                var pass_cust_cd = $("#DespatchManageOrder2Detail_form input[name=pass_cust_cd]").val();
+                var pass_cust_nm = $("#DespatchManageOrder2Detail_form input[name=pass_cust_nm]").val();
+                var pass_cust_ad1 = $("#DespatchManageOrder2Detail_form input[name=pass_cust_ad1]").val();
+
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val(pass_cust_cd);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val(pass_cust_nm);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val(pass_cust_ad1);
+            }
+        })
+
+        //팝업 세팅
+        //#region
+
+        //거래처 팝업
+        var columns = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("DO2_Cust", "거래처 조회", @DO2_s_cust_Popup, columns, "vender_cd");
+
+        //품목 팝업
+        var columns2 = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("DO2_Item", "제품 조회", @DO2_s_item_Popup, columns2, "item_cd");
+
+        //출고전표상세 - 제품코드팝업
+        var columns3 = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+
+        createPopup("DO2_Item_Cd", "제품 조회", @DO2_item_cd_Popup, columns3, "item_cd");
+
+        //출고전표등록 - 거래처팝업
+        var columns4 = [
+            { dataField: "vender_cd", caption: "거래처코드" },
+            { dataField: "vender_nm", caption: "거래처명" }
+        ];
+
+        createPopup("DO2_I_Cust", "제품 거래처 조회", @DO2_i_cust_Popup, columns4, "vender_cd");
+
+        //출고전표등록 - 간납처팝업
+        var columns5 = [
+            { dataField: "cust_indirect_cd", caption: "간납처코드" },
+            { dataField: "vender_nm", caption: "간납처명" }
+        ];
+
+        createPopup("DO2_I_CustIn", "거래처 코드조회", @DO2_i_custIn_Popup, columns5, "cust_indirect_cd");
+
+        //#endregion
+
+    });
+
+    //수정중인지 체크
+    function DO2_PEditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#DespatchManageOrder2Save").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchManageOrder2Undo").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchManageOrder2Search").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchManageOrder2Input").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchManageOrder2Edit").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchManageOrder2Delete").dxButton().parent().parent().addClass("display-none");
+
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("option", "disabled", true);
+            $("#DespatchManageOrder2Detail :disabled").attr('disabled', false);
+        }
+        if (!nowEdit) {
+            $("#DespatchManageOrder2Save").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchManageOrder2Undo").dxButton().parent().parent().addClass("display-none");
+            $("#DespatchManageOrder2Search").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchManageOrder2Input").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchManageOrder2Edit").dxButton().parent().parent().removeClass("display-none");
+            $("#DespatchManageOrder2Delete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#DespatchManageOrder2MainGrid").dxDataGrid("option", "disabled", false);
+            $("#DespatchManageOrder2Detail :enabled").attr('disabled', true);
+        }
+
+    }
+
+    //#region 팝업 기능
+
+        //거래처 팝업
+        function DO2_searchCustPopup() {
+            var popup = $("#DO2_CustPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        //거래처 더블클릭
+        function DO2_CustRowDblClick(selectedItems) {
+            $("#DespatchManageOrder2_form input[name=DO2_s_cust_cd]").val(selectedItems.data.vender_cd);
+            $("#DespatchManageOrder2_form input[name=DO2_s_cust_nm]").val(selectedItems.data.vender_nm);
+
+            var popup = $("#DO2_CustPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //품목 팝업
+        function DO2_searchItemPopup() {
+            var popup = $("#DO2_ItemPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        //품목 더블클릭
+        function DO2_ItemRowDblClick(selectedItems) {
+            $("#DespatchManageOrder2_form input[name=DO2_item_cd]").val(selectedItems.data.item_cd);
+            $("#DespatchManageOrder2_form input[name=DO2_item_nm]").val(selectedItems.data.item_nm);
+
+            var popup = $("#DO2_ItemPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //출고전표등록 - 거래처 팝업
+        function DO2_search_ICustPopup() {
+            var popup = $("#DO2_I_CustPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        //출고전표등록 - 거래처 더블클릭
+        function DO2_I_CustRowDblClick(selectedItems) {
+            $("#DespatchManageOrder2Detail input[name=cust_cd]").val(selectedItems.data.vender_cd);
+            $("#DespatchManageOrder2Detail input[name=cust_nm]").val(selectedItems.data.vender_nm);
+            $("#DespatchManageOrder2Detail input[name=cust_ad1]").val(selectedItems.data.address);
+
+            if ($("#DespatchManageOrder2Detail_form input[name=issue_trans_gb]:checked").val() == "1") {
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val(selectedItems.data.vender_cd);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val(selectedItems.data.vender_nm);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val(selectedItems.data.address);
+            } else {
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val("");
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val("");
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val("");
+            }
+
+            var popup = $("#DO2_I_CustPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //출고전표등록 - 간납처 팝업
+        function DO2_search_ICustInPopup() {
+            var popup = $("#DO2_I_CustInPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        //출고전표등록 - 간납처 더블클릭
+        function DO2_I_CustInRowDblClick(selectedItems) {
+            $("#DespatchManageOrder2Detail input[name=pass_cust_cd]").val(selectedItems.data.cust_indirect_cd);
+            $("#DespatchManageOrder2Detail input[name=pass_cust_nm]").val(selectedItems.data.vender_nm);
+            $("#DespatchManageOrder2Detail input[name=pass_cust_ad1]").val(selectedItems.data.address);
+
+            if ($("#DespatchManageOrder2Detail_form input[name=issue_trans_gb]:checked").val() == "2") {
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val(selectedItems.data.cust_indirect_cd);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val(selectedItems.data.vender_nm);
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val(selectedItems.data.address);
+            } else {
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_cd]").val("");
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_nm]").val("");
+                $("#DespatchManageOrder2Detail_form input[name=issue_trans_cust_ad1]").val("");
+            }
+
+            var popup = $("#DO2_I_CustInPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+        //#region 출고전표상세 - 제품코드 팝업
+        //CellClick 이벤트
+        function DO2_cellWithButton(container, cellInfo) {
+
+            //입력 상태에서만 팝업 아이콘
+            if (!(DO2_despatchGubun == "I" || DO2_despatchGubun == "Insert")) {
+                $("<div>").html(cellInfo.value)
+                    .appendTo(container);
+                return;
+            }
+
+            if (typeof cellInfo.value == "undefined" || cellInfo.value == null)
+                cellInfo.value = "";
+
+            $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' class='DespatchManageOrder2_icon-plus'></div>")
+                .appendTo(container);
+
+            $(".DespatchManageOrder2_icon-plus").dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                }
+            });
+        }
+
+        //CellClick 이벤트 제한
+        function DO2_EditableCell(e) {
+            if (e.parentType === "dataRow") {
+                if (e.columnIndex == 2 || e.dataField == "ITEM_NM") {
+                    e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 3 || e.dataField == "ITEM_PACK_SIZE") {
+                    e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 6 || e.dataField == "Issue_Amt") {
+                    e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 7 || e.dataField == "item_s_nm") {
+                    e.editorOptions.disabled = true;
+                }
+                //수정시 제품코드 팝업 막기
+                if (DO2_despatchGubun == "U") {
+                    if (e.columnIndex == 1 || e.dataField == "ITEM_CD") {
+                        e.editorOptions.disabled = true;
+                    }
+                }
+            }
+
+            //Grid Cell Keyup 이벤트 적용(단가 일괄 적용)
+            if (e.parentType == 'dataRow' && e.dataField == 'Issue_Price2') {
+                var grid = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+                var gridL = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+
+                var DO2_onPriceChanged = e.editorOptions.onValueChanged;
+
+                var _Issue_Price = 0;                                   //단가
+                var _Issue_Qty = gridL.cellValue(0, "ISSUE_QTY");       //출고 수량
+
+                e.editorOptions.onValueChanged = function (args) {
+
+                    DO2_onPriceChanged.apply(this, arguments);
+                    
+                    _Issue_Price = args.value;
+                    
+                    for (var i = 0; i < grid.totalCount(); i++) {
+                        if (grid.cellValue(i, "ck") == "Y" || grid.cellValue(i, "ck") == true) {
+                            grid.cellValue(i, "Issue_Price", _Issue_Price);                     //개별 단가 수정
+                        }
+                    }
+
+                    gridL.cellValue(0, "Issue_Amt", _Issue_Price * parseInt(_Issue_Qty));       //총 금액 수정
+
+                }
+
+            }
+
+
+            //Grid Cell Keyup 이벤트 적용(출고지시수량)
+            if (e.parentType == 'dataRow' && e.dataField == 'ISSUE_QTY') {
+                var grid = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+                var gridL = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+
+                var DO2_onValueChanged = e.editorOptions.onValueChanged;
+                                
+                var _stockQty = 0;          //최초 조회된 재고량
+                var _issueQty = 0;          //출고지시수량
+                var _remainQty = 0;         //잔여 출고지시수량
+                var _allStock = 0;          //전체 출고 수량
+
+                var _Issue_Price = gridL.cellValue(0, "Issue_Price2");             //단가
+
+                e.editorOptions.onValueChanged = function (args) {
+
+                    if (args.value <= 0) {
+                        alert("출고지시 수량은 0보다 작을 수 없습니다.");
+                        return;
+                    }
+                    
+                    for (var e = 0; e < grid.totalCount(); e++) {
+                        _allStock += grid.cellValue(e, "stock_qty");
+                    }                     
+                    
+                    if (args.value > _allStock) {
+                        alert("출고 수량은 지시 수량보다 작을 수 없습니다.");                        
+                        return;
+                    }
+
+                    DO2_onValueChanged.apply(this, arguments);
+
+                    _issueQty = args.value;                                 //출고 수량 입력값
+
+                    for (var i = 0; i < grid.totalCount(); i++) {
+                        _stockQty = grid.cellValue(i, "stock_qty");         //i번째 재고 수량
+
+                        if (_issueQty > 0) {
+                            if (_issueQty >= _stockQty) {
+                                grid.cellValue(i, "ck", "Y");
+                                grid.cellValue(i, "issue_qty", _stockQty);
+                                _remainQty = _issueQty - _stockQty;
+                                _issueQty = _remainQty;
+                            } else if (_issueQty < _stockQty) {
+
+                                grid.cellValue(i, "ck", "Y");
+                                grid.cellValue(i, "issue_qty", _issueQty);
+                                _remainQty = _issueQty - _stockQty;
+                                _issueQty = _remainQty;
+                            }
+                        }
+                        else if (_issueQty <= 0) {
+                            grid.cellValue(i, "ck", "N");
+                            grid.cellValue(i, "issue_qty", 0);
+                        }
+
+                    }
+
+                    gridL.cellValue(0, "Issue_Amt", args.value * parseInt(_Issue_Price));       //총 금액 수정                    
+                }
+            }
+
+        }
+
+        //CellClick 이벤트 제한 - 우측 그리드
+        function DO2_EditableCell_Right(e) {
+            if (e.parentType === "dataRow") {
+                if (e.columnIndex == 1 || e.dataField == "lot_no") {
+                    e.editorOptions.disabled = true;
+                }
+                if (e.columnIndex == 2 || e.dataField == "stock_qty") {
+                    e.editorOptions.disabled = true;
+                }
+            }
+
+            //Grid Cell Keyup 이벤트 적용(출고지시수량)
+            if (e.parentType == 'dataRow' && e.dataField == 'issue_qty') {
+                var gridL = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+                var gridR = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+
+                var DO2_onValueChanged_Right = e.editorOptions.onValueChanged;
+
+                var _sumQty = 0;                                                //ck = "Y" 인 것들의 출고지시수량 합
+                var _Issue_Price = gridL.cellValue(0, "Issue_Price2");          //단가
+                
+                e.editorOptions.onValueChanged = function (args) {
+                    
+                    DO2_onValueChanged_Right.apply(this, arguments);
+
+                    for (var i = 0; i < gridR.totalCount(); i++) {
+                        if (gridR.cellValue(i, "ck") == "Y" || gridR.cellValue(i, "ck") == true) {
+                            _sumQty += gridR.cellValue(i, "issue_qty");
+                        }                        
+                    }
+
+                    gridL.cellValue(0, "ISSUE_QTY", _sumQty);
+                    gridL.cellValue(0, "Issue_Amt", _sumQty * parseInt(_Issue_Price));       //총 금액 수정
+                }
+            }
+
+            //Grid Cell Keyup 이벤트 적용(Ck)
+            if (e.parentType == 'dataRow' && e.dataField == 'ck') {
+                var gridL = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+                var gridR = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+
+                var DO2_onValueChanged_ck = e.editorOptions.onValueChanged;
+
+                var _sumQty = 0;                                                //ck = "Y" 인 것들의 출고지시수량 합
+                var _Issue_Price = gridL.cellValue(0, "Issue_Price2");          //단가
+
+                e.editorOptions.onValueChanged = function (args) {
+
+                    DO2_onValueChanged_ck.apply(this, arguments);
+
+                    for (var i = 0; i < gridR.totalCount(); i++) {                        
+                        if (gridR.cellValue(i, "ck") == "Y" || gridR.cellValue(i, "ck") == true) {
+                            _sumQty += gridR.cellValue(i, "issue_qty");
+
+                            gridR.cellValue(i, "Issue_Price", gridL.cellValue(0, "Issue_Price2"));      //단가 적용
+                        }
+                        if(gridR.cellValue(i, "ck") == "N" || gridR.cellValue(i, "ck") == false) {
+                            gridR.cellValue(i, "issue_qty", 0);      //선택 풀리면 출고지시수량 0으로 자동 입력
+                        }
+                    }
+                    gridL.cellValue(0, "ISSUE_QTY", _sumQty);
+                    gridL.cellValue(0, "Issue_Amt", _sumQty * parseInt(_Issue_Price));       //총 금액 수정
+                }
+            }
+        }
+
+        //출고전표상세 - 제품코드 팝업
+        function DespatchManageOrder2CellEvent(e) {
+
+            _DespatchManageOrder2CellClickEvent = e;
+
+            //입력 상태에서만 팝업 출력
+            if (!(DO2_despatchGubun == "I" || DO2_despatchGubun == "Insert")) {
+                return;
+            }
+
+            if (e.columnIndex == 1) {
+                var popup = $("#DO2_Item_CdPopup").dxPopup("instance");
+                popup.show();
+            }
+        }
+
+        //출고전표상세 - 제품코드 더블클릭
+        function DO2_Item_CdRowDblClick(selectedItems) {
+
+            //입력/수정 상태에 따른 check 값 설정
+            var rowCount = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource");
+            if (DO2_despatchGubun == "I" || (DO2_despatchGubun == "U" && rowCount.length <= 0)) {
+                DO2_despatchGubun = "Insert";
+            } else if (DO2_despatchGubun == "U") {
+                DO2_despatchGubun = "Edit";
+            }
+
+            var grid = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");   //하단 좌측 그리드
+
+            var despatch_no = $("#DespatchManageOrder2Detail_form input[name=despatch_order_no]").val();    //우측 detail폼
+
+
+            grid.cellValue(_DespatchManageOrder2CellClickEvent.rowIndex, "ITEM_CD", selectedItems.data.item_cd);
+            grid.cellValue(_DespatchManageOrder2CellClickEvent.rowIndex, "ITEM_NM", selectedItems.data.item_nm);
+            grid.cellValue(_DespatchManageOrder2CellClickEvent.rowIndex, "item_s_nm", selectedItems.data.item_s_nm);
+
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_GetLotNoSum',
+                data: {
+                    item_cd: selectedItems.data.item_cd,
+                    check: DO2_despatchGubun,
+                    despatch_no: despatch_no
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", []);                        
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    var json = JSON.parse(result);                    
+                    
+                    //우측 하단(Lot번호별 출고내역) edit 모드로 전환
+                    var editing2 = {
+                        allowUpdating: true,
+                        mode: 'batch'
+                    }
+
+                    $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+                }
+            });
+
+            var popup = $("#DO2_Item_CdPopup").dxPopup("instance");
+            popup.hide();
+        }
+
+
+        //#endregion
+
+    //#endregion
+
+    //#region 상단 CRUD 버튼
+
+        //조회
+        function DespatchManageOrder2Search() {
+
+            DO2_PEditCheck(false);
+            DO2_despatchGubun = "";
+
+            if ($("#DespatchManageOrder2_form input[name=DO2_s_cust_cd]").val() == "") {
+                $("#DespatchManageOrder2_form input[name=DO2_s_cust_nm]").val("");
+            }
+
+            if ($("#DespatchManageOrder2_form input[name=DO2_item_cd]").val() == "") {
+                $("#DespatchManageOrder2_form input[name=DO2_item_nm]").val("");
+            }
+
+            var formData = new FormData($("#DespatchManageOrder2_form")[0]);
+            formData.set("s_sdate", $("#DespatchManageOrder2_form input[name=DO2_s_sdate]").val());
+            formData.set("s_edate", $("#DespatchManageOrder2_form input[name=DO2_s_edate]").val());
+            formData.set("s_cust_cd", $("#DespatchManageOrder2_form input[name=DO2_s_cust_cd]").val());
+            formData.set("item_cd", $("#DespatchManageOrder2_form input[name=DO2_item_cd]").val());
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_S1',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#DespatchManageOrder2Detail_form")[0].reset();
+                        $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", []);
+
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+
+            });
+        }
+
+        //입력
+        function DespatchManageOrder2Input() {
+            DO2_PEditCheck(true);
+
+            //입력 폼 초기화
+            $("#DespatchManageOrder2Detail_form")[0].reset();
+            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", []);
+
+            DO2_despatchGubun = "I";            
+
+            //입력시 기본 세팅값
+            $("#DespatchManageOrder2Detail_form select[name=issue_ck_cd]").val("0").attr("disabled", true);                              //상태 : '출고지시' 고정
+            //$("#DespatchManageOrder2Detail_form input:radio[name=issue_trans_gb]:input[value=" + 1 + "]").attr("checked", true);         //배송처 : '거래처' default
+            $("#DespatchManageOrder2Detail_form input:radio[name=TaxBillYn]:input[value=" + 'Y' + "]").attr("checked", true);            //세금계산서 : '당월' default
+            $("#DespatchManageOrder2Detail_form input:radio[name=release_type]:input[value=" + 0 + "]").attr("checked", true);           //출고종류 : '일반' default
+
+            //좌측 하단(출고전표상세) edit 모드로 전환
+            var editing = {
+                allowUpdating: true,
+                allowAdding: true,
+                mode: 'batch'
+            }
+
+            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+        }
+
+        //수정
+        function DespatchManageOrder2Edit() {
+
+            var grid = $("#DespatchManageOrder2MainGrid").dxDataGrid("instance");
+
+            if (grid.totalCount() <= 0) {
+                alert("수정할 항목이 존재하지 않습니다.");
+                DespatchManageOrder2Undo();
+                return;
+            }
+
+            var gridData = getGridRowByKey('DespatchManageOrder2MainGrid', grid.option("focusedRowKey"));
+
+            if (gridData.issue_ck_cd == "1" || gridData.issue_ck_cd == "2") {
+                alert("출고확정/출고완료된 출고전표는 수정할 수 없습니다.");
+                return;
+            }
+            if (gridData.sign_status == "1" || gridData.sign_status == "2" || gridData.sign_status == "3") {
+                alert("승인된 자료는 수정할 수 없습니다.");
+                return;
+            }
+
+            DO2_PEditCheck(true);
+            DO2_despatchGubun = "U";
+
+            //수정시 기본 세팅값
+            $("#DespatchManageOrder2Detail_form select[name=issue_ck_cd]").attr("disabled", true);
+
+            //좌측 하단(출고전표상세) edit 모드로 전환
+            var editing = {
+                allowUpdating: true,
+                mode: 'batch'
+            }
+            //우측 하단(Lot번호별 출고내역) edit 모드로 전환
+            var editing2 = {
+                allowUpdating: true,
+                mode: 'batch'
+            }
+
+            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+            $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+
+        }
+
+        //저장
+        async function DespatchManageOrder2Save() {
+
+            if (!confirm("변경사항을 저장하시겠습니까?")) {
+                return;
+            }
+
+            //#region 우측 폼 데이터 Validation check
+            var formID = "DespatchManageOrder2Detail_form";
+            var cols = [                
+                { name: "issue_date", text: "출고일자", type: "input" },
+                { name: "issue_trans_cust_cd", text: "배송처", type: "input" }
+            ];
+            var isValid = validationCk(formID, cols);
+
+            if (!isValid) {
+                return;
+            }
+            //#endregion
+
+            await $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").saveEditData();
+            await $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").saveEditData();            
+
+            if (!_despatchManageOrder2Valid) {
+                alert("필수항목을 확인 하시오.");
+                return;
+            }
+            
+            //#region 입력시 추가 validation
+            if (DO2_despatchGubun == "Insert" || DO2_despatchGubun == "I") {
+                if (_DespatchManageOrder2Changes.length == 0) {
+                    alert("출고 상세정보가 없습니다.\n출고할 제품을 선택해주세요.");
+                    _DespatchManageOrder2Changes = new Array();
+                    DO2_LotNoList = new Array();
+                    return;
+                }
+
+                if (DO2_LotNoList.length == 0) {
+                    alert("출고 내역정보가 없습니다.\nLot번호별 출고내역을 입력해주세요.");
+                    DO2_LotNoList = new Array();
+                    return;
+                }
+            }
+            //#endregion
+
+            //#region 출고번호 자동 생성
+            if (DO2_despatchGubun == "Insert") {            
+
+                var formData = new FormData($("#DespatchManageOrder2Detail_form")[0]);
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/PrdOut/DespatchManageOrder2_S_NO',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    async: false,
+                    success: function (result) {
+
+                        if (result.length <= 0) {
+                            return;
+                        }
+                        
+                        var json = JSON.parse(result);
+                        var despatch_order_no = json[0].new_despatch_no;
+
+                        $("#DespatchManageOrder2Detail_form input[name=despatch_order_no]").val(despatch_order_no);
+                    }
+                });
+            }
+            //#endregion
+
+            //저장 로직
+            TRXExcute();
+        }
+
+        //우측 폼 데이터 저장
+        function TRXExcute() {
+
+            if (DO2_despatchGubun == "Insert") {
+                DO2_despatchGubun = "I";
+            } else if (DO2_despatchGubun == "Edit") {
+                DO2_despatchGubun = "U";
+            }
+
+            var formData = new FormData($("#DespatchManageOrder2Detail_form")[0]);
+            formData.set("gubun", DO2_despatchGubun);
+            formData.set("issue_ck_cd", $("#DespatchManageOrder2Detail_form select[name=issue_ck_cd]").val());
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_TRX',
+                data: formData,
+                contentType: false,
+                processData: false,
+                async: false,
+                success: function (result) {
+                    if (result.length <= 0) {
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    
+                    //수정 일 때
+                    if (DO2_despatchGubun == "U") {                        
+                        DespatchManageOrder2Update(_DespatchManageOrder2Changes);
+                    }
+                    else if (DO2_despatchGubun == "I") {  //입력 일 때
+                        DespatchManageOrder2Excute(_DespatchManageOrder2Changes);
+                    }
+                }
+            });
+        }
+
+        //그리드 입력 진행
+        function DespatchManageOrder2Excute(data) {
+
+            if (DO2_despatchGubun == "I") {
+                DO2_despatchGubun = "I2";
+            }
+
+            //#region Lot번호별 출고내역 입력할 시
+            if (DO2_LotNoList.length != 0) {
+                
+                $.ajax({
+                    type: 'POST',
+                    url: '/PrdOut/DespatchManageOrder2_batch',
+                    data: {
+                        despatchManageOrder2: JSON.stringify(DO2_LotNoList),
+                        gubun: DO2_despatchGubun,
+                        issue_detail_date: $("#issue_date").val(),
+                        despatch_no: $("#despatch_order_no").val(),
+                        item_issue_id: ""
+                    },
+                    dataType: 'json',
+                    async: false,
+                    success: function (result) {
+                        var jsonData = JSON.parse(result);
+
+                        if (jsonData.hasOwnProperty("failMessege")) {
+                            console.log(jsonData.messege.replace(/\\n/g, "\\n"));
+                            alert(jsonData.messege.replace(/\\n/g, "\\n"));
+
+                            return;
+                        }
+
+                        //alert(jsonData.resultMessege);
+                        alert("저장되었습니다.");
+                        _DespatchManageOrder2Changes = new Array();
+                        DO2_LotNoList = new Array();
+
+                        var editing = {
+                            allowUpdating: false,
+                            allowAdding: false
+                        }
+                        var editing2 = {
+                            allowUpdating: false,
+                        }
+
+                        $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+                        $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+
+                        DespatchManageOrder2Search();
+                    }
+                });
+            }
+            //#endregion
+
+        }        
+
+        //그리드 수정 진행
+        function DespatchManageOrder2Update(data) {
+
+            var grid = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("DespatchManageOrder2DownLeftGrid", grid.option("focusedRowKey"));
+            //#region 우측 detail_form만 수정할 경우
+            if (_DespatchManageOrder2Changes.length == 0 && DO2_LotNoList.length == 0) {
+
+                alert("저장되었습니다.");
+
+                var editing = {
+                    allowUpdating: false,
+                    allowAdding: false
+                }
+                var editing2 = {
+                    allowUpdating: false,
+                }
+
+                $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+                $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+
+                DespatchManageOrder2Search();
+                return;
+            }
+            //#endregion
+            //#region 좌측 하단 그리드 수량 수정
+            else if (DO2_LotNoList.length != 0) {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/PrdOut/DespatchManageOrder2_batch',
+                    data: {
+                        despatchManageOrder2: JSON.stringify(DO2_LotNoList),
+                        gubun: DO2_despatchGubun,
+                        despatch_no: gridData.despatch_order_no,
+                        issue_detail_date: $("#issue_date").val(),
+                        Issue_Price: gridData.Issue_Price,
+                        box_barcode_no: ""
+                    },
+                    dataType: 'json',
+                    async: false,
+                    success: function (result) {
+                        var jsonData = JSON.parse(result);
+
+                        if (jsonData.hasOwnProperty("failMessege")) {
+                            console.log(jsonData.messege.replace(/\\n/g, "\\n"));
+                            alert(jsonData.messege.replace(/\\n/g, "\\n"));
+
+                            return;
+                        }
+
+                        if (gridData.Issue_Price != gridData.Issue_Price2) {
+                            //단가수정
+                            DespatchManageOrder2UpdatePrice(data);
+                        }
+                        else {
+                            alert("저장되었습니다.");
+                            _DespatchManageOrder2Changes = new Array();
+                            DO2_LotNoList = new Array();
+
+                            var editing = {
+                                allowUpdating: false,
+                                allowAdding: false
+                            }
+                            var editing2 = {
+                                allowUpdating: false,
+                            }
+
+                            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+                            $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+
+                            DespatchManageOrder2Search();
+                        }
+
+                    }
+                });
+
+            }
+            //#endregion
+            //#region 단가만 수정
+            else if (data[0].Issue_Price != data[0].Issue_Price2) {
+                
+                DespatchManageOrder2UpdatePrice(data);
+            }
+            //#endregion
+            
+        }
+
+        //단가 수정하는 경우
+        function DespatchManageOrder2UpdatePrice(data) {
+            
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_GetLotNoSum',
+                data: {
+                    item_cd: data[0].ITEM_CD,
+                    check: "Edit",
+                    despatch_no: data[0].despatch_order_no
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+                    
+                    for (var i = 0; i < json.length; i++) {
+                        if (json[i].ck == "Y" || json[i].ck == true) {
+                            json[i].Issue_Price2 = data[0].Issue_Price2;
+                            json[i].despatch_order_no = data[0].despatch_order_no;
+
+                            //단가수정실시
+                            DespatchManageOrder2UpdatePrice_Excute(json[i]);
+                        }
+
+                        //정상적으로 성공한다면
+                        if (i + 1 === json.length) {
+                            alert("저장되었습니다.");
+                            _DespatchManageOrder2Changes = new Array();
+                            DO2_LotNoList = new Array();
+
+                            var editing = {
+                                allowUpdating: false,
+                                allowAdding: false
+                            }
+                            var editing2 = {
+                                allowUpdating: false,
+                            }
+
+                            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+                            $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+
+                            DespatchManageOrder2Search();
+                        }
+
+                    }
+                }
+            })
+
+        }
+
+        //단가수정실시
+        function DespatchManageOrder2UpdatePrice_Excute(data) {
+            
+            data.gubun = "U4";
+            
+            $.ajax({
+                type: 'POST',                
+                url: '/PrdOut/DespatchManageOrder2_TRX', 
+                data: data,
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData.hasOwnProperty("failMessege")) {
+                        console.log(jsonData.messege.replace(/\\n/g, "\\n"));
+                        alert(jsonData.messege.replace(/\\n/g, "\\n"));
+
+                        return;
+                    }
+
+                }
+            });
+        }
+
+        //취소
+        function DespatchManageOrder2Undo() {
+
+            DO2_despatchGubun = "";
+
+            _DespatchManageOrder2Changes = new Array();
+            DO2_LotNoList = new Array();
+            _despatchManageOrder2Valid = true;
+
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false
+            }
+            var editing2 = {
+                allowUpdating: false
+            }
+
+            $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("option", "editing", editing);
+            $("#DespatchManageOrder2DownRightGrid").dxDataGrid("option", "editing", editing2);
+            DO2_PEditCheck(false);
+            if ($("#DespatchManageOrder2MainGrid").dxDataGrid("instance").option("dataSource").length !== 0) {
+                DespatchManageOrder2MainGrid_changed();
+            }
+        }
+
+        //삭제
+        function DespatchManageOrder2Delete() {
+
+            var grid = $("#DespatchManageOrder2MainGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('DespatchManageOrder2MainGrid', grid.option("focusedRowKey"));
+            var dataArr = grid.getSelectedRowsData();
+
+            if (gridData.issue_ck_cd == "1" || gridData.issue_ck_cd == "2") {
+                alert("선택한 항목 중 출고확정/출고완료된 전표가 있습니다.\n출고확정/출고완료된 출고전표는 삭제할 수 없습니다.");
+                return;
+            }
+            if (gridData.sign_status != "0" && gridData.sign_status != "") {
+                alert("전자서명이 된 전표가 있습니다.\n 전자서명된 출고전표는 삭제할 수 없습니다.");
+                return;
+            }
+            if (dataArr.length == 0) {
+                alert("삭제할 항목을 선택해주세요.");
+                return;
+            }
+
+            if (confirm("삭제하시겠습니까?") === true) {
+
+                for (var i = 0; i < dataArr.length; i++) {
+                    var data = dataArr[i];
+
+                    data.gubun = "D";
+                    data.despatch_no = dataArr.DESPATCH_ORDER_NO;
+                    data.item_cd = dataArr.ITEM_CD;
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/PrdOut/DespatchManageOrder2_TRX',
+                        data: data,
+                        async: false,
+                        success: function (result) {
+
+                            //정상적으로 성공한다면
+                            if (i + 1 === dataArr.length) {
+                                alert(i + 1 + "건 정상적으로 삭제되었습니다.");
+                                dataArr = new Array();
+                                DespatchManageOrder2Search();
+                                $("#DespatchManageOrder2MainGrid").dxDataGrid("instance").deselectAll();
+                            }                            
+                        }
+                    });
+                }
+
+
+            } else {
+                alert("취소되었습니다.");
+                return;
+            }
+        }
+
+    //#endregion
+
+    //#region 하단 그리드 editing 모드 CRUD 버튼
+        //출고전표상세 추가
+        function DespatchManageOrder2_DetailInsert(info) {
+            DO2_PEditCheck(true);
+            var data = info.data;
+
+            _DespatchManageOrder2Changes.push(data);
+        }
+        //출고전표상세 수정
+        function DespatchManageOrder2_DetailUpdate(info) {
+            DO2_PEditCheck(true);
+            var data = info.data;
+            
+            _DespatchManageOrder2Changes.push(data);
+        }
+
+        //Lot번호별 출고내역 수정
+        function DespatchManageOrder2_LotNumUpdate(info) {
+
+            var data = info.data;                                    
+            
+            //#region 수정 시, Lot번호별 출고내역 data 변경사항 확인
+            if (DO2_despatchGubun === "U") {
+                var grid = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+                var gridData = getGridRowByKey("DespatchManageOrder2DownLeftGrid", grid.option("focusedRowKey"));
+                
+                $.ajax({
+                    type: 'POST',
+                    url: '/PrdOut/DespatchManageOrder2_S3',
+                    async: false,                    
+                    data: {
+                        despatch_no: gridData.despatch_order_no,
+                        item_cd: data.item_cd,
+                        lot_no: data.lot_no
+                    },
+                    success: function (result) {
+                        
+                        if (result.length > 0) {
+                            var json = JSON.parse(result);
+
+                            if (data.ck == "Y" || data.ck == true) {
+                                //품목-제조번호-바코드 비교하여 맞으면 수량 수정
+                                if (data.item_cd == json[0].item_cd && data.lot_no == json[0].lot_no && data.box_barcode_no == json[0].box_barcode_no) {
+
+                                    if (data.keeping_status === "Y" || data.keeping_status === true) {
+                                        alert("보관 여부가 선택이 되면 출고량은 수정이 되지 않습니다.");
+                                        DespatchManageOrder2Undo();
+                                        return;
+                                    }
+
+                                    //수량이 바뀐 것만 수정
+                                    if (data.issue_qty != json[0].issue_qty || data.box_qty != json[0].box_qty || data.keeping_status != json[0].keeping_status) {
+                                        data.gubun = "U3";
+                                        DO2_LotNoList.push(data);
+                                    }
+
+                                }
+                            } else if (data.ck == "N" || data.ck == false) {      //ck값이 false이면 DB에는 있는데 Grid에는 없다 or 체크해제 된 것 -> 해당 내역을 삭제한다.
+                                if (data.item_cd == json[0].item_cd && data.lot_no == json[0].lot_no) {
+                                    data.gubun = "D3";
+                                    DO2_LotNoList.push(data);
+                                }
+                            }
+                        }
+                        //result값이 없으면 DB에는 값이 없다. -> 해당 내역을 추가한다.
+                        else {
+                            if (data.ck == 'Y' || data.ck == true) {
+                                data.gubun = "I2";
+                                DO2_LotNoList.push(data);
+                            }
+                        }
+                    }
+                });
+            }
+            //#endregion
+            else {
+                if (data.ck == "Y" || data.ck == true) {        //ck 값 체크 된 Lot번호별 출고내역만 저장
+                    DO2_LotNoList.push(data);
+                }
+            }
+
+        }
+
+    //저장 버튼 비활성화 및 '+' 버튼 조건 따라 비활성화
+    function DO2_ToolbarEdit(e) {
+        var toolbarItems = e.toolbarOptions.items;
+        var gridLeft = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {                //저장 버튼
+                item.visible = false;
+            }
+            if (item.name == "addRowButton") {              //Row 추가 버튼
+                item.options.onClick = function (e) {
+                    gridLeft.addRow();
+                    _DespatchManageOrder2Count += 1;
+                    DO2_addFunction = e;
+                    addFunction(DO2_addFunction);
+                }
+            }
+            if (item.name == "revertButton") {              //Revert 버튼
+                if (DO2_despatchGubun == "U") {         //수정중에는 우측 Grid에서 revert
+                    item.visible = false;
+                } else {
+                    item.options.onClick = function (e) {
+                        gridLeft.cancelEditData();              //Editing mode 내용 취소시킨다.(Grid 입력내용 초기화)                                                
+                        _DespatchManageOrder2Count = 0;
+                        DO2_despatchGubun = "I";                        
+                        addFunction(DO2_addFunction);
+                    }
+                }
+
+            }
+        });
+
+    }
+
+    function DO2_ToolbarEdit_Right(e) {
+        var toolbarItems = e.toolbarOptions.items;
+        var gridLeft = $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance");
+        var gridRight = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {                //저장 버튼
+                item.visible = false;
+            }
+            if (item.name == "revertButton") {              //Revert 버튼
+                item.options.onClick = function (e) {
+                    gridRight.cancelEditData();             //Editing mode 내용 취소시킨다.(Grid 입력내용 초기화)
+                    gridLeft.cancelEditData();
+                }
+            }
+        });
+    }
+
+    function addFunction(e) {                       //Grid 내에 row가 한줄만 입력 가능.        
+        if (_DespatchManageOrder2Count == 1) {
+            e.component.option('disabled', true);
+        } else {
+            e.component.option('disabled', false);
+        }
+    }
+
+    //#endregion
+
+        // 그리드 컬럼 벨리데이션 체크
+        function DespatchManageOrder2Required(e) {
+            _despatchManageOrder2Valid = e.isValid;
+        }
+
+    //#region Focus Row 변경 이벤트
+        //상단 메인 그리드 -> 하단 좌측 그리드
+        function DespatchManageOrder2MainGrid_changed() {
+            var grid = $("#DespatchManageOrder2MainGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('DespatchManageOrder2MainGrid', grid.option("focusedRowKey"));
+
+            //#region 우측 그리드 데이터 채우기
+                //상단 메인 그리드 -> 우측 디테일 그리드 데이터 채우기
+                $("#DespatchManageOrder2Detail input[name=despatch_order_no]").val(gridData.DESPATCH_ORDER_NO);
+                $("#DespatchManageOrder2Detail input[name=issue_date]").val(gridData.ISSUE_DATE);
+                $("#DespatchManageOrder2Detail select[name=issue_ck_cd]").val(gridData.issue_ck_cd);
+                $("#DespatchManageOrder2Detail input[name=cust_cd]").val(gridData.CUST_CD);
+                $("#DespatchManageOrder2Detail input[name=cust_nm]").val(gridData.CUST_NM);
+                $("#DespatchManageOrder2Detail input[name=cust_ad1]").val(gridData.CUST_AD1);
+                $("#DespatchManageOrder2Detail input[name=pass_cust_cd]").val(gridData.PASS_CUST_CD);
+                $("#DespatchManageOrder2Detail input[name=pass_cust_nm]").val(gridData.PASS_CUST_NM);
+                $("#DespatchManageOrder2Detail input[name=pass_cust_ad1]").val(gridData.PASS_CUST_AD1);
+
+                if (gridData.ISSUE_TRANS_GB === "1") {
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_gb][value='1']").prop("checked", true);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_cd]").val(gridData.CUST_CD);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_nm]").val(gridData.CUST_NM);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_ad1]").val(gridData.CUST_AD1);
+                } else if (gridData.ISSUE_TRANS_GB === "2") {
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_gb][value='2']").prop("checked", true);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_cd]").val(gridData.PASS_CUST_CD);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_nm]").val(gridData.PASS_CUST_NM);
+                    $("#DespatchManageOrder2Detail input[name=issue_trans_cust_ad1]").val(gridData.PASS_CUST_AD1);
+                }
+
+                $("#DespatchManageOrder2Detail input[name=TaxBillYn][value=" + gridData.TaxBillYn + "]").prop("checked", true);
+
+                if (gridData.release_type === "일반출고") {
+                    $("#DespatchManageOrder2Detail input[name=release_type][value='0']").prop("checked", true);
+                } else if (gridData.release_type === "샘플출고") {
+                    $("#DespatchManageOrder2Detail input[name=release_type][value='1']").prop("checked", true);
+                }
+
+            //#endregion
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_S2',
+                data: {
+                    despatch_no: gridData.DESPATCH_ORDER_NO,
+                    item_cd: gridData.ITEM_CD
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (gridData.issue_ck_cd == "0") {
+                        var DO2_despatchGubun = "Edit";
+                    } else if (gridData.issue_ck_cd == "1" || gridData.issue_ck_cd == "2") {
+                        var DO2_despatchGubun = "Finish";
+                    }
+                    DespatchManageOrder2DownLeftGrid_changed(DO2_despatchGubun);
+
+                    //하단 좌측 그리드
+                    $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#DespatchManageOrder2DownLeftGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                }
+            })
+
+        }
+
+        //상단 메인 그리드 -> 하단 좌측 그리드 -> 하단 우측 그리드
+        function DespatchManageOrder2DownLeftGrid_changed(DO2_despatchGubun) {
+            var grid = $("#DespatchManageOrder2MainGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey('DespatchManageOrder2MainGrid', grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdOut/DespatchManageOrder2_GetLotNoSum',
+                data: {
+                    item_cd: gridData.ITEM_CD,
+                    check: DO2_despatchGubun,
+                    despatch_no: gridData.DESPATCH_ORDER_NO
+                },
+                success: function (result) {
+                    if (result.length <= 0) {
+                        $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+            })
+        }
+    //#endregion
+
+    //#region Cell background color 설정
+        function DO2_BackgroundColor(cellInfo) {
+            if (cellInfo.rowType == "data" && cellInfo.column.dataField === 'issue_ck_cd') {
+                if (cellInfo.data.issue_ck_cd === '0') {
+                    cellInfo.cellElement.addClass('yellow');
+                }
+                if (cellInfo.data.issue_ck_cd === '1') {
+                    cellInfo.cellElement.addClass('blue');
+                }
+                if (cellInfo.data.issue_ck_cd === '2') {
+                    cellInfo.cellElement.addClass('green');
+                }
+            }
+        }
+    //#endregion
+
+    //#region Grid Validation 체크
+    function DO2_QtyZeroChk_L(e) {
+        var data = e.data;
+
+        var ISSUE_QTY = data.ISSUE_QTY;
+
+        var result = ISSUE_QTY > 0;
+
+        return result;
+    }
+
+    function DO2_QtyChk_L(e) {
+        var data = e.data;
+        var grid = $("#DespatchManageOrder2DownRightGrid").dxDataGrid("instance");
+
+        var ISSUE_QTY = data.ISSUE_QTY;     //좌측하단 Grid 출고지시수량
+
+        var stock_qty = 0;     //재고량
+
+        for (var i = 0; i < grid.totalCount(); i++) {
+            stock_qty += grid.cellValue(i, "stock_qty");
+        }
+
+        var result = stock_qty >= ISSUE_QTY;
+        
+        return result;
+    }
+
+
+    function DO2_QtyChk_R(e) {
+        var data = e.data;
+
+        var Chk_stock_qty = data.stock_qty;     //재고량
+        var Chk_issue_qty = data.issue_qty;     //출고지시수량
+
+        var result = Chk_stock_qty >= Chk_issue_qty;
+
+        return result;
+    }
+    //#endregion
+
+</script>
+
+<!--셀 배경색상 설정-->
+<style>
+    #DespatchManageOrder2 .yellow {
+        background-color: yellow;
+        color: black;
+    }
+
+    #DespatchManageOrder2 .blue {
+        background-color: deepskyblue;
+        color: black;
+    }
+
+    #DespatchManageOrder2 .green {
+        background-color: greenyellow;
+        color: black;
+    }
+</style>
+
+<div id="DespatchManageOrder2" autoresize="Y">
+
+    @*<h4 class="divTitle">현장 출고지시</h4>*@
+
+    <!--#region 팝업div-->
+    <div id="DO2_CustPopup"></div>
+    <div id="DO2_ItemPopup"></div>
+    <div id="DO2_Item_CdPopup"></div>
+    <div id="DO2_I_CustPopup"></div>
+    <div id="DO2_I_CustInPopup"></div>
+    <!--#endregion-->
+    <!--#region 상단 Menu바-->
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="DespatchManageOrder2_form">
+                <div class="input-wrapper">
+                    <div class="col-4 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">출고일자</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="DO2_s_sdate" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="DO2_s_edate" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">거래처</span>
+                        </div>
+                        <input type="text" class="form-control" name="DO2_s_cust_cd" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="DO2_searchCustPopup()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="DO2_s_cust_nm" readonly />
+                    </div>
+                </div>
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control" name="DO2_item_cd" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="DO2_searchItemPopup()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="DO2_item_nm" readonly />
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">상태</span>
+                        </div>
+                        <select class="form-control" name="s_issue_status">
+                            @foreach (DataRow row in ((DataTable)ViewBag.s_issue_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <input type="hidden" name="search_ck" value="0" />
+                <input type="hidden" name="s_sign_status" value="%" />
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Input;Edit;Save;Undo;Delete");}
+        </div>
+
+    </div>
+    <!--#endregion-->
+
+    <div class="row">
+
+        <!--#region 좌측 상단 메인 그리드-->
+        <div class="col-9 pr-0 pb-1">
+            <div id="DespatchManageOrder2Main" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DespatchManageOrder2MainGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .Selection(s => s.Mode(SelectionMode.Multiple).ShowCheckBoxesMode(GridSelectionShowCheckBoxesMode.Always))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    //.KeyExpr("DESPATCH_ORDER_NO")
+                    .KeyExpr(DO2_gridKey_Main)
+                    .Height(500)
+                    .OnCellPrepared("DO2_BackgroundColor")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("sign_status_nm").Caption("서명상태").Visible(false);
+                        c.Add().DataField("emp_nm").Caption("의뢰자").Visible(false);
+                        c.Add().DataField("ISSUE_DATE").Caption("출고일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                        c.Add().DataField("DESPATCH_ORDER_NO").Caption("출고번호");
+                        c.Add().DataField("ISSUE_TRANS_CUST_CD").Caption("배송처코드");
+                        c.Add().DataField("CUST_NM").Caption("거래처");
+                        c.Add().DataField("PASS_CUST_NM").Caption("간납처");
+                        c.Add().DataField("Issue_Price").Caption("단가").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("ISSUE_QTY").Caption("출고지시수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("Issue_Amt").Caption("금액").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("ITEM_CD").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("RECEIPT_STATUS").Caption("출고가능여부").Width(100);
+                        c.Add().DataField("release_type").Caption("출고타입");
+                        c.Add()
+                                .Caption("상태")
+                                .Lookup(lookup => lookup
+                                    .DataSource(d => d.WebApi()
+                                        .RouteName("Comm")
+                                        .LoadAction("GetCommon")
+                                        .LoadMethod("GET")
+                                        .LoadParams(new
+                                        {
+                                            pGubun = "공통코드",
+                                            pDiv = "N",
+                                            pStrWhere = "GD402",
+                                            pTableName = "unit"
+                                        }
+                                    ).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    ).DataField("issue_ck_cd")
+                                    .DataType(GridColumnDataType.String);
+
+                    })
+                .OnFocusedRowChanged("DespatchManageOrder2MainGrid_changed")
+                )
+            </div>
+        </div>
+        <!--#endregion-->
+        <!--#region 우측 그리드-->
+        <div class="col-3 pl-1 pb-1">
+            <div id="DespatchManageOrder2Detail" class="box mb-0">
+                <div class="divName">
+                    <p>출고전표등록</p>
+                </div>
+
+                <form id="DespatchManageOrder2Detail_form">
+
+                    <div class="input-wrapper">
+                        <label class="col-3">출고번호</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="despatch_order_no" id="despatch_order_no" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">출고일자<star>*</star></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control input-sm datepicker required" name="issue_date" id="issue_date" value="@DateTime.Today.ToShortDateString()" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">상태</label>
+                        <div class="input-group col-4">
+                            <select class="form-control" name="issue_ck_cd">
+                                @foreach (DataRow row in ((DataTable)ViewBag.issue_ck_cd).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">거래처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="cust_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="CustBtn" onclick="DO2_search_ICustPopup()">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="cust_nm" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="cust_ad1" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">간납처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="pass_cust_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="PASS_CustBtn" onclick="DO2_search_ICustInPopup()">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="pass_cust_nm" readonly="readonly">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="pass_cust_ad1" readonly="readonly">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">배송처<star>*</star></label>
+                        <div class="input-group col-4">
+                            <div class="radioDiv form-control required"  style="text-align:center;">
+                                <label><input type="radio" name="issue_trans_gb" value="1" />거래처</label>
+                                <label class="p-1"></label>
+                                <label><input type="radio" name="issue_trans_gb" value="2" />간납처</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="issue_trans_cust_cd" readonly /><!--배송처 코드-->
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="issue_trans_cust_nm" readonly /><!--배송처 명-->
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3"></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control" name="issue_trans_cust_ad1" readonly="readonly"><!--배송처 주소-->
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">세금계산서</label>
+                        <div class="input-group col-4">
+                            <div class="radioDiv form-control" style="text-align:center;">
+                                <label><input type="radio" name="TaxBillYn" value="Y" />당월</label>
+                                <label class="p-1"></label>
+                                <label><input type="radio" name="TaxBillYn" value="N" />이월</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">출고종류</label>
+                        <div class="input-group col-4">
+                            <div class="radioDiv form-control" style="text-align:center;">
+                                <label><input type="radio" name="release_type" value="0" />일반</label>
+                                <label class="p-1"></label>
+                                <label><input type="radio" name="release_type" value="1" />샘플</label>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+        <!--#endregion-->
+    </div>
+
+    <div class="row">
+        <!--#region 하단 왼쪽 그리드-->
+        <div class="col-6 pr-1">
+            <div id="DespatchManageOrder2DownLeft" class="box mb-0">
+                <div class="divName">
+                    <p>출고전표상세</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DespatchManageOrder2DownLeftGrid")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("ITEM_ISSUE_ID")
+                    .Height(900)
+                    .Editing(editing =>
+                    {
+                        editing.Mode(GridEditMode.Batch);
+                        editing.AllowAdding(false);
+                        editing.AllowUpdating(false);
+                    })
+                    .OnRowUpdated("DespatchManageOrder2_DetailUpdate")
+                    .OnRowInserted("DespatchManageOrder2_DetailInsert")
+                    .OnCellClick("DespatchManageOrder2CellEvent")
+                    .OnEditorPreparing("DO2_EditableCell")
+                    .OnToolbarPreparing("DO2_ToolbarEdit")
+                    .OnRowValidating("DespatchManageOrder2Required")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("keeping_status").Caption("보관여부").DataType(GridColumnDataType.Boolean).Width(100)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.keeping_status == ""Y"" || rowData.keeping_status == true); }");
+                        c.Add().DataField("ITEM_CD").Caption("제품코드").CellTemplate(new JS("DO2_cellWithButton"))
+                            .Width(150)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("출고 상세정보가 없습니다.\n출고할 제품을 선택해주세요.");
+                            });
+                        c.Add().DataField("ITEM_NM").Caption("제품명");
+                        c.Add().DataField("ITEM_PACK_SIZE").Caption("포장단위");
+                        c.Add().DataField("ISSUE_QTY").Caption("출고지시수량")
+                            .Format("#,##0").DataType(GridColumnDataType.Number)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("출고 수량 정보가 없습니다.\n수량을 입력해주세요.");                                
+                                vr.AddCustom().ValidationCallback("DO2_QtyChk_L").Message("출고 수량은 지시 수량보다 작을 수 없습니다.");
+                                vr.AddCustom().ValidationCallback("DO2_QtyZeroChk_L").Message("출고지시 수량은 0보다 작을 수 없습니다.");
+                            });
+                        c.Add().DataField("Issue_Price2").Caption("단가")
+                            .Format("#,##0").DataType(GridColumnDataType.Number)
+                            .ValidationRules(vr =>
+                            {
+                                vr.AddRequired().Message("출고 단가 정보가 없습니다.\n수량을 입력해주세요.");
+                            });
+                        c.Add().DataField("Issue_Amt").Caption("금액").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("item_s_nm").Caption("약식명");
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 출고지시수량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("ISSUE_QTY")
+                                .ShowInColumn("ISSUE_QTY")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+                )
+            </div>
+        </div>
+
+        <!--#endregion-->
+        <!--#region 하단 오른쪽 그리드-->
+        <div class="col-6 pl-0">
+            <div id="DespatchManageOrder2DownRight" class="box mb-0">
+                <div class="divName">
+                    <p>Lot번호별 출고내역</p>
+                </div>
+
+                @(Html.DevExtreme().DataGrid()
+                .ID("DespatchManageOrder2DownRightGrid")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .HoverStateEnabled(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .KeyExpr(DO2_gridKey)
+                .Height(900)
+                .Editing(editing =>
+                {
+                    editing.Mode(GridEditMode.Batch);
+                    editing.AllowUpdating(false);
+                })
+                .OnRowUpdated("DespatchManageOrder2_LotNumUpdate")
+                .OnRowInserted("DespatchManageOrder2_DetailInsert")
+                .OnEditorPreparing("DO2_EditableCell_Right")
+                .OnToolbarPreparing("DO2_ToolbarEdit_Right")
+                .OnRowValidating("DespatchManageOrder2Required")
+                .Columns(c =>
+                {
+                    c.Add().DataField("ck").Caption("선택")
+                        .CalculateCellValue(@"function(rowData) { return (rowData.ck == ""Y"" || rowData.ck == true); }");
+                    c.Add().DataField("lot_no").Caption("제조번호");
+                    c.Add().DataField("stock_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    c.Add().DataField("issue_qty").Caption("출고지시수량").Format("#,##0")
+                        .DataType(GridColumnDataType.Number)
+                        .ValidationRules(vr =>
+                        {
+                            vr.AddRequired().Message("출고 수량 정보가 없습니다.\n수량을 입력해주세요.");
+                            vr.AddCustom().ValidationCallback("DO2_QtyChk_R").Message("재고량보다 출고 수량이 클 수 없습니다.");
+                        });
+                    c.Add().DataField("box_qty").Caption("지함적재량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    c.Add().DataField("keeping_status").Caption("보관여부").DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.keeping_status == ""Y"" || rowData.keeping_status == true); }");
+                    c.Add()
+                            .Lookup(lookup => lookup
+                                .DataSource(d => d.WebApi()
+                                    .RouteName("Comm")
+                                    .LoadAction("GetCommon")
+                                    .LoadMethod("GET")
+                                    .LoadParams(new
+                                    {
+                                        pGubun = "공통코드",
+                                        pDiv = "N",
+                                        pStrWhere = "SR001",
+                                        pTableName = "unit"
+                                    }).Key("keyfield"))
+                                    .ValueExpr("keyfield")
+                                    .DisplayExpr("displayfield")
+                                    )
+                            .DataField("shipping_status").Caption("출하승인");
+                    c.Add().DataField("receipt_status").Caption("인수인계");
+                    c.Add().DataField("item_issue_id").Caption("제품출고일련번호").Visible(false);
+                    c.Add().DataField("Issue_Price").Caption("단가").Visible(false);
+                })
+                .Summary(s => s.TotalItems(items =>
+                {
+                    /* 재고량 */
+                    items.Add()
+                    .Name("SelectedRowsSummary")
+                    .Column("stock_qty")
+                            .ShowInColumn("stock_qty")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum)
+                            .DisplayFormat("[{0}]");
+                    /* 출고지시수량 */
+                    items.Add()
+                    .Name("SelectedRowsSummary")
+                    .Column("issue_qty")
+                            .ShowInColumn("issue_qty")
+                            .ValueFormat("#,##0")
+                            .SummaryType(SummaryType.Sum)
+                            .DisplayFormat("[{0}]");
+                }))
+            )
+            </div>
+        </div>
+        <!--#endregion-->
+
+    </div>
+
+
+</div>

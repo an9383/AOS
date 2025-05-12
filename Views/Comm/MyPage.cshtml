@@ -1,0 +1,310 @@
+﻿@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    var myInfoData = @Html.Raw(Json.Encode(ViewBag.myInfoData.Data));
+
+    Layout = null;
+    ViewBag.Tilte = pagePrefix;
+}
+
+@model HACCP.Models.User
+
+
+<script>
+    $(function () {
+
+        if (JSON.parse(@myInfoData).length > 0) {
+            var myInfo = JSON.parse(@myInfoData)[0];
+
+            myInfoBind(myInfo);
+        }
+
+        $("div#MyPage div.btn_div button#myPWEdit_btn").on("click", function () {
+            passwordBtn_Edit();
+        })
+
+
+
+    })
+
+
+    function myInfoBind(data) {
+
+        $("div#MyPage input[name='emp_cd']").val(data.emp_cd);
+        $("div#MyPage input[name='emp_nm']").val(data.emp_nm);
+        $("div#MyPage input[name='dept_cd']").val(data.dept_cd);
+        $("div#MyPage input[name='dept_nm']").val(data.dept_nm);
+        $("div#MyPage input[name='emp_post_nm']").val(data.emp_post_nm);
+        $("div#MyPage input[name='emp_rair_nm']").val(data.emp_rair_nm);
+        $("div#MyPage input[name='phone_no']").val(data.phone_no);
+        $("div#MyPage input[name='email_addr']").val(data.email_addr);
+    }
+
+
+    function passwordBtn_Edit() {
+        var popup = $("#MyPagePassworkCheckSignPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#MyPagePassworkCheckSignPopupTemplate"));
+        popup.show();
+    }
+
+
+    function passwordEdit() {
+        var newPassword = $("#MyPage input[name='new_password']").val();
+        var passwordCheck = $("#MyPage input[name='password_check']").val();
+        var oldPassword = arguments[0];
+
+        if (newPassword.length <= 0) {
+            alert("패스워드를 입력하십시오.")
+            $("#MyPage input[name='new_password'").focus();
+
+            return;
+        }
+
+        if (passwordCheck.length <= 0) {
+            alert("확인을 위해 다시한번 패스워드를 입력하십시오.");
+            $("#MyPage input[name='password_check'").focus();
+
+            return;
+        }
+
+        if (newPassword == oldPassword) {
+            alert("새로운 패스워드를 입력하십시오.");
+            $("#MyPage input[name='new_password'").focus();
+            return;
+        }
+
+        if (newPassword != passwordCheck) {
+            alert("새 비밀번호와 비밀번호 확인이 일치하지 않습니다.");
+            $("#MyPage input[name='password_check'").focus();
+            return;
+        }
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/PasswordEdit',
+            data: {
+                newPassword: newPassword,
+                oldPassword: oldPassword
+            },
+            async: false,
+            success: function (result) {
+                var msg = JSON.parse(result).message;
+                if (msg.substring(msg.length - 7) == "수정되었습니다") {
+                    alert("비밀번호가 수정되었습니다.");
+
+                    passwordUndo();
+
+                } else {
+                    alert(msg);
+
+                }
+            }
+        });
+
+    }
+
+
+    function passwordUndo() {
+        var myInfo = JSON.parse(@myInfoData)[0];
+        myInfoBind(myInfo);
+
+        // 버튼 변경
+        /*$("div#MyPage div.btn_div button#myInfoEdit_btn").text("내 정보 수정");*/
+        $("div#MyPage div.btn_div button#myInfoEdit_btn").addClass("display-none");
+        $("div#MyPage div.btn_div button#myPWEdit_btn").text("비밀번호 변경");
+
+
+        $("div#MyPage div.btn_div button#myInfoEdit_btn").off("click");
+        $("div#MyPage div.btn_div button#myPWEdit_btn").off("click");
+
+        $("div#MyPage div.btn_div button#myPWEdit_btn").on("click", function () {
+            passwordBtn_Edit();
+        })
+
+
+        // input 변경
+        $("div#MyPage div.input-wrapper:nth-child(-n+4)").removeClass("display-none");
+        $("div#MyPage div.input-wrapper:nth-child(n+5)").addClass("display-none");
+
+        $("div#MyPage input[name='new_password']").val("");
+        $("div#MyPage input[name='password_check']").val("");
+    }
+
+
+    // 서명 권한 체크(id, pw)
+    function MyPagePassworkCheckSignSubmit() {
+        var data = new FormData($('#MyPagePassworkCheckSignForm')[0]);
+        data.set("gubun", "S");
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/IDValidation',
+            data: data,
+            contentType: false,
+            processData: false,
+            async: false,
+            success: function (result) {
+                if (result) {
+                    // 버튼 변경
+                    /*  $("div#MyPage div.btn_div button#myInfoEdit_btn").text("변경");*/
+                    $("div#MyPage div.btn_div button#myInfoEdit_btn").removeClass("display-none");
+                    $("div#MyPage div.btn_div button#myPWEdit_btn").text("취소");
+
+                    $("div#MyPage div.btn_div button#myInfoEdit_btn").off("click");
+                    $("div#MyPage div.btn_div button#myPWEdit_btn").off("click");
+
+                    $("div#MyPage div.btn_div button#myInfoEdit_btn").on("click", function () {
+                        passwordEdit(data.get("txt_Pass"));
+                    })
+
+                    $("div#MyPage div.btn_div button#myPWEdit_btn").on("click", function () {
+                        passwordUndo();
+                    })
+
+                    // input 변경
+                    $("div#MyPage div.input-wrapper:nth-child(-n+4)").addClass("display-none");
+                    $("div#MyPage div.input-wrapper:nth-child(n+5)").removeClass("display-none");
+
+                } else {
+                    alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                }
+
+                var popup = $("#MyPagePassworkCheckSignPopup").dxPopup("instance");
+                popup.hide();
+            }
+        });
+    }
+
+
+    function clearMyPageSignInput() {
+        $('#MyPagePassworkCheckSignForm')[0].reset();
+    }
+
+</script>
+
+<style>
+    div#MyPage div.input-wrapper:nth-child(n+6), div#MyPage div.btn_div.mt-4 {
+        text-align: center;
+    }
+
+    .btn-danger {
+        height: 23px;
+        padding: 0 10px;
+        font-size: inherit;
+    }
+
+</style>
+
+<div id="MyPage">
+    @* === 전자 서명 팝업 === *@
+    @(Html.DevExtreme().Popup()
+        .ID("MyPagePassworkCheckSignPopup")
+        .Width(500)
+        .Height(220)
+        .ShowTitle(true)
+        .Title(" 인증")
+        .OnHidden("clearMyPageSignInput")
+        .Visible(false)
+        .DragEnabled(true)
+        .CloseOnOutsideClick(false)
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("MyPagePassworkCheckSignPopupTemplate"))
+    {
+        <h6>사용자 확인을 위해 사용자ID와 비밀번호를 입력하세요.</h6>
+
+        <form id="MyPagePassworkCheckSignForm">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end mt-4">
+            <button class="btn btn-outline-secondary" onclick="MyPagePassworkCheckSignSubmit()">확인</button>
+        </div>
+
+    }
+
+
+
+    <div class="col-12">
+        <div class="input-wrapper">
+            <label class="col-2">사원코드</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="emp_cd" readonly>
+            </div>
+            <label class="col-2">사원명</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="emp_nm" readonly>
+            </div>
+        </div>
+
+        <div class="input-wrapper">
+            <label class="col-2">부서코드</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="dept_cd" readonly>
+            </div>
+
+            <label class="col-2">부서명</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="dept_nm" readonly>
+            </div>
+        </div>
+
+        <div class="input-wrapper">
+            <label class="col-2">직위</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="emp_post_nm" readonly>
+            </div>
+
+            <label class="col-2">직무</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="emp_rair_nm" readonly>
+            </div>
+        </div>
+
+        <div class="input-wrapper">
+            <label class="col-2">Phone</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="phone_no" readonly>
+            </div>
+
+            <label class="col-2">Email</label>
+            <div class="input-group col-3">
+                <input type="text" class="form-control" name="email_addr" readonly>
+            </div>
+        </div>
+
+        <div class="input-wrapper display-none" style="height: 30px;">
+        </div>
+
+        <div class="input-wrapper display-none">
+            <label class="col-3">신규 비밀번호</label>
+            <div class="input-group col-4">
+                <input type="password" class="form-control" name="new_password">
+            </div>
+        </div>
+
+        <div class="input-wrapper display-none">
+            <label class="col-3">비밀번호 확인</label>
+            <div class="input-group col-4">
+                <input type="password" class="form-control" name="password_check">
+            </div>
+        </div>
+
+        <div class="input-wrapper display-none" style="height: 23px;">
+        </div>
+    </div>
+    <div class="btn_div mt-4">
+        <button class="btn btn-danger display-none" id="myInfoEdit_btn">변경</button>
+        <button class="btn btn-secondary" id="myPWEdit_btn">비밀번호 변경</button>
+    </div>
+
+</div>

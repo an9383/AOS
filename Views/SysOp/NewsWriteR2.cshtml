@@ -1,0 +1,602 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "NewsWriteR2";
+
+    var news = @Html.Raw(Json.Encode(ViewBag.news.Data));
+    var noticeTargetGridData = @Html.Raw(Json.Encode(ViewBag.noticeTargetGridData.Data));
+    var NewsWriteR2Auth = @Html.Raw(Json.Encode(ViewBag.NewsWriteR2Auth.Data));
+
+}
+
+@*공지사항 등록*@
+
+<script id="NewsWriteR2Js" autoresize="Y">
+
+        var _newsWriteR2Auth;
+        var _newsWriteR2Gubun;
+        var _news_cd;
+
+        $(function () {
+            setDatePicker("#NewsWriteR2 .datepicker");
+
+            if (@news) {
+                $("#NewsWriteGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@news));
+                $("#NewsWriteGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+            else {
+                $("#NewsWriteGrid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            if (@noticeTargetGridData) {
+                $("#NoticeTarget1Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@noticeTargetGridData));
+            }
+            else {
+                $("#NoticeTarget1Grid").dxDataGrid("instance").option("dataSource", []);
+            }
+
+            if (@NewsWriteR2Auth) {
+                _newsWriteR2Auth = JSON.parse(@NewsWriteR2Auth);
+            }
+
+            if (_newsWriteR2Auth.form_insert != "Y") {
+                //$("#companyCalendarInput").remove();
+            }
+
+            newsWrite2IsEdited(false);
+        });
+
+        function newsWrite2IsEdited(isEdited) {
+
+            if (!isEdited) {
+                $('#' + "NewsWriteR2" + 'Save,#' + "NewsWriteR2" + 'Undo').dxButton().parent().parent().addClass("display-none");
+                $('#' + "NewsWriteR2" + 'Search,#' + "NewsWriteR2" + 'Input,#' + "NewsWriteR2" + 'Edit,#' + "NewsWriteR2" + 'Delete').dxButton().parent().parent().removeClass("display-none");
+
+                $("#NewsWriteGrid").dxDataGrid("instance").option("disabled", false);
+                $("#NewsWriteR2MainForm input").attr("disabled", true);
+                $("#NewsWriteR2MainForm textarea").attr("disabled", true);
+
+                var editing = {
+                    allowUpdating: false,
+                    selectTextOnEditStart: false,
+                }
+
+                $("#NoticeTarget1Grid").dxDataGrid("option", "editing", editing);
+                $("#NoticeTarget2Grid").dxDataGrid("option", "editing", editing);
+                $("#NoticeTarget3Grid").dxDataGrid("option", "editing", editing);
+
+            } else {
+                $('#' + "NewsWriteR2" + 'Save,   #' + "NewsWriteR2" + 'Undo').dxButton().parent().parent().removeClass("display-none");
+                $('#' + "NewsWriteR2" + 'Search, #' + "NewsWriteR2" + 'Input,#' + "NewsWriteR2" + 'Edit,#' + "NewsWriteR2" + 'Delete').dxButton().parent().parent().addClass("display-none");
+
+                $("#NewsWriteGrid").dxDataGrid("instance").option("disabled", true);
+                $("#NewsWriteR2MainForm input").attr("disabled", false);
+                $("#NewsWriteR2MainForm textarea").attr("disabled", false);
+
+                var editing = {
+                    allowUpdating: true,
+                    selectTextOnEditStart: true,
+                    mode: 'batch'
+                }
+
+                $("#NoticeTarget1Grid").dxDataGrid("option", "editing", editing);
+                $("#NoticeTarget2Grid").dxDataGrid("option", "editing", editing);
+                $("#NoticeTarget3Grid").dxDataGrid("option", "editing", editing);
+            }
+
+        }
+
+        function showGrid(num) {
+
+            for (var i = 1; i < 4; i++) {
+                if (i == num) {
+                    $("#NewsWriteR2Grid" + i).removeClass("display-none");
+                } else {
+                    $("#NewsWriteR2Grid" + i).addClass("display-none");
+
+                }
+            }
+        }
+
+        function newsFocusChanged() {
+
+            NewsWriteR2MainFormClear();
+
+            var grid = $("#NewsWriteGrid").dxDataGrid("instance");
+            var data = getGridRowByKey('NewsWriteGrid', grid.option("focusedRowKey"));
+
+            if (UtilView.isEmpty(data)) return;
+
+            _news_cd = data.news_cd;
+
+            var news_cd = data.news_cd;
+            var news_gb = data.news_gb;
+
+            var sDate = data.news_start_date;
+            var eDate = data.news_end_date;
+
+            $("#NewsWriteR2 input[name=newsGubun][value=" + news_gb + "]").prop("checked", true);
+            showGrid(news_gb);
+
+            $("#NewsWriteR2MainForm input[name=news_start_date]").val(sDate.substring(0, 10));
+            $("#NewsWriteR2MainForm input[name=news_end_date]").val(eDate.substring(0, 10));
+            $("#NewsWriteR2MainForm input[name=news_title]").val(data.news_title);
+            $("#NewsWriteR2MainForm textarea[name=news_content]").text(data.news_content);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/SelectNoticeTarget',
+                data: {
+                    news_cd: news_cd,
+                    news_gb: news_gb
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#NoticeTarget" + news_gb + "Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                    } else {
+                        $("#NoticeTarget" + news_gb + "Grid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            });
+    }
+
+
+    function NewsWriteR2Search() {
+        searchNews();
+    }
+
+        function NewsWriteR2Input() {
+
+            newsWrite2IsEdited(true);
+
+            $("#NewsWriteR2MainForm")[0].reset();
+            $("#NewsWriteR2MainForm textarea").text("");
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/NewNoticeTarget',
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        if (Array.isArray(JSON.parse(result[0]))) {
+                            $("#NoticeTarget1Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result[0]));
+                        }
+                        if (Array.isArray(JSON.parse(result[1]))) {
+                            $("#NoticeTarget2Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result[1]));
+                        }
+                        if (Array.isArray(JSON.parse(result[2]))) {
+                            $("#NoticeTarget3Grid").dxDataGrid("instance").option("dataSource", JSON.parse(result[2]));
+                        }
+
+                        $("#NewsWriteR2 input[name=newsGubun][value=1]").prop("checked", true);
+                        _newsWriteR2Gubun = "I";
+                    }
+                }
+            });
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/GetNewsCd',
+                success: function (result) {
+                    _news_cd = result;
+                }
+            });
+
+        }
+
+        function NewsWriteR2Edit() {
+
+            newsWrite2IsEdited(true);
+
+            $("#NewsWriteR2MainForm input[name=newsGubun]:not(:checked)").prop("disabled", true);
+
+            _newsWriteR2Gubun = "U";
+        }
+
+        function NewsWriteR2Delete() {
+
+            if (!confirm("선택된 공지사항을 삭제하시겠습니까?")) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/NewsCRUD',
+                data: {
+                    news_cd: _news_cd,
+                    gubun: 'D'
+                },
+                success: function (result) {
+                    searchNews();
+                }
+            });
+        }
+
+        async function NewsWriteR2Save() {
+
+            var news_start_date = $("#NewsWriteR2MainForm input[name=news_start_date]").val();
+            var news_end_date = $("#NewsWriteR2MainForm input[name=news_end_date]").val();
+
+            if (!news_start_date || !news_end_date) {
+                alert("게시기간은 필수 입력 사항입니다.");
+                return;
+            }
+
+            if (!UtilView.checkValidForm("NewsWriteR2MainForm")) {
+                return;
+            }
+
+            var news_gb = $("#NewsWriteR2 input[name=newsGubun]:checked").val();
+
+            if (_newsWriteR2Gubun === "I") {
+
+                await $("#NoticeTarget" + news_gb + "Grid").dxDataGrid("instance").saveEditData();
+
+            } else if (_newsWriteR2Gubun === "U") {
+
+                var gridData = $("#NoticeTarget" + news_gb + "Grid").dxDataGrid("instance").getVisibleRows();
+
+                for (var i = 0; i < gridData.length; i++) {
+                    NewsWriteR2SaveTarget(gridData[i].data);
+                }
+            }
+
+            searchNews();
+            newsWrite2IsEdited(false);
+        }
+
+        function NewsWriteR2Undo() {
+
+            newsWrite2IsEdited(false);
+            newsFocusChanged();
+
+        }
+
+        function NewsWriteR2UpdateTarget(info) {
+
+            var data = info.data;
+
+            NewsWriteR2SaveTarget(data);
+
+        }
+
+        function NewsWriteR2SaveTarget(data) {
+
+            var form = $('#NewsWriteR2MainForm')[0];
+            var formData = new FormData(form);
+
+            var news_gb = $("#NewsWriteR2 input[name=newsGubun]:checked").val();
+
+            var target_cd;
+            var targetType;
+            var targetChk;
+
+            switch (news_gb) {
+
+                case '1':
+                    target_cd = data.plant_cd;
+                    targetType = 'plant_cd';
+                    targetChk = data.plant_chk;
+
+                    break;
+
+                case '2':
+                    target_cd = data.dept_cd;
+                    targetType = 'dept_cd';
+                    targetChk = data.dept_chk;
+
+                    break;
+
+                case '3':
+                    target_cd = data.emp_cd;
+                    targetType = 'emp_cd';
+                    targetChk = data.emp_chk;
+
+                    break;
+            }
+
+            formData.set("news_cd", _news_cd);
+            formData.set("news_gb", news_gb);
+            formData.set("news_seq_id", (data.news_seq_id ? data.news_seq_id : ""));
+            formData.set("target_cd", target_cd);
+            formData.set("targetType", targetType);
+
+            if (!targetChk) {
+                formData.set("gubun", "D2");
+            } else {
+                formData.set("gubun", _newsWriteR2Gubun);
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/NewsCRUD',
+                contentType: false,
+                processData: false,
+                data: formData,
+                success: function (result) {
+
+                }
+            });
+
+        }
+
+        // 프로그램 권한 트리리스트 수정가능 컬럼 조정
+        function newsWriteR2EditableColumn(cellElement) {
+
+            if (cellElement.rowType != "data" || !cellElement.isEditing)
+                return;
+            if (cellElement.column.dataField != "plant_chk"
+                && cellElement.column.dataField != "dept_chk"
+                && cellElement.column.dataField != "emp_chk"
+                && !cellElement.row.inserted) {
+                cellElement.element.find('input').prop('readonly', true);
+            }
+    }
+
+        function searchNews() {
+
+            NewsWriteR2MainFormClear();
+
+            var form = $('#NewsWriteR2SearchForm')[0];
+            var formData = new FormData(form);
+
+            if (!$("#NewsWriteR2SearchForm input[name=isNotifiedByMe]").prop("chekced")) {
+                formData.set("isNotifiedByMe", false);
+            }
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysOp/SelectNews',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#NewsWriteGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    } else {
+                        $("#NewsWriteGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            });
+            UtilView.setGridFocus("G", "NewsWriteGrid");
+        }
+
+        function NewsWriteR2MainFormClear() {
+
+            $("#NewsWriteR2MainForm")[0].reset();
+            $("#NewsWriteR2MainForm textarea").text("");
+            $("#NewsWriteR2 input[name=newsGubun][value=1]").prop("checked", true);
+        }
+
+        function NewsWriteR2HideSaveButton(e) {
+
+            var toolbarItems = e.toolbarOptions.items;
+            $.each(toolbarItems, function (_, item) {
+                if (item.name == "saveButton") {
+                    item.visible = false;
+                }
+            });
+
+        }
+
+</script>
+
+<div id="NewsWriteR2">
+
+    <div class="mainTop row p-0 m-0">
+
+        <div class="col-8 p-0">
+
+            <form id="NewsWriteR2SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공지대상</span>
+                        </div>
+                        <select class="form-control" name="news_gb" onchange="searchNews()">
+                            @foreach (DataRow row in ((DataTable)ViewBag.noticeTarget).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">게시일자</span>
+                        </div>
+
+                        <input type="text" class="form-control col-5 datepicker" name="news_start_date" value="@DateTime.Today.AddDays(-(DateTime.Today.Day-1)).ToShortDateString()" onchange="searchNews()">
+                        <div class="input-group-append"><span class="input-group-text">~</span></div>
+                        <input type="text" class="form-control col-5 datepicker" name="news_end_date" value="@DateTime.Today.ToShortDateString()" onchange="searchNews()">
+
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"> 내가 입력한 공지</span>
+                        </div>
+                        <input type="checkbox" class="form-control" value="true" name="isNotifiedByMe" onclick="searchNews()" />
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4 p-0">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row p-0 m-0">
+
+        <div class="col-8 p-0 pr-1 m-0">
+            <div class="box mb-0 p-0" style="height:auto">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("NewsWriteGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true).ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Height(865)
+                    .KeyExpr("news_cd")
+                    //.Selection(s => s.Mode(SelectionMode.Single))
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("news_gbT").Caption("공지대상");
+                        c.Add().DataField("news_title").Caption("제목");
+                        c.Add().DataField("news_start_date").Caption("시작일자");
+                        c.Add().DataField("news_writerT").Caption("공지자");
+                    })
+                .OnFocusedRowChanged("newsFocusChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 p-0">
+
+            <div class="box mb-0" style="height:auto">
+
+                <div class="divName">
+                    <p>공지사항</p>
+                </div>
+
+                <form id="NewsWriteR2MainForm">
+
+                    <div class="input-wrapper">
+                        <label class="col-3">게시기간<star>*</star></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control datepicker required" name="news_start_date" />
+                            <div class="input-group-append"><span class="input-group-text">~</span></div>
+                            <input type="text" class="form-control datepicker required" name="news_end_date" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">제목 <star>*</star></label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12 required" name="news_title">
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">내용 <star>*</star></label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control col-12 required" cols="40" rows="3" name="news_content"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+
+                        <label class="col-3">공지대상 <star>*</star></label>
+                        <div class="input-group col-8">
+                            <div class="radioDiv required col-12">
+                                <label><input type="radio" name="newsGubun" value="1" onclick="showGrid(1)" disabled="disabled" />사업장</label>
+                                <label><input type="radio" name="newsGubun" value="2" onclick="showGrid(2)" disabled="disabled" />부서</label>
+                                <label><input type="radio" name="newsGubun" value="3" onclick="showGrid(3)" disabled="disabled" />사원</label>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div id="NewsWriteR2Grid1">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("NoticeTarget1Grid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(715)
+                            .OnCellPrepared("newsWriteR2EditableColumn")
+                            .OnRowUpdated("NewsWriteR2UpdateTarget")
+                            .OnToolbarPreparing("NewsWriteR2HideSaveButton")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("plant_cd").Caption("사업장코드");
+                                c.Add().DataField("plant_nm").Caption("사업장명");
+                                c.Add()
+                                    .DataField("plant_chk")
+                                    .Caption("공지대상")
+                                    .DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.plant_chk == ""Y"" || rowData.plant_chk == true); }");
+                            })
+                        )
+                    </div>
+                    <div id="NewsWriteR2Grid2" class="display-none">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("NoticeTarget2Grid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(715)
+                            .OnCellPrepared("newsWriteR2EditableColumn")
+                            .OnRowUpdated("NewsWriteR2UpdateTarget")
+                            .OnToolbarPreparing("NewsWriteR2HideSaveButton")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("dept_cd").Caption("부서코드");
+                                c.Add().DataField("dept_nm").Caption("부서명");
+                                c.Add()
+                                    .DataField("dept_chk")
+                                    .Caption("발신")
+                                    .DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.dept_chk == ""Y"" || rowData.dept_chk == true); }");
+                            })
+                        )
+                    </div>
+                    <div id="NewsWriteR2Grid3" class="display-none">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("NoticeTarget3Grid")
+                            .ShowBorders(true)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .SearchPanel(searchPanel => searchPanel.Visible(true))
+                            .HoverStateEnabled(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .Scrolling( scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(715)
+                            .OnCellPrepared("newsWriteR2EditableColumn")
+                            .OnRowUpdated("NewsWriteR2UpdateTarget")
+                            .OnToolbarPreparing("NewsWriteR2HideSaveButton")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("emp_cd").Caption("사원코드");
+                                c.Add().DataField("emp_nm").Caption("사원명");
+                                c.Add().DataField("emp_joinDept").Caption("소속부서");
+                                c.Add()
+                                    .DataField("emp_chk")
+                                    .Caption("발신")
+                                    .DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.emp_chk == ""Y"" || rowData.emp_chk == true); }");
+                            })
+                        )
+                    </div>
+
+                </form>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,171 @@
+﻿
+@{
+    Layout = null;
+    ViewBag.Title = "SelectItemPopup";
+}
+
+    <script id="SelectItemPopupJs">
+
+        $(function () {
+
+            if ((@Html.Raw(Json.Encode(Model.Data))).length > 0) {
+                $("#PackingOrderLedgerItemPopupGrid_1").dxDataGrid("instance").option("dataSource", JSON.parse(@Html.Raw(Json.Encode(Model.Data))));
+            }
+
+        });
+
+        function PackingOrderLedgerItemPopupGridFocuseChanged() {
+
+            var grid = $("#PackingOrderLedgerItemPopupGrid_1").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingOrderLedgerItemPopupGrid_1", grid.option("focusedRowKey"));
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/SelectItemDetail',
+                data: {
+                    item_cd: data.item_cd,
+                    revision_no: data.revision_no,
+                    batch_size: $("#PackingOrderLedgerItemPopupBatchSize").val()
+                },
+                dataType: 'json',
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingOrderLedgerItemPopupGrid_2").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#PackingOrderLedgerItemPopupGrid_2").dxDataGrid("option", "dataSource", json);
+
+                }
+            })
+        }
+
+        function addPackingOrderItem() {
+
+            // 제조제품 조회 팝업 선택 데이터
+            var popupGrid = $("#PackingOrderLedgerItemPopupGrid_1").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingOrderLedgerItemPopupGrid_1", popupGrid.option("focusedRowKey"));
+
+            var grid = $("#PackingOrderLedgerGrid_Tab_1").dxDataGrid("instance");
+
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "item_cd", data.item_cd);
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "item_nm", data.item_nm);
+
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "lot_no", "");
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "batch_size", "");
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "make_order_no", "");
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "lot_date", "");
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "valid_date", "");
+
+            var popup = $("#PackingOrderLedgerItemPopup2").dxPopup("instance");
+            popup.hide();
+        }
+
+        function SelectItemPopupRowBackgroundColor(e) {
+            
+            if (e.rowType === "data" && parseFloat(e.data.use_qty.replaceAll(',', '')) > parseFloat(e.data.remain_qty.replaceAll(',', ''))) {
+                e.rowElement[0].style.backgroundColor = 'lightpink';
+            }
+
+        }
+
+    </script>
+
+<div id="SelectItemPopup">
+
+    @(Html.DevExtreme().Toolbar()
+        .ID("PackingOrderLedgerItemPopupTemplateToolbar_1")
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .ID("addPackingOrderItem")
+                .Icon("check")
+                .Text("확인")
+                .OnClick("addPackingOrderItem")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+            .Items(items =>
+            {
+                items.Add()
+                .Template(new TemplateName("PackingOrderLedgerItemPopupToolbar_1"))
+                .Location(ToolbarItemLocation.Before);
+
+            })
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("PackingOrderLedgerItemPopupToolbar_1"))
+    {
+        <div style="width: 800px;">
+            <label class="col-2">지시수량</label>
+            <input type="text" id="PackingOrderLedgerItemPopupBatchSize" class="form-control col-3" value="@ViewBag.batch_size" readonly="readonly">
+        </div>
+    }
+
+    <div class="col-12 row">
+        <div class="col-5">
+            @(Html.DevExtreme().DataGrid()
+                    .ID("PackingOrderLedgerItemPopupGrid_1")
+                    .ShowBorders(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(680)
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowIndex(0)
+                    .FocusedRowEnabled(true)
+                    .KeyExpr("row_num")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("item_pack_size_nm").Caption("포장단위");
+                    })
+            .OnFocusedRowChanged("PackingOrderLedgerItemPopupGridFocuseChanged")
+            .OnRowDblClick("addPackingOrderItem")
+            )
+
+        </div>
+
+        <div class="col-7">
+            @(Html.DevExtreme().DataGrid()
+                .ID("PackingOrderLedgerItemPopupGrid_2")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Height(680)
+                .ColumnAutoWidth(true)
+                .HoverStateEnabled(true)
+                //.FocusedRowIndex(0)
+                //.FocusedRowEnabled(true)
+                .KeyExpr("child_cd")
+                .OnRowPrepared("SelectItemPopupRowBackgroundColor")
+                .Columns(c =>
+                {
+                    c.Add().DataField("child_cd").Caption("자재코드");
+                    c.Add().DataField("child_nm").Caption("자재명");
+                    c.Add().DataField("standard_qty").Caption("기준량");
+                    c.Add().DataField("use_qty").Caption("필요량");
+                    c.Add().DataField("remain_qty").Caption("재고량");
+                    c.Add().DataField("item_unit").Caption("단위");
+                    c.Add().DataField("enable_cnt").Caption("생산가능배치");
+
+                })
+            )
+        </div>
+    </div>
+</div>

@@ -1,0 +1,633 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var ItemPopupData_M = @Html.Raw(Json.Encode(ViewBag.ItemPopupData_M.Data));
+    var ItemPopupData_P = @Html.Raw(Json.Encode(ViewBag.ItemPopupData_P.Data));
+}
+
+@* 제조의뢰 입력(발주량 산출용)*@
+<script id="@(pagePrefix)Js">
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";         // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var ForcastingOrderManage_FocusedRowData = null;
+
+    var ForcastingOrderManage_dbState = "";
+    var ForcastingOrderManage_searchItemChk = "";
+
+    $(function () {
+        setDatePicker("#ForcastingOrderManage .datepicker");
+
+        //제조품목 팝업
+        var ItemPopupData_M = @ItemPopupData_M;
+
+        //var columns = [
+        //    { dataField: "item_cd", caption: "제품코드" },
+        //    { dataField: "item_nm", caption: "제품명" }
+        //];
+        //createPopup("ForcastingOrderManage_Item_M", "품목 조회", ItemPopupData_M, columns, "item_cd");
+
+
+
+        //포장품목 팝업
+        @*var ItemPopupData_P = @ItemPopupData_P;
+
+        var columns = [
+            { dataField: "item_cd", caption: "제품코드" },
+            { dataField: "item_nm", caption: "제품명" }
+        ];
+        createPopup("ForcastingOrderManage_Item_P", "품목 조회", ItemPopupData_P, columns, "item_cd");*@
+
+
+        // 수정중인지 체크
+        ForcastingOrderManage_EditCheck(false);
+        // 그리드 데이터 조회
+        ForcastingOrderManageSearch();
+
+    })
+
+
+    // 수정중인지 체크
+    function ForcastingOrderManage_EditCheck(nowEdit) {
+
+        // 수정중일 때
+        if (nowEdit) {
+            $("#ForcastingOrderManageSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageInput").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageDelete").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageExcel").dxButton().parent().parent().addClass("display-none");
+
+            $("#ForcastingOrderManageForm :disabled").attr('disabled', false);
+            $("#ForcastingOrderManageGrid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+            $("#ForcastingOrderManageSave").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ForcastingOrderManageSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageDelete").dxButton().parent().parent().removeClass("display-none");
+            $("#ForcastingOrderManageExcel").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ForcastingOrderManageForm :enabled").attr('disabled', true);
+            $("#ForcastingOrderManageGrid").dxDataGrid("option", "disabled", false);
+
+            ForcastingOrderManage_dbState = "";
+
+        }
+    }
+
+    //포장품목 찾기
+    function ForcastingOrderManage_SearchPackingItem() {
+
+        CreatePopupWithFilter('@CodeHelpType.packingitem', '품목 조회', 'item_cd', $("#ForcastingOrderManageSearchForm input[name=order_request_c_item_cd]").val(),
+            function (selectedItems) {
+                //입력폼 데이터로 설정
+                $("#ForcastingOrderManageForm input[name=order_request_c_item_cd]").val(selectedItems.item_cd);
+                $("#ForcastingOrderManageForm input[name=order_request_c_item_nm]").val(selectedItems.item_nm);
+
+                ForcastingOrderManage_Setting_h_item(selectedItems.item_cd);
+            }
+        );
+
+        //var popup = $("#ForcastingOrderManage_Item_PPopup").dxPopup("instance");
+        //popup.show();
+    }
+
+    //제조품목 찾기
+    function ForcastingOrderManage_SearchItem(t) {
+
+        ForcastingOrderManage_searchItemChk = t;
+
+        var val = "";
+
+        if (ForcastingOrderManage_searchItemChk == "1")
+            val = $("#ForcastingOrderManageSearchForm input[name=order_request_item_cd]").val();
+        else if (ForcastingOrderManage_searchItemChk == "2")
+            val = $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val();
+
+        CreatePopupWithFilter('@CodeHelpType.makingitem', '품목 조회', 'item_cd', val,
+            function (selectedItems) {
+
+                if (ForcastingOrderManage_searchItemChk == "1") {
+                    //상단 검색영역 데이터로 설정
+                    $("#ForcastingOrderManageSearchForm input[name=order_request_item_cd]").val(selectedItems.item_cd);
+                    $("#ForcastingOrderManageSearchForm input[name=order_request_item_nm]").val(selectedItems.item_nm);
+                }
+
+                else if (ForcastingOrderManage_searchItemChk == "2") {
+                    //입력폼 데이터로 설정
+                    $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val(selectedItems.item_cd);
+                    $("#ForcastingOrderManageForm input[name=order_request_h_item_nm]").val(selectedItems.item_nm);
+                }
+
+            }
+        );
+
+       // var popup = $("#ForcastingOrderManage_Item_MPopup").dxPopup("instance");
+       // popup.show();
+    }
+
+    //포장품목 팝업 - 선택
+    //function ForcastingOrderManage_Item_PRowDblClick(e) {
+    //    var data = e.data;
+
+    //    if (ForcastingOrderManage_searchItemChk == "1") {
+    //        //상단 검색영역 데이터로 설정
+    //        $("#ForcastingOrderManageSearchForm input[name=order_request_item_cd]").val(data.item_cd);
+    //        $("#ForcastingOrderManageSearchForm input[name=order_request_item_nm]").val(data.item_nm);
+    //    }
+
+    //    if (ForcastingOrderManage_searchItemChk == "2") {
+    //        //입력폼 데이터로 설정
+    //        $("#ForcastingOrderManageForm input[name=order_request_c_item_cd]").val(data.item_cd);
+    //        $("#ForcastingOrderManageForm input[name=order_request_c_item_nm]").val(data.item_nm);
+
+    //        ForcastingOrderManage_Setting_h_item(data.item_cd);
+
+    //    }
+
+    //    ForcastingOrderManage_searchItemChk = "";
+
+    //    var popup = $("#ForcastingOrderManage_Item_PPopup").dxPopup("instance");
+    //    popup.hide();
+    //}
+
+    //제조품목 팝업 - 선택
+    //function ForcastingOrderManage_Item_MRowDblClick(e) {
+    //    var data = e.data;
+
+    //    $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val(data.item_cd);
+    //    $("#ForcastingOrderManageForm input[name=order_request_h_item_nm]").val(data.item_nm);
+
+    //    ForcastingOrderManage_GetItemUnit(data.item_cd);
+
+    //    var popup = $("#ForcastingOrderManage_Item_MPopup").dxPopup("instance");
+    //    popup.hide();
+    //}
+
+    //조회, 입력, 수정, 삭제, 저장, 취소, 엑셀
+
+    //조회
+    function ForcastingOrderManageSearch() {
+
+        var formData = new FormData($("#ForcastingOrderManageSearchForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/AdvancedPlanning/ForcastingOrderManageSearch',
+            data: formData,
+            async: false,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    $("#ForcastingOrderManageGrid").dxDataGrid("instance").option("dataSource", json);
+
+                } else {
+                    $("#ForcastingOrderManageGrid").dxDataGrid("instance").option("dataSource", []);
+
+                    ForcastingOrderManage_FocusedRowData = null;
+                    ForcastingOrderManage_SetDetail();
+                }
+            }
+        })
+        UtilView.setGridFocus("G", "ForcastingOrderManageGrid");
+    }
+
+    //입력
+    function ForcastingOrderManageInput() {
+
+        ForcastingOrderManage_EditCheck(true);
+
+        //입력폼 초기화
+        $("#ForcastingOrderManageForm")[0].reset();
+
+        ForcastingOrderManage_dbState = "I";
+
+        $("#ForcastingOrderManageForm input[name=request_date]").datepicker({ dateFormat: "yy-mm-dd" }).datepicker("setDate", new Date());
+        $("#ForcastingOrderManageForm input[name=require_date]").datepicker({ dateFormat: "yy-mm-dd" }).datepicker("setDate", new Date());
+    }
+
+    //수정
+    function ForcastingOrderManageEdit() {
+
+        if ($("#ForcastingOrderManageGrid").dxDataGrid("instance").getDataSource().totalCount() == 0) {
+            alert("수정할 데이터가 없습니다.");
+            return;
+        }
+
+        ForcastingOrderManage_dbState = "U";
+
+        ForcastingOrderManage_EditCheck(true);
+
+    }
+
+    //삭제
+    function ForcastingOrderManageDelete() {
+
+        if ($("#ForcastingOrderManageGrid").dxDataGrid("instance").getDataSource().totalCount() == 0) {
+            alert("삭제할 데이터가 없습니다.");
+            return;
+        }
+
+        if (confirm("제조의뢰 정보를 삭제하시겠습니까?")) {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/AdvancedPlanning/ForcastingOrderManageDelete',
+                data: {
+                    forcast_order_no: ForcastingOrderManage_FocusedRowData.forcast_order_no
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        var message = json.message;
+
+
+                    }
+                }
+            })
+
+        }
+
+        ForcastingOrderManageSearch();
+        ForcastingOrderManage_SetDetail();
+
+    }
+
+
+    //저장
+    function ForcastingOrderManageSave() {
+        if (!UtilView.checkValidForm("ForcastingOrderManageForm")) return;
+
+        if (confirm("제조의뢰 정보를 저장하시겠습니까?")) {
+
+            var formData = new FormData($("#ForcastingOrderManageForm")[0]);
+
+            if (ForcastingOrderManage_dbState == "I") formData.set("row_status", "I2");
+            if (ForcastingOrderManage_dbState == "U") formData.set("row_status", "U2");
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                contentType: false,
+                processData: false,
+                url: '/AdvancedPlanning/ForcastingOrderManageSave',
+                data: formData,
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        var message = json.message;
+
+                    }
+                }
+            })
+        }
+
+        ForcastingOrderManage_EditCheck(false);
+        ForcastingOrderManageSearch();
+
+    }
+
+    //취소
+    function ForcastingOrderManageUndo() {
+        ForcastingOrderManage_EditCheck(false);
+        ForcastingOrderManageSearch();
+    }
+
+    //엑셀
+    function ForcastingOrderManageExcel() {
+        gridExportToExcel("ForcastingOrderManageGrid", "ForcastingOrderManageData");
+    }
+
+    //제조제품 단위
+    function ForcastingOrderManage_GetItemUnit(item_cd) {
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/ForcastingOrderManage_GetItemUnit',
+            data: {
+                item_cd: item_cd //제조품목
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    var message = json.message;
+
+                    if (message != "" && message.length > 0) {
+                        $("#ForcastingOrderManageForm input[name=item_unit]").val(message);
+                    }
+
+                }
+            }
+        })
+    }
+
+    //포장제품 선택시, 제조제품 자동선택
+    function ForcastingOrderManage_Setting_h_item(item_cd) {
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/AdvancedPlanning/ForcastingOrderManage_Setting_h_item',
+            data: {
+                //item_cd: order_request_c_item_cd, //포장
+                item_cd: item_cd, //포장
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+                    //var message = json.message;
+
+                    if (json != "" && json.length > 0) {
+                        $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val(json[0].item_make_cd); //제조품목코드
+                        $("#ForcastingOrderManageForm input[name=order_request_h_item_nm]").val(json[0].item_nm); //제조품목명
+
+                        ForcastingOrderManage_GetItemUnit(json[0].item_make_cd);
+                    } else {
+                        $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val(); //제조품목코드
+                        $("#ForcastingOrderManageForm input[name=order_request_h_item_nm]").val(); //제조품목명
+                    }
+
+
+                }
+            }
+        })
+    }
+
+    //제조수량 환산
+    function ForcastingOrderManage_Setting_loss_h_qty() {
+        var formData = new FormData($("#ForcastingOrderManageForm")[0]);
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/AdvancedPlanning/ForcastingOrderManage_Setting_loss_h_qty',
+            data: formData,
+            success: function (result) {
+                if (result.length > 0) {
+                    var json = JSON.parse(result);
+
+                    var message = json.message;
+
+                    if (message != "" && message.length > 0) {
+                        var qty = parseFloat(message);
+
+                        $("#ForcastingOrderManageForm input[name=h_qty]").val(qty);       //제조환산수량
+                    } else {
+                        $("#ForcastingOrderManageForm input[name=h_qty]").val(0);         //제조환산수량
+                    }
+
+                }
+            }
+        })
+    }
+
+    //우측 폼 데이터 매핑
+    function ForcastingOrderManage_SetDetail() {
+        if (ForcastingOrderManage_FocusedRowData != null) {
+            var data = ForcastingOrderManage_FocusedRowData;
+
+            $("#ForcastingOrderManageForm input[name=forcast_order_no]").val(data.forcast_order_no);//생산의뢰번호
+            $("#ForcastingOrderManageForm input[name=request_date]").val(data.request_date);//의뢰일자
+            $("#ForcastingOrderManageForm input[name=require_date]").val(data.require_date);//요구납기일자
+
+            $("#ForcastingOrderManageForm input[name=order_request_c_item_cd]").val(data.c_item_cd);//포장품목코드
+            $("#ForcastingOrderManageForm input[name=order_request_c_item_nm]").val(data.c_item_nm);//포장품목명
+            $("#ForcastingOrderManageForm input[name=order_request_h_item_cd]").val(data.h_item_cd);//제조품목코드
+            $("#ForcastingOrderManageForm input[name=order_request_h_item_nm]").val(data.h_item_nm);//제조품목명
+
+            $("#ForcastingOrderManageForm input[name=c_qty]").val(data.c_qty);//포장의뢰수량
+            //$("#ForcastingOrderManageForm input[name=]").val();//포장의뢰수량 단위
+            $("#ForcastingOrderManageForm input[name=h_qty]").val(data.h_qty);//제조의뢰수량
+            $("#ForcastingOrderManageForm input[name=item_unit]").val(data.item_unit);//제조의뢰수량 단위
+            $("#ForcastingOrderManageForm input[name=remark]").val(data.remark);//비고
+
+        } else {
+            $("#ForcastingOrderManageForm")[0].reset();
+
+        }
+    }
+
+
+    //포커스 변경 이벤트
+    function ForcastingOrderManageGrid_FocusedRowChanged(e) {
+
+        if (!e.row || !e.row.data) {
+            ForcastingOrderManage_FocusedRowData = null;
+        } else {
+            ForcastingOrderManage_FocusedRowData = e.row.data;
+            ForcastingOrderManage_SetDetail(e.row.data);
+        }
+    }
+
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    @* 팝업 *@
+    <div id="ForcastingOrderManage_Item_MPopup"></div>
+    <div id="ForcastingOrderManage_Item_PPopup"></div>
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조의뢰일</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" value="@DateTime.Now.AddDays(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="end_date" value="@DateTime.Now.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">품목</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="order_request_item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="ForcastingOrderManage_SearchItem('1')">찾기</button>
+                        </div>
+                        <input type="hidden" class="form-control" name="order_request_item_nm">
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ForcastingOrderManageGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .HoverStateEnabled(true)
+                    .WordWrapEnabled(true)
+                    .KeyExpr("forcast_order_no")
+                    .Height(850)
+                    .ShowColumnLines(true)
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .FocusedRowEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("forcast_order_no").Caption("예상생산번호");
+                        c.Add().DataField("c_item_cd").Caption("품목코드");
+                        c.Add().DataField("c_item_nm").Caption("품목명");
+                        c.Add().DataField("request_date").Caption("의뢰일자");
+                        c.Add().DataField("require_date").Caption("납기일자");
+                        c.Add().DataField("c_qty").Format("#,##0").Caption("의뢰포장수량");
+                    })
+                    .OnFocusedRowChanged("ForcastingOrderManageGrid_FocusedRowChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box mb-0">
+                <form id="ForcastingOrderManageForm">
+                    <div class="divName margin-bottom">
+                        <p>생산의뢰 정보</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">예상생산번호</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12" name="forcast_order_no" readonly="readonly" />
+                        </div>
+
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">의뢰일자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12 required datepicker" name="request_date" value="" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">요구납기일자</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control col-12 required datepicker" name="require_date" value="" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장품목코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required searchPopupInput" name="order_request_c_item_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="ForcastingOrderManage_PackingItemBtn" onclick="ForcastingOrderManage_SearchPackingItem()">찾기</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="order_request_c_item_nm" readonly /> <!-- 포장품목 이름-->
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조품목코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required searchPopupInput" name="order_request_h_item_cd" readonly />
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="ForcastingOrderManage_ItemBtn" onclick="ForcastingOrderManage_SearchItem('2')">찾기</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="order_request_h_item_nm" readonly /> <!-- 제조품목 이름-->
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">포장의뢰수량</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="c_qty">
+                        </div>
+                        <label class="col-1">EA</label>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4"></label>
+                        <button class="btn btn-secondary col-4" type="button" onclick="ForcastingOrderManage_Setting_loss_h_qty()">제조수량환산</button>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">제조의뢰수량</label>
+                        <div class="input-group col-6">
+                            <input type="number" class="form-control" name="h_qty">
+                        </div>
+
+                        <div class="input-group col-1">
+                            <input type="text" class="form-control" name="item_unit" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-4">비고</label>
+                        <div class="input-group col-7">
+                            <input type="text" class="form-control" name="remark" />
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>

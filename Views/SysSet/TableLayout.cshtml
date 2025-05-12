@@ -1,0 +1,399 @@
+﻿@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+
+    var TableLayout = @Html.Raw(Json.Encode(ViewBag.TableLayout.Data));
+}
+
+
+@*테이블명세서 관리*@
+
+<script id="@(pagePrefix)Js">
+    var PagePrefix        = "@(pagePrefix)";              //js사용, 페이지접두어
+    var PageControllerNm  = "@(pageControllerNm)";        //js사용, 페이지컨트롤러명
+    var FormNmSearch = PagePrefix + "SearchForm";    // 폼명-검색용
+
+    UtilView.m_controller = PageControllerNm;
+    UtilView.m_actionPrefix = PagePrefix;
+
+    var table_name = "";
+    var TableLayout_tempArray = new Array();
+
+    // 스크립트 시작
+    $(function () {
+        var dropdownSource = JSON.parse(@TableLayout);
+
+        $("#TableLayoutDropBox").dxDropDownBox("instance").option("dataSource", new DevExpress.data.ArrayStore({ data: dropdownSource, key: "table_nm" }));
+
+        TableLayout_EditCheck(false);
+
+    });
+
+    // 수정중인지 체크
+    function TableLayout_EditCheck(nowEdit) {
+
+        if (nowEdit) {
+            $("#TableLayoutSave").dxButton().parent().parent().removeClass("display-none");
+            $("#TableLayoutUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#TableLayoutSearch").dxButton().parent().parent().addClass("display-none");
+            $("#TableLayoutEdit").dxButton().parent().parent().addClass("display-none");
+
+            //$("#TableLayout_GridContainer").dxDataGrid("option", "disabled", true);
+
+            var editing = {
+                allowUpdating: true,
+                selectTextOnEditStart: true,
+                mode: 'batch'
+            }
+            $("#TableLayout_GridContainer").dxDataGrid("option", "editing", editing);
+
+        }
+        if (!nowEdit) {
+            $("#TableLayoutSave").dxButton().parent().parent().addClass("display-none");
+            $("#TableLayoutUndo").dxButton().parent().parent().addClass("display-none");
+            $("#TableLayoutSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#TableLayoutEdit").dxButton().parent().parent().removeClass("display-none");
+
+            //$("#TableLayout_GridContainer").dxDataGrid("option", "disabled", false);
+
+            var editing = {
+                allowUpdating: false,
+                selectTextOnEditStart: false
+            }
+
+            TableLayout_tempArray = new Array();
+
+            $("#TableLayout_GridContainer").dxDataGrid("option", "editing", editing);
+
+        }
+    }
+
+    // 조회 버튼
+    function TableLayoutSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysSet/TableLayoutSelect',
+            data: {
+                table_name: table_name
+            },
+            success: function (result) {
+                if (result.length > 0) {
+                    var JsonData = JSON.parse(result);
+
+                    if (JsonData.length > 0) {
+                        $("#TableLayout_GridContainer").dxDataGrid("option", "dataSource", JsonData);
+                        $("#TableLayout_GridContainer").dxDataGrid("option", "focusedRowIndex", -1);
+                        $("#TableLayout_GridContainer").dxDataGrid("option", "focusedRowIndex", 0);
+                    }
+                } else {
+                    $("#TableLayout_GridContainer").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+
+    }
+
+    // 수정 버튼
+    function TableLayoutEdit() {
+        TableLayout_EditCheck(true);
+    }
+
+    // 취소 버튼
+    function TableLayoutUndo() {
+
+        TableLayout_EditCheck(false);
+        TableLayoutSearch();
+    }
+
+    // 저장 버튼
+    async function TableLayoutSave() {
+        if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+        await $("#TableLayout_GridContainer").dxDataGrid("instance").saveEditData();
+
+        if (TableLayout_tempArray.length > 0) {
+
+            //console.log(TableLayout_tempArray);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/TableLayoutUpdate',
+                async: false,
+                data: {
+                    param: JSON.stringify(TableLayout_tempArray)
+                },
+                dataType: 'json',
+                success: function (result) {
+                    //console.log(result);
+                }
+            });
+
+            //ScheduleGuide_dbState = "search";
+            TableLayout_EditCheck(false);
+            TableLayoutSearch();
+        }
+
+    }
+
+    // 미리보기 버튼
+    function TableLayoutPreview() {
+
+    }
+
+    // 인쇄 버튼
+    function TableLayoutPrint() {
+
+    }
+
+    // 엑셀 버튼
+    function TableLayoutExcel() {
+        gridExportToExcel("TableLayout_GridContainer", "TableLayoutData");
+    }
+
+    // 워드 파일 생성 버튼
+    function CreateWord() {
+
+    }
+
+    function TableLayout_OnRowUpdated(e) {
+
+        var data = e.data;
+
+        //data.table_name = row.table_name;
+        //data.column_name = row.column_name;
+        //data.column_caption = row.column_caption;
+        //data.column_description = row.column_description;
+
+        TableLayout_tempArray.push(data);
+
+    }
+
+
+    function TableLayoutDropBox_valueChanged(e) {
+
+        if (e.previousValue != null) {
+
+            table_name = e.value[0];
+
+            var dataGrid = $("#TableLayoutDropdownGrid").dxDataGrid("instance");
+            var selectedRowsData = dataGrid.getSelectedRowsData();
+            //console.log(selectedRowsData);
+
+            if (selectedRowsData[0].table_caption != null) {
+                $("#TableLayoutSearchForm input[name=table_caption]").val(selectedRowsData[0].table_caption);
+            } else {
+                $("#TableLayoutSearchForm input[name=table_caption]").val("");
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/SelectAuditTarget',
+                data: {
+                    table_name: table_name
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var JsonData = JSON.parse(result);
+
+                        if (JsonData.length > 0) {
+                            var table_label = table_name;
+
+                            if (JsonData[0].audit_target == "Y")
+                                table_label = table_name + " : [AuditTarget]";   
+
+                            var table_row_count = "TABLE RowCount : " + JsonData[0].RowCounts + " 건 / TABLE SIZE : " + JsonData[0].TotalSpaceKB+ " KB";        
+
+
+                            $("#TableLayoutSearchForm input[name=table_label]").val(table_label);
+                            $("#TableLayoutSearchForm input[name=table_row_count]").val(table_row_count);
+                        }
+                    } else {
+                        $("#TableLayoutSearchForm")[0].reset();
+
+                    }
+                }
+            });
+
+            $("#TableLayoutDropBox").dxDropDownBox("instance").close();
+        } 
+    }
+
+</script>
+
+<div id="@(pagePrefix)" autoresize="Y">
+
+    <div class="mainTop row">
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-10">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">테이블 리스트</span>
+                        </div>
+                        <div class="col-6">
+
+                            @(Html.DevExtreme().DropDownBox()
+                                .ID("TableLayoutDropBox")
+                                //.Name("TableLayoutDropBox")
+                                .ValueExpr("table_nm")
+                                .DisplayExpr("table_nm")
+                                .Height(30)
+                                .Placeholder("테이블을 선택하세요")
+                                //.ShowClearButton(true)
+                                .OnValueChanged("TableLayoutDropBox_valueChanged")
+                                .OnClosed("DropDownBoxReload")
+                                .ContentTemplate(new TemplateName("TableLayout_DropboxTemplate"))
+                            )
+
+                            @using (Html.DevExtreme().NamedTemplate("TableLayout_DropboxTemplate"))
+                            {
+                                @(Html.DevExtreme().DataGrid()
+                                    .ID("TableLayoutDropdownGrid")
+                                    .DataSource(new JS(@"component.getDataSource()"))
+                                    .Columns(columns => {
+                                        columns.Add().DataField("table_nm").Caption("table_nm");
+                                        columns.Add().DataField("table_caption").Caption("table_caption");
+                                    })
+                                    .HoverStateEnabled(true)
+                                    .SearchPanel(searchPanel =>
+                                    {
+                                        searchPanel.Visible(true);
+                                        searchPanel.Width(130);
+                                    })
+                                    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+                                    .Width(400)
+                                    .Height(350)
+                                    .Selection(s => s.Mode(SelectionMode.Single))
+                                    .SelectedRowKeys(new JS(@"[component.option(""value"")]"))
+                                    .OnSelectionChanged(@<text>
+                                                function(selectedItems) {
+                                                    var keys = selectedItems.selectedRowKeys;
+                                                    component.option("value", keys);
+                                                }
+                                                </text>)
+                                )
+                            }
+                        </div>
+
+                        <input type="text" class="form-control" name="table_label" readonly>
+                    </div>
+
+
+                </div>
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-6">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">테이블 주석</span>
+                        </div>
+                        <input type="text" class="form-control" name="table_caption" readonly>
+                    </div>
+                    <div class="input-group input-group-sm col-4">
+                        <input type="text" class="form-control" name="table_row_count" readonly>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="CreateWord()">워드생성</button>
+
+                </div>
+            </form>
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Edit;Save;Undo;Print;Excel");}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("TableLayout_GridContainer")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .HoverStateEnabled(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Height(850)
+                .KeyExpr("column_id")
+                .Columns(c =>
+                {
+                    c.Add().DataField("column_id").Caption("순번").AllowEditing(false);
+                    c.Add().DataField("table_name").Caption("테이블명").AllowEditing(false);
+                    c.Add().DataField("column_name").Caption("열이름").AllowEditing(false);
+                    c.Add().DataField("column_type").Caption("데이터형식").AllowEditing(false);
+                    c.Add().DataField("column_length").Caption("길이").AllowEditing(false);
+
+                    c.Add()
+                        .DataField("isnullable")
+                        .Caption("Null허용")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isnullable == ""Y"" || rowData.isnullable == true); }");
+
+                    c.Add()
+                        .DataField("isidentity")
+                        .Caption("열증가")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isidentity == ""Y"" || rowData.isidentity == true); }");
+
+                    c.Add()
+                        .DataField("isprimarykey")
+                        .Caption("기본키")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isprimarykey == ""Y"" || rowData.isprimarykey == true); }");
+
+                    c.Add()
+                        .DataField("isuniquekey")
+                        .Caption("유일키")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isuniquekey == ""Y"" || rowData.isuniquekey == true); }");
+
+                    c.Add()
+                        .DataField("isforeignkey")
+                        .Caption("외래키")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isforeignkey == ""Y"" || rowData.isforeignkey == true); }");
+
+                    c.Add()
+                        .DataField("isindex")
+                        .Caption("인덱스")
+                        .DataType(GridColumnDataType.Boolean)
+                        .AllowEditing(false)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.isindex == ""Y"" || rowData.isindex == true); }");
+
+                        c.Add().DataField("column_caption").Caption("명칭");
+                        c.Add().DataField("column_description").Caption("설명");
+                })
+                .OnToolbarPreparing("HideToolbarButton")
+                .OnRowUpdated("TableLayout_OnRowUpdated")
+
+            )
+            </div>
+        </div>
+    </div>
+
+
+</div>

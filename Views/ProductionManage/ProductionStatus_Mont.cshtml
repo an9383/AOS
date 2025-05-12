@@ -1,0 +1,313 @@
+﻿
+@using System.Data
+@using HACCP.Libs
+
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+
+@{
+    var ProductionStatus_Mont_data = Html.Raw(Json.Encode(ViewBag.productionStatus_MontData.Data));
+
+}
+
+<script type="text/javascript" id="ProductionStatus_MontJs">
+
+    var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+    var PageControllerNm = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+
+    var toDay = new Date();
+
+    // 새로고침 객체
+    var ProductionStatus_Mont_intervalSet = {
+        ProductionStatus_Mont_intervalMaster: {
+            intervalExcute: function () {
+                var _setSize = Object.keys(ProductionStatus_Mont_intervalSet).length;
+                var _thisViewId = "ProductionStatus_Mont";
+
+                var time = 5;
+                if ($("#ProductionStatus_MontSearchForm #refresh_time").val() == 0) $("#ProductionStatus_MontSearchForm #refresh_time").val(1);
+                time = $("#ProductionStatus_MontSearchForm #refresh_time").val();
+
+                if (_setSize > 1) {
+                    for (var i = 0; i < (_setSize - 1); i++) {
+                        var _excuteString = _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + i + " = setInterval(function() {"
+                            + _thisViewId + "_intervalSet." + _thisViewId + "_interval_" + i + "(" + i + ");"
+                            + "}, (" + time + " * 1000))";
+
+                        new Function(_excuteString)();
+                    }
+                }
+
+            },
+            intervalDelete: function (index, check) {
+                var _thisViewId = "ProductionStatus_Mont";
+                var _currentViewId = UtilView.getCurrentViewId();
+
+                var _excuteString = "";
+                if (check == 0) {
+                    _excuteString = "if(" + _thisViewId + " != " + _currentViewId + ") {"
+                        + "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");"
+                        + "}";
+                } else {
+                    _excuteString = "clearInterval(" + _thisViewId + "_intervalSet." + _thisViewId + "_intervalMaster.interval_" + index + ");";
+                }
+
+                new Function(_excuteString)();
+            }
+        },
+        ProductionStatus_Mont_interval_0: function () {
+            ProductionStatus_MontSearch();
+
+            ProductionStatus_Mont_intervalSet.ProductionStatus_Mont_intervalMaster.intervalDelete(0, 0);
+        }
+    }
+
+    $(function () {
+        //ProductionStatus_Mont_Content_Resize();
+        ProductionStatus_Mont_intervalSet.ProductionStatus_Mont_intervalMaster.intervalExcute();
+
+        var today = new Date();
+        $("#ProductionStatus_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+
+
+        if ((@ProductionStatus_Mont_data).length > 0) {
+
+            $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@ProductionStatus_Mont_data));
+        }
+
+
+    })
+
+
+    $("#ProductionStatus_MontSearchForm #refresh_time").blur(function () {
+
+        //ProductionStatus_MontResearch();
+        ProductionStatus_Mont_intervalSet.ProductionStatus_Mont_intervalMaster.intervalDelete(0, 1);
+        ProductionStatus_Mont_intervalSet.ProductionStatus_Mont_intervalMaster.intervalExcute();
+    });
+
+
+    $("#ProductionStatus_MontSearchForm #refresh_time").keyup(function (e) {
+
+        if (e.keyCode == "13") {
+
+            $("#ProductionStatus_MontSearchForm #refresh_time").blur();
+        }
+    });
+
+
+    function ProductionStatus_MontSearch() {
+
+        $.ajax({
+            type: "POST",
+            url: "/ProductionManage/ProductionStatus_MontSearch",
+            success: function (result) {
+
+                if (result <= 0) return;
+
+                var json = JSON.parse(result);
+                if (json.hasOwnProperty('sessionLoss')) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#" + "ProductionStatus_Mont" + "Grid").dxDataGrid("option", "dataSource", JSON.parse(result));
+
+                var today = new Date();
+                $("#ProductionStatus_MontSearchForm div.input-wrapper p").last().text("최근 조회시간 : " + today.format("yyyy년 MM월 dd일 HH시 mm분 ss초"));
+            }
+        })
+
+    }
+
+
+</script>
+
+<style>
+    #ProductionStatus_Mont div.mainTop {
+        height: 30px;
+    }
+
+    #ProductionStatus_Mont div.mainTop p {
+        margin: 0px;
+    }
+
+</style>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <div id="ProductionStatus_Mont_Top" class="mainTop row">
+        <div class="col-12">
+            <form id="ProductionStatus_MontSearchForm" onsubmit="return false;">
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-7">
+                        
+                    </div>
+                   
+
+                    <label style="display: inline-block; font-weight: 700;">새로고침</label>
+                    <input type="number" min="1" value="30" class="form-control" name="refresh_time" id="refresh_time" style="width: 4%;">
+                    <p style="display: inline-block; font-weight: 700;">초</p>
+
+                    <p class="col-3" style="display: inline-block; font-weight: 700;">최근 조회시간 : </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="ProductionStatus_Mont_Content" class="row">
+        <div class="col-12">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .KeyExpr("row_num")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("LOT_CK").Caption("상태")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.LOT_CK == "OK" || data.LOT_CK == "점검") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.LOT_CK == "오류" ) { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+                        c.Add().DataField("packing_order_no").Caption("포장지시번호");
+                        c.Add().DataField("order_no").Caption("제조지시번호");
+                        c.Add().DataField("ITEM_CODE").Caption("제품코드");
+                        c.Add().DataField("ITEM_NM").Caption("제품명");
+                        c.Add().DataField("LOT").Caption("제조번호");
+
+                        c.Add().DataField("ORDER_DATE").Caption("제조지시일자");
+                        c.Add().DataField("IN_DATE").Caption("입고일자");
+                        c.Add().DataField("ORDER_QTY").Caption("제조지시수량");
+                        c.Add().DataField("PROD_QTY").Caption("입고수량");
+                        c.Add().DataField("OUT_QTY").Caption("출고수량");
+                        c.Add().DataField("ORDER_CK").Caption("제조지시")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.ORDER_CK == "Y") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.ORDER_CK == "N" || data.ORDER_CK == "") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% }else if(data.ORDER_CK == "S") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/YellowLight.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+
+                        c.Add().DataField("MAT_CK").Caption("원료불출")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.MAT_CK == "Y") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.MAT_CK == "N" || data.MAT_CK == "") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% }else if(data.MAT_CK == "S") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/YellowLight.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+
+                        c.Add().DataField("MAT_CK1").Caption("자재불출")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.MAT_CK1 == "Y") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.MAT_CK1 == "N" || data.MAT_CK1 == "") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% }else if(data.MAT_CK1 == "S") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/YellowLight.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+
+                        c.Add().DataField("LIMS_CK").Caption("시험의뢰")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.LIMS_CK == "Y") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.LIMS_CK == "N" || data.LIMS_CK == "") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% }else if(data.LIMS_CK == "S") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/YellowLight.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+
+                        c.Add().DataField("test_no").Caption("시험번호");
+                        c.Add().DataField("IN_CK").Caption("제품입고")
+                            .Width("5%")
+                            .CellTemplate(@<Text>
+                                <% if(data.IN_CK == "Y") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/GreenLight.png" />
+                                    </div>
+                                <% }else if(data.IN_CK == "N" || data.IN_CK == "") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/Red.png" />
+                                    </div>
+                                <% }else if(data.IN_CK == "S") { %>
+                                    <div>
+                                        <img src="~/Content/image/monitoring/YellowLight.png" />
+                                    </div>
+                                <% } %>
+                            </Text>)
+                            .Alignment(HorizontalAlignment.Center);
+
+
+                    })
+                )
+            </div>
+    </div>
+</div>

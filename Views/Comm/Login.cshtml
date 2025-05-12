@@ -1,0 +1,230 @@
+﻿@using HACCP.Libs;
+@using Newtonsoft.Json;
+
+@{
+    Layout = "~/Views/Shared/_LoginLayout.cshtml";
+    ViewData["Title"] = "Login";
+
+    var loginData = @Html.Raw(JsonConvert.SerializeObject(ViewBag.loginData.Data));
+}
+
+@model HACCP.Models.User
+
+
+<script>
+
+    $(document).ready(function () {
+        if ((@loginData).length > 0) {
+            sessionStorage.setItem('plantLogo', JSON.parse(@loginData)[0].company_full_image);
+
+            $("div#login div#loginFieldset div.align-center.p-2 img").attr("src", JSON.parse(@loginData)[0].company_full_image);
+        }
+    })
+
+    function loginFormSubmit() {
+
+        if ($('#txt_ID').val() == '') {
+
+            //var text = "User ID를 입력 하세요"
+            //var type = "warning"
+            //DevExpress.ui.notify({ message: text, width: 300, position: "top"}, type, 4000);
+            $('#txt_ID').focus();
+            return;
+        }
+        if ($('#txt_Pass').val() == '') {
+
+            var myDialog = DevExpress.ui.dialog.custom({
+                title: "메세지",
+                messageHtml: "<h6>PassWord를 입력 하세요</h6>",
+                width: "400px",
+                height: "800px",
+                buttons: [{
+                    text: "확인",
+                    type: "warning",
+                    //stylingMode: "contained",
+                    onClick: function (e) {
+                        return { buttonText: e.component.option("text") }                    }
+                }]
+            });
+            myDialog.show().done(function (dialogResult) {
+                $('#txt_Pass').focus();
+                //console.log(dialogResult.buttonText);
+            });
+
+            $('#txt_Pass').focus();
+            return;
+        }
+
+        var form = $('#loginForm')[0];
+        var data = new FormData(form);
+
+        $.ajax({
+            type: 'POST',
+            url: '/Comm/Login',
+            contentType: false,
+            processData: false,
+            data: data,
+            success: function (result) {
+
+                if (!result.OK) {
+                    switch (result.errorType) {
+                        case '1':
+                            alert("허용된 입력횟수를 초과하였습니다.\n로그인을 완료할 수 없습니다.\n관리자에게 변경요청하세요.");
+                            break;
+                        case '2':
+                            alert("패스워드의 사용기한이 초과되었습니다.\n관리자에게 변경요청하세요.");
+                            break;
+                        case '3':
+                            alert("입력이 잘못되었거나 사용금지된 ID입니다.\n확인 후 다시 진행하십시오.");
+                            break;
+                    }
+
+                    return;
+                } else {
+                    if (new Date() > new Date(result.endTime).setDate(new Date(result.endTime).getDate() - 7)) {
+                        alert("패스워드 사용기한이 '" + result.endTime + "'까지 입니다. \n패스워드를 변경하세요.");
+                    }
+
+                    sessionStorage.setItem('loginID', result.loginID);
+                    sessionStorage.setItem('loginCD', result.loginCD);
+                    sessionStorage.setItem('loginNM', result.loginNM);
+                    sessionStorage.setItem('loginPosition', result.loginPosition);
+                    sessionStorage.setItem('plantCD', result.plantCD);
+                    sessionStorage.setItem('plantNM', result.plantNM);
+                    sessionStorage.setItem('deptCD', result.deptCD);
+                    sessionStorage.setItem('deptNM', result.deptNM);
+
+                    $("#login").remove();
+                    $("#Main").removeClass("display-none");
+
+                    /*history
+                        --------------------------------------------------
+                        date        write   comment
+                        --------------------------------------------------
+                        2020-10-23  조형진 index 페이지 오픈 window.open으로 변경 (기존코드 주석처리)
+                    */
+                    if (screen.width > 1920) {
+                        window.open('/Comm/Index', 'Haccp AOS', 'height=' + screen.height + ',width=' + 1920 + 'fullscreen=yes');
+                    }
+                    else {
+                        window.open('/Comm/Index', 'Haccp AOS', 'height=' + screen.height + ',width=' + screen.width + 'fullscreen=yes');
+                    }
+                    //location.replace("/Comm/Index");
+
+                    return;
+                }
+
+            }
+
+        });
+
+    }
+
+    function enterKeyLogin() {
+        if ($('#txt_ID').val() != '')
+            $('#txt_Pass').focus();
+    }
+    function enterkey() {
+
+        if (window.event.keyCode == 13) {
+            if ($('#txt_Pass').val() != '')
+                loginFormSubmit();
+        }
+    }
+
+</script>
+
+<div id="login">
+    @using (Html.BeginForm("LoginForm", "Comm", FormMethod.Post, new { id = "loginForm" }))
+    {
+        using (Html.DevExtreme().ValidationGroup())
+        {
+    <div id="loginFieldset" class="box">
+        <div class="align-center p-2"><img style="max-height: 100%; max-width: 100%;" /></div>
+
+
+        <div class="dx-field">
+            <div class="dx-field-label">
+                @Html.LabelFor(m => m.txt_ID, "User ID")
+            </div>
+            <div class="dx-field-value">
+                @*@(Html.DevExtreme().TextBoxFor(m => m.txt_ID)
+                    .Placeholder("Your ID")
+                    .Value("a2003850")
+                    .ID("loginID")
+                )*@
+
+                @(Html.DevExtreme().TextBox()
+                            .Name("txt_ID")
+                            .Placeholder("Your ID")
+                            .ID("loginID")
+                            .OnEnterKey("enterKeyLogin")
+                        )
+            </div>
+        </div>
+
+        <div class="dx-field">
+            <div class="dx-field-label">
+                @Html.LabelFor(m => m.txt_Pass, "PassWord")
+            </div>
+            <div class="dx-field-value">
+                @*@(Html.DevExtreme().TextBoxFor(model => model.txt_Pass)
+                    .Name("txt_Pass")
+                    .Placeholder("Password")
+                    .Value("a123qwe")
+                    .Mode(TextBoxMode.Password)
+                    .ID("loginPW")
+                )*@
+
+                @(Html.DevExtreme().TextBox()
+                            .Name("txt_Pass")
+                            .Placeholder("Password")
+                            .Mode(TextBoxMode.Password)
+                            .ID("loginPW")
+                            .OnKeyUp("enterkey")
+                        )
+            </div>
+        </div>
+
+        <div class="dx-fieldset">
+            @(Html.DevExtreme().Button()
+                        .ID("logIn")
+                        .Text("Log In")
+                        .Height(40)
+                        .Width("100%")
+                        .Type(ButtonType.Success)
+                        .UseSubmitBehavior(false)
+                        .OnClick("loginFormSubmit")
+                    )
+        </div>
+    </div>
+        }
+    }
+</div>
+
+<style>
+    #toast {
+        padding: 10px;
+    }
+
+    #toast ul {
+        text-align: center;
+        list-style-type: none;
+        margin: 20px 0;
+    }
+
+    #toast ul li {
+        display: inline-block;
+        width: 160px;
+        margin: 10px;
+    }
+
+    #toast ul li img {
+        width: 100px;
+    }
+
+    .dx-toast-content {
+        min-width: 300px;
+        max-width: 400px;
+    }
+</style>

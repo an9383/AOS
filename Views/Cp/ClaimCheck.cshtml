@@ -1,0 +1,1082 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ClaimCheck";
+
+    var ClaimCheckAuth = @Html.Raw(ViewBag.ClaimCheckAuth.Data);
+    var deptItem = @Html.Raw(Json.Encode(ViewBag.deptItem.Data));
+    var empItem = @Html.Raw(Json.Encode(ViewBag.empItem.Data));
+
+}
+<style>
+    #ClaimCheck textarea.form-control {
+        height: 55px;
+    }
+</style>
+<script id="ClaimCheckJs">
+    var ClaimCheck_dbState = "init";
+    var ClaimCheck_focusedRow = null;
+    var ClaimCheck_popCk = "";
+
+    //상세 그리드 데이터
+    var ClaimCheck_TempArray = new Array();
+
+    //파일이름 설정변수
+    var ClaimCheck_FileInfo = new Array();
+
+    $(function () {
+        $("#ClaimCheckForm input[name=select_S][value='0']").prop("checked", true);
+        $("#ClaimCheckForm select[name=claim_status_S]").val("2"); //접수상태
+
+        setDatePicker("#ClaimCheck .datepicker");
+
+        var columns1 = [
+            { dataField: "emp_cd", caption: "사원코드" },
+            { dataField: "emp_nm", caption: "사원명" },
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        var columns2 = [
+            { dataField: "dept_cd", caption: "부서코드" },
+            { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("ClaimCheckEmpItem", "사원 조회", @empItem, columns1, "emp_cd", 700, 800); //조사자 팝업(입력 폼)
+        createPopup("ClaimCheckDeptItem", "부서 조회", @deptItem, columns2, "dept_cd"); //관련부서 팝업(입력 폼)
+
+        ClaimCheckEditCheck(false);
+        ClaimCheckSearch();
+    });
+
+    // 수정중인지 체크
+    function ClaimCheckEditCheck(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#ClaimCheckSave").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimCheckUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimCheckSearch").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimCheckInput").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimCheckEdit").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimCheckDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#ClaimCheckForm_Right :disabled").attr('disabled', false);
+            $("#ClaimCheck_Grid").dxDataGrid("option", "disabled", true);
+
+        }
+        if (!nowEdit) {
+
+            $("#ClaimCheckSave").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimCheckUndo").dxButton().parent().parent().addClass("display-none");
+            $("#ClaimCheckSearch").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimCheckInput").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimCheckEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#ClaimCheckDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#ClaimCheckForm_Right :enabled").attr('disabled', true);
+            $("#ClaimCheck_Grid").dxDataGrid("option", "disabled", false);
+
+            // 그리드 수정모드 해제
+            var editing = {
+                allowUpdating: false,
+                allowAdding: false,
+                allowDeleting: false
+            }
+            $("#ClaimCheck_RightGrid").dxDataGrid("option", "editing", editing);
+            ClaimCheck_TempArray = new Array();
+
+
+        }
+    }
+
+    //입력 or 수정 시에만 버튼 활성화
+    function ClaimCheckButtonControl() {
+        if (ClaimCheck_focusedRow != null) {
+
+            $("#ClaimCheck_OpenFile1").attr('disabled', false);
+            $("#ClaimCheck_OpenFile2").attr('disabled', false);
+
+            if (ClaimCheck_dbState == "insert" || ClaimCheck_dbState == "edit") {
+                $("#ClaimCheck_RemoveFile1").attr('disabled', false);
+                $("#ClaimCheck_RemoveFile2").attr('disabled', false);
+
+                $("#ClaimCheck_AttachedFile1").dxFileUploader("instance").option("disabled", false);
+                $("#ClaimCheck_AttachedFile2").dxFileUploader("instance").option("disabled", false);
+
+                //$("#ClaimCheck_AttachedFile1").dxButton("disabled", false);
+                //$("#ClaimCheck_AttachedFile2").dxButton("disabled", false);
+            } else {
+                $("#ClaimCheck_RemoveFile1").attr('disabled', true);
+                $("#ClaimCheck_RemoveFile2").attr('disabled', true);
+
+                $("#ClaimCheck_AttachedFile1").dxFileUploader("instance").option("disabled", true);
+                $("#ClaimCheck_AttachedFile2").dxFileUploader("instance").option("disabled", true);
+
+                //$("#ClaimCheck_AttachedFile1").dxButton("disabled", true);
+                //$("#ClaimCheck_AttachedFile2").dxButton("disabled", true);
+            }
+        }
+    }
+
+    //라디오버튼 변경시 재조회
+    function ClaimCheckByRadio() {
+        ClaimCheckSearch();
+    }
+
+    //조회
+    function ClaimCheckSearch() {
+
+        if (ClaimCheck_dbState == "insert" || ClaimCheck_dbState == "edit") return;
+
+        var form = $('#ClaimCheckForm')[0];
+        var data = new FormData(form);
+
+        // 초기화영역
+        $('#ClaimCheck_Grid').dxDataGrid("option", "dataSource", []);
+        $('#ClaimCheck_Grid').dxDataGrid("option", "focusedRowKey", "");
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            contentType: false,
+            processData: false,
+            url: '/Cp/ClaimCheck_GridSelect',
+            data: data,
+            success: function (result) {
+
+                if (result != "") {
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+                    if (json.length > 0) {
+                        $("#ClaimCheck_Grid").dxDataGrid("option", "dataSource", json);
+                        $("#ClaimCheck_Grid").dxDataGrid("option", "focusedRowEnabled", true);
+                        $("#ClaimCheck_Grid").dxDataGrid("option", "focusedRowIndex", 0);
+                    } else {
+                        $("#ClaimCheck_Grid").dxDataGrid("option", "focusedRowEnabled", false);
+
+                        $("#ClaimCheckForm_Right")[0].reset();
+                        $("#ClaimCheck input[name='result_file1_nm']").val("");//첨부파일1
+                        $("#ClaimCheck input[name='result_file2_nm']").val("");//첨부파일2
+
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "dataSource", []);
+                        $("#ClaimCheck_RightGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "focusedRowEnabled", false);
+
+                    }
+
+                } else {
+                    $("#ClaimCheck_Grid").dxDataGrid("option", "focusedRowEnabled", false);
+                }
+                ClaimCheck_dbState = "search";
+            }
+        })
+
+    }
+
+    //입력
+    function ClaimCheckInput() {
+        if (ClaimCheck_focusedRow == null) {
+            alert("접수된 불만사항이 없습니다."); return;
+        }
+
+        if (ClaimCheck_focusedRow.data.claim_status != "2") {
+            alert("접수상태인 경우에만 입력이 가능합니다."); return;
+        }
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: false,
+            allowDeleting: false,
+            mode: 'batch'
+        }
+
+        $("#ClaimCheck_RightGrid").dxDataGrid("option", "editing", editing);
+
+        ClaimCheckEditCheck(true);
+        ClaimCheck_dbState = "insert";
+
+        //폼 초기값 세팅
+        $("#ClaimCheckForm_Right select[name='judge_type']").val("4");//조사판정 4급으로 세팅
+        $("#ClaimCheckForm_Right input[name='judge_date']").val("@DateTime.Today.ToShortDateString()");//조사일자
+
+        ClaimCheckButtonControl();
+    }
+
+    //수정
+    function ClaimCheckEdit() {
+        if (ClaimCheck_focusedRow == null) {
+           return;
+        }
+
+        if (ClaimCheck_focusedRow.data.claim_status != "3") {
+            alert("조사완료상태인 경우에만 수정이 가능합니다."); return;
+        }
+
+        var editing = {
+            allowUpdating: true,
+            allowAdding: false,
+            allowDeleting: false,
+            mode: 'batch'
+        }
+
+        $("#ClaimCheck_RightGrid").dxDataGrid("option", "editing", editing);
+
+        ClaimCheckEditCheck(true);
+        ClaimCheck_dbState = "edit";
+
+        ClaimCheckButtonControl();
+    }
+
+    //삭제
+    function ClaimCheckDelete() {
+        if (ClaimCheck_focusedRow == null) {
+            return;
+        }
+
+        if (ClaimCheck_focusedRow.data.claim_status != "3") {
+            alert("조사완료상태인 경우에만 삭제가 가능합니다."); return;
+        }
+
+        var ok = confirm("삭제하시겠습니까?");
+        if (ok) {
+            $.ajax({
+                type: 'POST',
+                url: '/Cp/ClaimCheck_GridDelete',
+                async: false,
+                data: {
+                    claim_id: ClaimCheck_focusedRow.data.claim_id
+                },
+                success: function (result) {
+                    if (result.length > 0) {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+                        check = true;
+                        alert("삭제되었습니다.");
+
+                        ClaimCheckSearch();
+                    }
+                }
+            });
+        }
+        ClaimCheckButtonControl();
+    }
+
+    //저장
+    async function ClaimCheckSave() {
+
+        var gubun = "";
+
+        if (ClaimCheck_dbState == "insert") {
+            gubun = "I";
+        } else if (ClaimCheck_dbState == "edit") {
+            gubun = "U";
+        }
+
+        if (UtilView.checkValidForm("ClaimCheckForm_Right")) {
+
+            var form = $('#ClaimCheckForm_Right')[0];
+            var data = new FormData(form);
+            data.set("claim_id", ClaimCheck_focusedRow.data.claim_id);
+
+            var url = (gubun == "I") ? "ClaimCheck_GridInsert" : "ClaimCheck_GridUpdate";
+
+            if (!confirm("변경사항을 저장하시겠습니까?")) return;
+
+            await $("#ClaimCheck_RightGrid").dxDataGrid("instance").saveEditData();
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                contentType: false,
+                processData: false,
+                url: '/Cp/' + url,
+                data: data,
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+
+                        //상세 그리드 입력
+                        if (ClaimCheck_TempArray.length > 0) {
+                            $.ajax({
+                                type: 'POST',
+                                async: false,
+                                url: '/Cp/ClaimCheck_GridUpdate1',
+                                data: {
+                                    claimDetailCheck: JSON.stringify(ClaimCheck_TempArray)
+                                },
+                                dataType: 'json',
+                                success: function (result) {
+
+                                    var json = JSON.parse(result);
+
+                                    if (json.hasOwnProperty('sessionLoss')) {
+                                        alert("세션이 만료되었습니다.");
+                                        sessionStorage.clear();
+                                        location.replace("/Comm/Login");
+                                    }
+
+                                    alert(json.messege);
+                                }
+                            })
+                        }
+                    }
+                    ClaimCheckButtonControl();
+                }
+            })
+
+            ClaimCheck_dbState = "search";
+            ClaimCheckSearch();
+            ClaimCheckEditCheck(false);
+        }
+
+
+    }
+
+    //취소
+    function ClaimCheckUndo() {
+
+        ClaimCheckEditCheck(false);
+
+        ClaimCheck_dbState = "search";
+
+        ClaimCheckSearch();
+    }
+
+    //엑셀
+    function ClaimCheckExcel() {
+        gridExportToExcel("ClaimCheck_Grid", "ClaimCheckData");
+    }
+
+    //포커스 로우 우측 폼에 매핑
+    function ClaimCheck_DataSetting() {
+        if (ClaimCheck_focusedRow != null) {
+            var data = ClaimCheck_focusedRow.data;
+            $("#ClaimCheckForm_Right textarea[name='claim_content']").val(data.claim_content);//불만내용
+            $("#ClaimCheckForm_Right input[name='claim_emp_nm']").val(data.claim_emp_nm);//보고자
+            $("#ClaimCheckForm_Right input[name='receive_emp_nm']").val(data.receive_emp_nm);//의뢰자
+            $("#ClaimCheckForm_Right input[name='claim_title']").val(data.claim_title);//불만제목
+
+            $("#ClaimCheckForm_Right textarea[name='result_opinion']").val(data.result_opinion);//조사결과
+            $("#ClaimCheckForm_Right textarea[name='plan_opinion']").val(data.plan_opinion);//대책
+            $("#ClaimCheckForm_Right input[name='judge_date']").val(data.judge_date);//조사일자
+            $("#ClaimCheckForm_Right input[name='judge_emp_cd']").val(data.judge_emp_cd);//조사자(코드)
+            $("#ClaimCheckForm_Right input[name='judge_emp_nm']").val(data.judge_emp_nm);//조사자(이름)
+            $("#ClaimCheckForm_Right select[name='judge_type']").val(data.judge_type);//조사판정
+            $("#ClaimCheckForm_Right select[name='claim_type']").val(data.claim_type);//불만구분
+            $("#ClaimCheckForm_Right input[name='judge_opinion']").val(data.judge_opinion);//조사의견
+
+            $("#ClaimCheckForm_Right input[name='dept_cd1']").val(data.dept_cd1);//관련부서1(코드)
+            $("#ClaimCheckForm_Right input[name='dept_nm1']").val(data.dept_nm1);//관련부서1(이름)
+            $("#ClaimCheckForm_Right input[name='dept_cd2']").val(data.dept_cd2);//관련부서2(코드)
+            $("#ClaimCheckForm_Right input[name='dept_nm2']").val(data.dept_nm2);//관련부서2(이름)
+
+            $("#ClaimCheck input[name='result_file1_nm']").val(data.result_file1_nm);//첨부파일1
+            $("#ClaimCheck input[name='result_file2_nm']").val(data.result_file2_nm);//첨부파일2
+
+        } else {
+            $("#ClaimCheckForm_Right")[0].reset();
+            $("#ClaimCheck input[name='result_file1_nm']").val("");//첨부파일1
+            $("#ClaimCheck input[name='result_file2_nm']").val("");//첨부파일2
+        }
+    }
+
+    //조사판정 상세 그리드 조회
+    function ClaimCheck_GridSelect1() {
+        if (ClaimCheck_focusedRow != null) {
+
+            // 초기화영역
+            $('#ClaimCheck_RightGrid').dxDataGrid("option", "dataSource", []);
+            $('#ClaimCheck_RightGrid').dxDataGrid("option", "focusedRowKey", "");
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Cp/ClaimCheck_GridSelect1',
+                data: {
+                    claim_id: ClaimCheck_focusedRow.data.claim_id
+                },
+                success: function (result) {
+
+                    if (result != "") {
+                        var json = JSON.parse(result);
+
+                        if (json.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "dataSource", json);
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "focusedRowEnabled", true);
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "focusedRowIndex", 0);
+
+                    } else {
+                        $("#ClaimCheck_RightGrid").dxDataGrid("option", "focusedRowEnabled", false);
+                    }
+                }
+            })
+        }
+
+    }
+
+    //그리드 이벤트
+    function ClaimCheck_OnFocusedRowChanged(e) {
+        if (!e.row.data) {
+            ClaimCheck_focusedRow = null;
+        } else {
+            ClaimCheck_focusedRow = e.row;
+            ClaimCheck_DataSetting();
+            ClaimCheck_GridSelect1();
+            ClaimCheckButtonControl();
+        }
+    }
+
+    //조사목록 그리드 저장버튼 숨기기
+    function ClaimCheckOnToolbarPreParing(e) {
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+
+            //되돌리기 버튼 클릭시
+            if (item.name == "revertButton") {
+                item.options.onClick = function (args) {
+                    e.component.cancelEditData();
+                    ClaimCheck_TempArray = new Array();
+                };
+            }
+        });
+    }
+
+    //상세 그리드 그리드 데이터 업데이트시(그리드 우측상단 저장버튼 눌렀을 때)
+    function ClaimCheckOnRowUpdated(e) {
+        var data = e.data;
+
+        if (data == null) return;
+        data.judge_value = (data.judge_value) === true ? "Y" : "N";
+        ClaimCheck_TempArray.push(data);
+
+    }
+
+    //팝업
+    //조사자 팝업
+    function ClaimCheckEmpItem_Search() {
+        var popup = $("#ClaimCheckEmpItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //조사자 팝업 -> 사원 더블클릭
+    function ClaimCheckEmpItemRowDblClick(selectedItems) {
+        $("#ClaimCheckForm_Right input[name=judge_emp_cd]").val(selectedItems.data.emp_cd);
+        $("#ClaimCheckForm_Right input[name=judge_emp_nm]").val(selectedItems.data.emp_nm);
+
+        var popup = $("#ClaimCheckEmpItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //관련부서 팝업
+    function ClaimCheckDeptItem_Search(t) {
+        ClaimCheck_popCk = t;
+
+        var popup = $("#ClaimCheckDeptItemPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //관련부서 팝업 -> 부서 더블클릭
+    function ClaimCheckDeptItemRowDblClick(selectedItems) {
+        if (ClaimCheck_popCk == "1") {
+            $("#ClaimCheckForm_Right input[name=dept_cd1]").val(selectedItems.data.dept_cd);
+            $("#ClaimCheckForm_Right input[name=dept_nm1]").val(selectedItems.data.dept_nm);
+        } else if (ClaimCheck_popCk == "2") {
+            $("#ClaimCheckForm_Right input[name=dept_cd2]").val(selectedItems.data.dept_cd);
+            $("#ClaimCheckForm_Right input[name=dept_nm2]").val(selectedItems.data.dept_nm);
+        }
+
+        var popup = $("#ClaimCheckDeptItemPopup").dxPopup("instance");
+        popup.hide();
+    }
+
+    //파일 관리
+    function ClaimCheck_RaiseFileUploadEvent(id) {
+        var fileUploader = $("#" + id).dxFileUploader("instance");
+
+        fileUploader._isCustomClickEvent = true;        //fileuploader 호출하기 위해 설정
+        fileUploader._$fileInput.click();               //fileuploader 호출
+        fileUploader._uploadedAction = ClaimCheckSetFileName;//fileuploader의 onuploaded 이벤트 발생
+    }
+
+    //파일업로드 후 파일이름 변경
+    function ClaimCheckSetFileName(e) {
+
+        var file_name = $("#ClaimCheck input[name=result_file" + ClaimCheck_FileInfo[0] + "_nm]").val();
+
+        //그리드 데이터 설정
+        var index = ClaimCheck_focusedRow.rowIndex;
+
+        //삭제후 재등록이거나, 신규등록일 때
+        if (file_name == "" || file_name == null) {
+
+            var file_id = e.request.responseText;
+            file_id = JSON.parse(file_id);
+
+            //폼 데이터 파일 id 설정
+            $("#ClaimCheck input[name=result_file" + ClaimCheck_FileInfo[0] + "]").val(file_id);
+
+            //그리드 데이터 파일 id 설정
+            $("#ClaimCheck_Grid").dxDataGrid("instance").cellValue(index, "result_file" + ClaimCheck_FileInfo[0], file_id);
+        }
+
+        //그리드 데이터 파일이름 설정
+        $("#ClaimCheck_Grid").dxDataGrid("instance").cellValue(index, "result_file" + ClaimCheck_FileInfo[0] + "_nm", ClaimCheck_FileInfo[1]);
+
+        if ($("#ClaimCheck_Grid").dxDataGrid("instance").hasEditData()) {
+            $("#ClaimCheck_Grid").dxDataGrid("instance").saveEditData();
+        }
+
+        //폼 데이터 설정
+        $("#ClaimCheck input[name=result_file" + ClaimCheck_FileInfo[0] + "_nm]").val(ClaimCheck_FileInfo[1]);
+    }
+
+    //업로드
+    function ClaimCheck_UploadAttachedFile(e) {
+        if (ClaimCheck_focusedRow != null) {
+
+            ClaimCheck_FileInfo = new Array();
+
+            var id = e.element[0].id;
+
+            ClaimCheck_FileInfo.push(id.substr(id.length -1));
+            ClaimCheck_FileInfo.push(e.value[0].name);//[1] :파일명
+
+            var name = e.component.option("name");
+            var url = e.component.option("uploadUrl");
+
+            url = updateQueryStringParameter(url, "name", name);
+            url = updateQueryStringParameter(url, "claim_id", ClaimCheck_focusedRow.data.claim_id);
+
+            //파일 있는지 체크
+            var file_nm = "";
+            if (name == "ClaimCheck_Attachedfile1") {
+                file_nm = ClaimCheck_focusedRow.data.result_file1_nm;
+            } else if (name == "ClaimCheck_Attachedfile2") {
+                file_nm = ClaimCheck_focusedRow.data.result_file2_nm;
+            }
+
+            //수정시에만 doc_file_id 설정
+            //F : 입력, FE : 수정
+            var gubun = (file_nm === "" || typeof (file_nm) === "undefined" || file_nm == null) ? "F" : "FE";
+            url = updateQueryStringParameter(url, "gubun", gubun);
+            if (gubun == "F") {
+                url = updateQueryStringParameter(url, "doc_file_id", "");
+            } else {
+                url = updateQueryStringParameter(url, "doc_file_id", ClaimCheck_focusedRow.data.result_file1);
+            }
+
+            e.component.option("uploadUrl", url);
+        }
+    }
+
+    //삭제
+    function ClaimCheck_DeleteAttatchedFile(num) {
+        var ok = confirm("파일을 삭제하시겠습니까?");
+        if (!ok) return;
+
+        if (ClaimCheck_focusedRow != null) {
+
+            //파일 있는지 체크
+            var file_nm = "";
+            var doc_file_id
+            if (num == "1") {
+                file_nm = $("#ClaimCheckForm_Right input[name='result_file1_nm']").val();
+            } else if (num == "2") {
+                file_nm = $("#ClaimCheckForm_Right input[name='result_file2_nm']").val();
+            }
+            if (file_nm != "") {
+                var doc_file_id = (num == "1") ? ClaimCheck_focusedRow.data.result_file1 : ClaimCheck_focusedRow.data.result_file2;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Cp/ClaimCheck_DeleteFile',
+                    data: {
+                        doc_file_id: doc_file_id,
+                        fgubun: num
+                    },
+                    success: function (result) {
+                        if (result.length > 0) {
+
+                            var json = JSON.parse(result);
+
+                            if (result.hasOwnProperty('sessionLoss')) {
+                                alert("세션이 만료되었습니다.");
+                                sessionStorage.clear();
+                                location.replace("/Comm/Login");
+                            }
+                            alert(json.messege);
+
+                            //그리드 데이터 설정
+                            var index = ClaimCheck_focusedRow.rowIndex;
+                            $("#ClaimCheck_Grid").dxDataGrid("instance").cellValue(index, "result_file" + num, 0);
+                            $("#ClaimCheck_Grid").dxDataGrid("instance").cellValue(index, "result_file" + num + "_nm", "");
+
+                            if ($("#ClaimCheck_Grid").dxDataGrid("instance").hasEditData()) {
+                                $("#ClaimCheck_Grid").dxDataGrid("instance").saveEditData();
+                                $("#ClaimCheck_Grid").dxDataGrid("instance").repaintRows(index);
+
+                            }
+
+                            //폼 데이터 설정
+                            $("#ClaimCheck input[name=result_file" + num + "_nm]").val("");
+                            $("#ClaimCheck input[name=result_file" + num + "]").val(0);
+                        }
+
+                    }
+                })
+            }
+
+        }
+
+
+    }
+
+    //열기
+    function ClaimCheck_DownloadAttatchedFile(num) {
+        if (ClaimCheck_focusedRow != null) {
+
+            //기존 그리드데이터에서 file_id 추출
+            //var doc_file_id = (num == "1") ? ClaimCheck_focusedRow.data.result_file1 : ClaimCheck_focusedRow.data.result_file2;
+            //if (doc_file_id == "" || doc_file_id == null) return;
+
+            //폼 데이터에서 file_id 추출
+            var doc_file_id = (num == "1") ? $("#ClaimCheck input[name='result_file1']").val() : $("#ClaimCheck input[name='result_file2']").val();
+            if (doc_file_id == "" || doc_file_id == null) return;
+
+            document.location.assign('/Cp/ClaimCheck_OpenFile?doc_file_id=' + doc_file_id);
+        }
+    }
+
+</script>
+
+<div id="ClaimCheck" autoresize="Y">
+    @*<h4 class="divTitle">불만사항 조사 판정</h4>*@
+
+    <div id="ClaimCheckEmpItemPopup"></div><!-- 조사자 팝업 -->
+    <div id="ClaimCheckDeptItemPopup"></div><!-- 관련부서 팝업 -->
+
+    <div id="ClaimCheckTop" class="mainTop row">
+        <div class="col-8">
+            <form id="ClaimCheckForm">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간구분</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="0" id="select_S0_c" name="select_S" onchange="ClaimCheckByRadio()" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S0_c">발생일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="select_S1_c" name="select_S" onchange="ClaimCheckByRadio()" />
+                        </div>
+                        <span class="form-control-sm"><label for="select_S1_c">접수일자</label></span>
+
+                        <input type="text" class="form-control datepicker text-center" name="Sdate_S" value="@DateTime.Today.AddYears(-1).ToShortDateString()">
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Edate_S" value="@DateTime.Today.ToShortDateString()">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">검색구분</span>
+                        </div>
+                        <select class="form-control" name="select_gubun_S">
+                            <option value="0">품목</option>
+                            <option value="1">제조번호</option>
+                            <option value="2">거래처</option>
+                            <option value="3">보고자</option>
+                            <option value="4">불만종류</option>
+                        </select>
+                        <input class="form-control" type="text" name="searchtext_S" />
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">진행상태</span>
+                        </div>
+                        <select class="form-control" name="claim_status_S">
+                            @foreach (DataRow row in ((DataTable)ViewBag.claim_status).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Excel;Save;Undo"); }
+            @*@(Html.DevExtreme().Toolbar()
+                .ID("ClaimCheck_Toolbar")
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                              .Button()
+                              .Type(ButtonType.Default)
+                              .StylingMode(ButtonStylingMode.Contained)
+                              .ID("ClaimCheckSearch")
+                              .Icon("search")
+                              .Text("조회")
+                              .OnClick("ClaimCheckSearch")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ClaimCheckInput")
+                          .Icon("plus")
+                          .Text("입력")
+                          .OnClick("ClaimCheckInput")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ClaimCheckEdit")
+                          .Icon("edit")
+                          .Text("수정")
+                          .OnClick("ClaimCheckEdit")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ClaimCheckDelete")
+                          .Icon("trash")
+                          .Text("삭제")
+                          .OnClick("ClaimCheckDelete")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ClaimCheckSave")
+                          .Icon("save")
+                          .Text("저장")
+                          .OnClick("ClaimCheckSave")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+                  .Items(items =>
+                  {
+                      items.Add()
+                          .Widget(w => w
+                          .Button()
+                          .Type(ButtonType.Default)
+                          .StylingMode(ButtonStylingMode.Contained)
+                          .ID("ClaimCheckUndo")
+                          .Icon("undo")
+                          .Text("취소")
+                          .OnClick("ClaimCheckUndo")
+                          )
+                          .Location(ToolbarItemLocation.After);
+                  })
+        )*@
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ClaimCheck_Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .ShowRowLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .KeyExpr("claim_no")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("claim_no").Caption("불만번호");
+                        c.Add().DataField("item_nm").Caption("품목");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("cust_nm").Caption("거래처");
+                        c.Add().DataField("claim_date").Caption("발생일자");
+                        c.Add().DataField("receive_date").Caption("접수일자");
+                        c.Add().DataField("claim_status_nm").Caption("진행상태");
+
+                        c.Add().DataField("result_file1").Visible(false);
+                        c.Add().DataField("result_file1_nm").Visible(false);
+
+                        c.Add().DataField("result_file2").Visible(false);
+                        c.Add().DataField("result_file2_nm").Visible(false);
+
+                    })
+                    .OnFocusedRowChanged("ClaimCheck_OnFocusedRowChanged")
+                    .OnToolbarPreparing("HideToolbarButton")
+                )
+            </div>
+        </div>
+
+        <div class="col-4">
+            <div class="box">
+                <form id="ClaimCheckForm_Right">
+                    <div class="divName">
+                        <p>조사판정</p>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">불만제목</label>
+                        <div class="input-group col-9">
+                            <input type="text" class="form-control" name="claim_title" readonly />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">불만내용</label>
+                        <div class="input-group col-9">
+                            <textarea class="form-control" name="claim_content" readonly></textarea>
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper margin-bottom">
+                        <label class="col-2">의뢰자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="receive_emp_nm" readonly />
+                        </div>
+                        <label class="col-2">보고자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="claim_emp_nm" readonly />
+                        </div>
+                    </div>
+
+                    <div class="margin-bottom">
+                        @(Html.DevExtreme().DataGrid()
+                            .ID("ClaimCheck_RightGrid")
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                            .Height(130)
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .ColumnAutoWidth(true)
+                            .AllowColumnResizing(true)
+                            .KeyExpr("claim_dt_id")
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("claim_nm").Caption("조사목록").AllowEditing(false);
+
+                                c.Add().DataField("judge_value").Caption("결과값")
+                                .DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return (rowData.judge_value == ""Y"" || rowData.judge_value == true); }");
+                                //.CalculateCellValue(@"function(rowData) { return (rowData.judge_value == ""Y""); }");
+                            })
+                            .OnRowUpdated("ClaimCheckOnRowUpdated")
+                            .OnToolbarPreparing("ClaimCheckOnToolbarPreParing")
+                            )
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">조사결과</label>
+                        <div class="input-group col-9">
+                            <textarea class="form-control" name="result_opinion"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">대책</label>
+                        <div class="input-group col-9">
+                            <textarea class="form-control" name="plan_opinion"></textarea>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">조사일자</label>
+                        <div class="input-group col-9">
+                            <input type="text" class="form-control datepicker required" name="judge_date" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">조사자</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control required" name="judge_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ClaimCheckEmpItem_Search()"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control" name="judge_emp_nm" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">조사판정</label>
+                        <div class="input-group col-3">
+                            <select class="form-control" name="judge_type">
+                                @foreach (DataRow row in ((DataTable)ViewBag.judge_item).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+
+                        <label class="col-3">불만구분</label>
+                        <div class="input-group col-3">
+                            <select class="form-control required" name="claim_type">
+                                @foreach (DataRow row in ((DataTable)ViewBag.claim_item).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">조사의견</label>
+                        <div class="input-group col-9">
+                            <input type="text" class="form-control" name="judge_opinion" />
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-2">관련부서1</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="dept_cd1">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ClaimCheckDeptItem_Search('1')"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control" name="dept_nm1" />
+                        </div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-2">관련부서2</label>
+                        <div class="input-group col-3">
+                            <input type="text" class="form-control" name="dept_cd2">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="ClaimCheckDeptItem_Search('2')"><i class="fa fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="input-group col-6">
+                            <input type="text" class="form-control" name="dept_nm2" />
+                        </div>
+                    </div>
+                </form>
+
+                <div class="input-wrapper">
+                    <label class="col-2">첨부파일1</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="result_file1_nm" readonly />
+                        <input type="text" class="form-control" name="result_file1" readonly  hidden="hidden" />
+                    </div>
+                    <div class="input-group col-3">
+                        @(Html.DevExtreme().FileUploader()
+                            .SelectButtonText("등록")
+                            //.Width("13%")
+                            .Height(50)
+                            .Name("ClaimCheck_AttachedFile1")
+                            .ID("ClaimCheck_AttachedFile1")
+                            .LabelText("")
+                            .Multiple(false)
+                            //.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                            .InvalidFileExtensionMessage("지원하지 않는 파일형식 입니다.")
+                            .InvalidMaxFileSizeMessage("최대파일 사이즈는 10MB입니다.")
+                            .UploadUrl(Url.Action("ClaimCheck_UploadFile", "Cp"))
+                            .UploadMode(FileUploadMode.Instantly)
+                            .MaxFileSize(10000000)
+                            .OnValueChanged("ClaimCheck_UploadAttachedFile")
+                            .OnUploaded("ClaimCheckSetFileName")
+                            .Visible(false)
+                        )
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_RaiseFileUploadEvent('ClaimCheck_AttachedFile1')">등록</button>
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_DownloadAttatchedFile('1')" id="ClaimCheck_OpenFile1">열기</button>
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_DeleteAttatchedFile('1')" id="ClaimCheck_RemoveFile1">삭제</button>
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-2">첨부파일2</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="result_file2_nm" readonly />
+                        <input type="text" class="form-control" name="result_file2" readonly hidden="hidden" />
+                    </div>
+                    <div class="input-group col-3">
+                        @(Html.DevExtreme().FileUploader()
+                            .SelectButtonText("등록")
+                            //.Width("13%")
+                            .Height(50)
+                            .Name("ClaimCheck_AttachedFile2")
+                            .ID("ClaimCheck_AttachedFile2")
+                            .LabelText("")
+                            .Multiple(false)
+                            ///.AllowedFileExtensions(new[] { ".hwp", ".doc", ".docx", ".dot" })
+                            .InvalidFileExtensionMessage("지원하지 않는 파일형식 입니다.")
+                            .InvalidMaxFileSizeMessage("최대파일 사이즈는 10MB입니다.")
+                            .UploadUrl(Url.Action("ClaimCheck_UploadFile", "Cp"))
+                            .UploadMode(FileUploadMode.Instantly)
+                            .MaxFileSize(10000000)
+                            .OnValueChanged("ClaimCheck_UploadAttachedFile")
+                            .OnUploaded("ClaimCheckSetFileName")
+                            .Visible(false)
+                        )
+
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_RaiseFileUploadEvent('ClaimCheck_AttachedFile2')">등록</button>
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_DownloadAttatchedFile('2')" id="ClaimCheck_OpenFile2">열기</button>
+                        <button type="button" class="btn btn-secondary" onclick="ClaimCheck_DeleteAttatchedFile('2')" id="ClaimCheck_RemoveFile2">삭제</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

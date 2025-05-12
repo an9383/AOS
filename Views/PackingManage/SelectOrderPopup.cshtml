@@ -1,0 +1,155 @@
+﻿
+@{
+    Layout = null;
+    ViewBag.Title = "SelectOrderPopup";
+}
+
+    <script>
+
+        $(function () {
+            setDatePicker("#SelectOrderPopup .datepicker");
+
+            if ((@Html.Raw(Json.Encode(Model.Data))).length > 0) {
+                $("#PackingOrderLedgerOrderPopupGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@Html.Raw(Json.Encode(Model.Data))));
+            }
+
+            $("#SelectOrderPopup input[name=sdate]").datepicker("update", "@ViewBag.sdate");
+            $("#SelectOrderPopup input[name=edate]").datepicker("update", "@ViewBag.edate");
+
+        });
+
+        function PackingOrderLedgerSearchOrder() {
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/SelectOrderPopupSearch',
+                data: {
+                    item_cd: "@ViewBag.item_cd",
+                    sdate: $("#SelectOrderPopup input[name=sdate]").val(),
+                    edate: $("#SelectOrderPopup input[name=edate]").val()
+                },
+                success: function (result) {
+
+                    if (result.length < 1) {
+                        $("#PackingOrderLedgerOrderPopupGrid").dxDataGrid("instance").option("dataSource", []);
+                        return;
+                    }
+
+                    $("#PackingOrderLedgerOrderPopupGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                }
+            })
+
+        }
+
+        function addPackingOrder() {
+
+            // 제조제품 조회 팝업 선택 데이터
+            var grid = $("#PackingOrderLedgerGrid_Tab_1").dxDataGrid("instance");
+
+            var popupGrid = $("#PackingOrderLedgerOrderPopupGrid").dxDataGrid("instance");
+            var data = getGridRowByKey("PackingOrderLedgerOrderPopupGrid", popupGrid.option("focusedRowKey"));
+
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "lot_no", data.lot_no);
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "order_batch_size", data.order_qty);
+            grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "order_no_M", data.order_no);
+
+            $.ajax({
+                type: 'GET',
+                url: '/PackingManage/GetValidDate',
+                data: {
+                    item_cd: "@ViewBag.item_cd",
+                    lot_no: data.lot_no,
+                },
+                success: function (result) {
+
+                    console.log(data);
+
+                    grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "lot_date", result[0]);
+                    grid.cellValue(_packingOrderLedgerCellClickEvent.rowIndex, "valid_date", result[1]);
+
+                }
+            })
+
+            var popup = $("#PackingOrderLedgerOrderPopup").dxPopup("instance");
+            popup.hide();
+
+        }
+
+
+    </script>
+
+<div id="SelectOrderPopup">
+
+    @(Html.DevExtreme().Toolbar()
+        .ID("PackingOrderLedgerOrderPopupTemplateToolbar")
+        .Items(items =>
+        {
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .Icon("search")
+                .Text("조회")
+                .OnClick("PackingOrderLedgerSearchOrder")
+                )
+                .Location(ToolbarItemLocation.After);
+            items.Add()
+                .Widget(w => w
+                .Button()
+                .Type(ButtonType.Default)
+                .StylingMode(ButtonStylingMode.Contained)
+                .Icon("check")
+                .Text("확인")
+                .OnClick("addPackingOrder")
+                )
+                .Location(ToolbarItemLocation.After);
+        })
+            .Items(items =>
+            {
+                items.Add()
+                .Template(new TemplateName("PackingOrderLedgerOrderPopupToolbar"))
+                .Location(ToolbarItemLocation.Before);
+
+            })
+    )
+
+    @using (Html.DevExtreme().NamedTemplate("PackingOrderLedgerOrderPopupToolbar"))
+    {
+        <div style="width: 650px;">
+            <label class="col-2">지시일자</label>
+            <input type="text" class="form-control col-3 datepicker" name="sdate">
+            <input type="text" class="form-control col-3 datepicker" name="edate">
+        </div>
+    }
+
+    <div>
+        @(Html.DevExtreme().DataGrid()
+            .ID("PackingOrderLedgerOrderPopupGrid")
+            .ShowBorders(true)
+            .ShowColumnLines(true)
+            .Selection(s => s.Mode(SelectionMode.Single))
+            .SearchPanel(searchPanel => searchPanel.Visible(true))
+            .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+            .Height(550)
+            .ColumnAutoWidth(true)
+            .HoverStateEnabled(true)
+            .FocusedRowIndex(0)
+            .FocusedRowEnabled(true)
+            .KeyExpr("order_no")
+            .Columns(c =>
+            {
+                c.Add().DataField("order_no").Caption("제조지시번호");
+                c.Add().DataField("order_date").Caption("지시일자");
+                c.Add().DataField("item_cd").Caption("제조제품코드");
+                c.Add().DataField("item_nm").Caption("제조제품명");
+                c.Add().DataField("lot_no").Caption("제조번호");
+                c.Add().DataField("order_qty").Caption("생산량");
+                c.Add().DataField("lot_date").Caption("제조일자");
+                c.Add().DataField("pb_date").Caption("발행일자");
+            })
+            .OnRowDblClick("addPackingOrder")
+        )
+
+    </div>
+</div>

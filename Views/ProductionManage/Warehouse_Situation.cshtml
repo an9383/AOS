@@ -1,0 +1,236 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var WarehouseSituations = Html.Raw(Json.Encode(ViewBag.WarehouseSituations.Data));
+    var MakingItems = Html.Raw(Json.Encode(ViewBag.MakingItems.Data));
+}
+
+@*반제품보관실 모니터링*@
+
+    <script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        $(function () {
+
+            if ((@WarehouseSituations).length > 0) {
+
+                $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@WarehouseSituations));
+                $("#" + PagePrefix + "Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#" + PagePrefix + "Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup(PagePrefix+"Item", "제품 조회", @MakingItems, popupColumns);
+
+            //ItemLabelPrintEditCheck(false, 'N');
+        });
+
+        // 검색용 제조제품 팝업
+        function Warehouse_SituationSelectItem() {
+            $("#Warehouse_SituationItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업
+        function Warehouse_SituationItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Warehouse_SituationSearchForm input[name=item_cd]").val(data.item_cd);
+
+            $("#Warehouse_SituationItemPopup").dxPopup("instance").hide();
+        }
+
+        // 조회
+        function Warehouse_SituationSearch() {
+
+            UtilView.dataGridSelect('Warehouse_Situation' + 'Grid', 'Warehouse_Situation' + 'SearchForm');
+        }
+
+        // 상단 그리드 포커스 변경
+        function Warehouse_SituationFocusChanged() {
+
+            var gridId = "Warehouse_SituationGrid";
+            var tGridId = "Warehouse_SituationDetailGrid";
+
+            var sGrid = $('#' + gridId).dxDataGrid("instance");
+            var gridData = getGridRowByKey(gridId, sGrid.option("focusedRowKey"));
+
+            var data = {
+                order_no: gridData.order_no,
+                order_proc_id: gridData.order_proc_id
+            };
+
+            UtilView.dataGridSimpleSelect(tGridId, data, 'SelectSub');
+        }
+
+        function Warehouse_SituationExcel() {
+            gridExportToExcel("Warehouse_SituationGrid", "반제품보관실_모니터링_" + "@DateTime.Now.ToShortDateString()");
+        }
+
+        function Warehouse_SituationRowBackgroundColor(e) {
+
+            if (e.rowType === "data" && parseFloat(e.data.order_proc_real_qty) > 0) {
+                e.rowElement[0].style.backgroundColor = 'lightpink';
+            }
+        }
+
+    </script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">반제품보관소</span>
+                        </div>
+                        <select class="form-control" name="warehouse_cd">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("반제품보관실", "S", "")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">인수인계상태</span>
+                        </div>
+                        <select class="form-control" name="transfer_status">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "RT008")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box mb-0">
+
+                <div class="mb-1">
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("Warehouse_Situation" + "Grid")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(450)
+                        .KeyExpr("order_proc_id")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("warehouse_cd").Caption("보관소코드");
+                            c.Add().DataField("warehouse_nm").Caption("보관소");
+                            c.Add().DataField("item_cd").Caption("제품코드");
+                            c.Add().DataField("item_nm").Caption("제품명");
+                            c.Add().DataField("lot_no").Caption("제조번호");
+                            c.Add().DataField("order_qty").Caption("지시량");
+                            c.Add().DataField("process_nm").Caption("공정");
+                            c.Add().DataField("cnt").Caption("현재용기수");
+                            c.Add().DataField("order_proc_real_qty").Caption("입고량");
+                            c.Add().DataField("order_proc_trans_qty").Caption("출고량");
+                            c.Add().DataField("trans_status_nm").Caption("인수인계상태");
+                            c.Add().DataField("make_status_nm").Caption("공정상태");
+                            c.Add().DataField("next_procee_nm").Caption("다음공정명");
+                            c.Add().DataField("chk_term").Caption("입고일수");
+                        })
+                        .OnFocusedRowChanged("Warehouse_Situation" + "FocusChanged")
+                        .OnRowPrepared("Warehouse_SituationRowBackgroundColor")
+                    )
+                </div>
+
+                <div>
+                    @(Html.DevExtreme().DataGrid()
+                        .ID("Warehouse_Situation" + "DetailGrid")
+                        .Selection(s => s.Mode(SelectionMode.Single))
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                        .ColumnAutoWidth(true)
+                        .Height(900)
+                        .KeyExpr("input_barcode")
+                        .ShowBorders(true)
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("order_vessel_seq").Caption("순번");
+                            c.Add().DataField("input_date").Caption("입고일시");
+                            c.Add().DataField("output_date").Caption("출고일시");
+                            c.Add().DataField("order_vessel_enter_qty").Caption("입고량");
+                            c.Add().DataField("order_vessel_trans_qty").Caption("출고량");
+                            c.Add().DataField("order_vessel_all_ck").Caption("출고여부");
+                            c.Add().DataField("order_vessel_return_ck").Caption("반납여부");
+                            c.Add().DataField("enter_emp_nm").Caption("입고자");
+                            c.Add().DataField("output_emp_nm").Caption("출고자");
+                            c.Add().DataField("input_barcode").Caption("바코드");
+                            c.Add().DataField("lot_num").Caption("포장제조번호");
+                            c.Add().DataField("item_nm").Caption("포장제품");
+                        })
+                    )
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

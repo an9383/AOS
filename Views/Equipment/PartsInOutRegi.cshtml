@@ -1,0 +1,554 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.Equipment.PartsInOutRegi.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+    // 1.3. 우측 Form
+
+    // 1.4. 코드성 데이터
+    var codeHistory_status = (DataTable)ViewBag.le_part_history_status;
+    var codePart_gb = (DataTable)ViewBag.le_part_gb;
+    var codeIn_out = (DataTable)ViewBag.le_inOut;
+
+    // 1.5 codehelp 데이터
+    var empPopupData = @Html.Raw(Json.Encode(ViewBag.empPopupData.Data));
+    var partPopupData = @Html.Raw(Json.Encode(ViewBag.partPopupData.Data));
+    var custPopupData = @Html.Raw(Json.Encode(ViewBag.custPopupData.Data));
+
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+    // 1. 화면 Load 영역
+    $(function () {
+        // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+                $("#"+'PartsInOutRegi'+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+                $("#"+'PartsInOutRegi'+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#"+'PartsInOutRegi'+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+        $('select[name=s_inout]', $('#' + 'PartsInOutRegiSearchForm')).val('@srch.S_inOut');
+
+        //1.3. help팝업설정
+        var PartsInOutRegiPopupColumns = {
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }, { dataField: "emp_nm", caption: "사원명" }, { dataField: "dept_cd", caption: "부서코드" }, { dataField: "dept_nm", caption: "부서명" }]
+            ,"part"    : [{ dataField: "part_cd", caption: "부품코드" }, { dataField: "part_nm", caption: "부품명" }]
+            ,"cust"    : [{ dataField: "cust_cd", caption: "거래처코드" }, { dataField: "cust_nm", caption: "거래처명" }]
+
+        };
+        createPopup('PartsInOutRegi' + "Emp", "사원 조회", @empPopupData, PartsInOutRegiPopupColumns.employee);
+        createPopup('PartsInOutRegi' + "Part", "부품 조회", @partPopupData, PartsInOutRegiPopupColumns.part);
+        createPopup('PartsInOutRegi' + "Cust", "거래처 조회", @custPopupData, PartsInOutRegiPopupColumns.cust);
+
+        //1.4 툴바 활성/비활성
+        PartsInOutRegiEditCheck(false, 'N');
+
+        //1.5 event설정
+        //1.5.1 검색
+        $('input[name=s_inout],input[name*=date]', $('#'+'PartsInOutRegiSearchForm')).change(function () {
+            PartsInOutRegiSelect();
+        });
+
+        $('input[name=s_part]', $('#' + 'PartsInOutRegiSearchForm')).keyup(function () {
+            PartsInOutRegiSelect();
+        });
+
+        $('input[name=s_part]+div>button',$('#'+'PartsInOutRegiSearchForm')).click(function (event) {
+            PartsInOutRegiHelpPopUpSearch(event);
+        });
+
+        //1.5.2 form
+        $('input[name*=_emp_cd]+div>button, input[name*=_cust_cd]+div>button, input[name=part_cd]+div>button', $('#'+'PartsInOutRegiWriteForm')).click(function (event) {
+            PartsInOutRegiHelpPopUpSearch(event);
+        });
+
+        $('input[name=part_history_price],input[name=part_history_qty]', $('#' + 'PartsInOutRegiWriteForm')).keyup(function (event) {
+            // cost계산
+            var evtName = $(event.target).attr('name');
+            var evtVal = $(event.target).val();
+            var destVal = 0;
+            var tot = 0;
+            destVal = (evtName == "part_history_price") ? $('input[name = part_history_qty]').val() : $('input[name = part_history_price]').val();
+
+            tot = evtVal * destVal;
+            $('input[name=cost]', $('#' + 'PartsInOutRegiWriteForm')).val(tot);
+        });
+
+        //1.5.3 공통객체
+        //datepicker
+        setDatePicker("#PartsInOutRegi .datepicker");
+
+    });
+
+    // 2. 검색영역
+    // 2.1. Help popup
+    // help Popup의 현재 선택된 InputName
+    var PartsInOutRegiHelpPopUpCurInputName = "";
+
+    // help popup 공통 검색창 오픈
+    function PartsInOutRegiHelpPopUpSearch(e) {
+        PartsInOutRegiHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (PartsInOutRegiHelpPopUpCurInputName)
+        {
+            case "s_part":
+            case "part_cd":
+                popupId = 'PartsInOutRegi'+"Part";
+                break;
+            case "part_history_emp_cd":
+                popupId = 'PartsInOutRegi'+"Emp";
+                break;
+            case "part_buy_cust_cd":
+            case "part_prod_cust_cd":
+                popupId = 'PartsInOutRegi' + "Cust";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+        //console.log("poupId :" + popupId);
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    // help popup 이벤트 정의
+    function PartsInOutRegiPartRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        if (PartsInOutRegiHelpPopUpCurInputName == "s_part") {
+            $("input[name="+PartsInOutRegiHelpPopUpCurInputName+"]",$('#'+'PartsInOutRegiSearchForm')).val(data.part_cd);
+        } else if (PartsInOutRegiHelpPopUpCurInputName == "part_cd") {
+            $("input[name=" + PartsInOutRegiHelpPopUpCurInputName + "]", $('#' + 'PartsInOutRegiWriteForm')).val(data.part_cd);
+            $("input[name=part_nm]", $('#' + 'PartsInOutRegiWriteForm')).val(data.part_nm);
+        }
+        $("#"+'PartsInOutRegi'+"PartPopup").dxPopup("instance").hide();
+    }
+
+    function PartsInOutRegiEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = PartsInOutRegiHelpPopUpCurInputName.lastIndexOf("_emp_cd");
+
+        if (strIndex > -1) {
+            var inputPrefix = PartsInOutRegiHelpPopUpCurInputName.substring(0, strIndex);
+            var inputSubfix = PartsInOutRegiHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name='+inputPrefix+'_emp_cd]', $('#' + 'PartsInOutRegiWriteForm')).val(data.emp_cd);
+            $('input[name='+inputPrefix+'_emp_nm]', $('#' + 'PartsInOutRegiWriteForm')).val(data.emp_nm);
+        }
+        $("#" + 'PartsInOutRegi' + "EmpPopup").dxPopup("instance").hide();
+
+    }
+
+    function PartsInOutRegiCustRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+        var strIndex = PartsInOutRegiHelpPopUpCurInputName.lastIndexOf("_cust_cd");
+
+        if (strIndex > -1) {
+            var inputPrefix = PartsInOutRegiHelpPopUpCurInputName.substring(0, strIndex);
+            var inputSubfix = PartsInOutRegiHelpPopUpCurInputName.substring(strIndex);
+
+            $('input[name=' + inputPrefix + '_cust_cd]', $('#' + 'PartsInOutRegiWriteForm')).val(data.cust_cd);
+            $('input[name=' + inputPrefix + '_cust_nm]', $('#' + 'PartsInOutRegiWriteForm')).val(data.cust_nm);
+        }
+        $("#" + 'PartsInOutRegi' + "CustPopup").dxPopup("instance").hide();
+    }
+
+    // 3. 툴바영역
+    //조회
+    function PartsInOutRegiSearch() {
+        PartsInOutRegiSelect();
+    }
+
+    //입력
+    function PartsInOutRegiInput() {
+        PartsInOutRegiEditCheck(true, 'I');
+        PartsInOutRegiWriteFormClear();
+
+    }
+    //수정
+    function PartsInOutRegiEdit() {
+        PartsInOutRegiEditCheck(true,'U');
+    }
+    //삭제
+    function PartsInOutRegiDelete() {
+        PartsInOutRegiEditCheck(true, 'D');
+        PartsInOutRegiTrx('PartsInOutRegiWriteForm', 'PartsInOutRegiSearchForm');
+
+    }
+    //저장
+    function PartsInOutRegiSave() {
+        if (UtilView.checkValidForm('PartsInOutRegiWriteForm')) {
+            PartsInOutRegiTrx('PartsInOutRegiWriteForm', 'PartsInOutRegiSearchForm');
+        }
+    }
+    //취소
+    function PartsInOutRegiUndo() {
+        PartsInOutRegiEditCheck(false, 'N');
+        PartsInOutRegiFocusChanged();
+    }
+
+    // 프린트
+    function PartsInOutRegiPrint() {
+
+    }
+
+    // 엑셀다운로드
+    function PartsInOutRegiExcel() {
+
+    }
+
+    // 즐겨찾기
+    function PartsInOutRegiFavorite() {
+
+    }
+
+    // 트랜잭션처리
+    function PartsInOutRegiTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+
+        //UtilView.dataGridTRX(formData, function(){PartsInOutRegiSelect();});
+        UtilView.dataGridTRX(formData, () => PartsInOutRegiSelect() );
+    }
+
+    // 수정중인지 체크
+    function PartsInOutRegiEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "PartsInOutRegiGrid"
+            , "@(pagePrefix)WriteForm"
+            , "part_gb"
+        );
+    }
+
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function PartsInOutRegiSelect() {
+        // form claear
+        PartsInOutRegiWriteFormClear();
+        // edit 해제
+        PartsInOutRegiEditCheck(false, 'N');
+
+       // 메인Grid
+       // var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+       // var gridOption = { "focusedRowEnabled": true };
+       UtilView.dataGridSelect('PartsInOutRegi' + 'Grid', 'PartsInOutRegiSearchForm');
+    }
+
+    // 3.2 Row focus changed
+    function PartsInOutRegiFocusChanged() {
+        // datagrid 폼바인딩
+        var gridId = 'PartsInOutRegi'+"Grid";
+        UtilView.setDataGridFormBind(gridId, 'PartsInOutRegiWriteForm');
+
+        // 우측 gird바인딩
+        //PartsInOutRegiSelectSub(gridId, 'PartsInOutRegi' + "SubGrid");
+    }
+
+    // 5. 우측 Form
+    // 5.1. clear form
+    function PartsInOutRegiWriteFormClear() {
+        $('#'+'PartsInOutRegiWriteForm')[0].reset();
+        $("textarea",$('#'+'PartsInOutRegiWriteForm')).text("");
+
+        //sub그리드 초기화
+        //var gridIds = 'PartsInOutRegi' + "SubGrid";
+        //UtilView.setDataGridFromJson(gridIds, "");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid (사용설비현황)
+    //function PartsInOutRegiSelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { rowkey: gridData.part_cd };
+
+    //    //var gridOption = { "focusedRowEnabled": true, "focusedRowIndex": 0 }
+    //    UtilView.dataGridSimpleSelect(tGridId, data, 'SelectSub');
+    //}
+
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+    <!-- $DIv 팝업 선언부-->
+    <div id="@(pagePrefix)PartPopup"></div>
+    <div id="@(pagePrefix)EmpPopup"></div>
+    <div id="@(pagePrefix)CustPopup"></div>
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">부품 입출고 관리</h4>*@
+
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">입/출고</span>
+                        </div>
+                        <select class="form-control" name="s_inout" value="">
+                            @foreach (DataRow row in codeIn_out.Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="s_sdate" value="@srch.S_sdate">
+                        <label class="p-1">~</label>
+                        @*<input type="text" class="form-control col-3 datepicker" name="edate" value="@DateTime.Today.ToShortDateString()" onchange="NotifySelect()">*@
+                        <input type="text" class="form-control datepicker text-center" name="e_edate" value="@srch.S_edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">부품</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_part" value="@srch.S_part">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    @*<label class="col-1">부품</label>
+                    <div class="input-group col-2">
+                        <input type="text" class="form-control" name="s_part" value="@srch.S_part">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">찾기</button>
+                        </div>
+                    </div>*@
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                        .ID("PartsInOutRegi" + "Grid")
+                        .KeyExpr("part_history_id")
+                        .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                        .Height("900")
+                        .ShowBorders(true)
+                        //.Selection(s => s.Mode(SelectionMode.Single))
+                        .SearchPanel(searchPanel => searchPanel.Visible(true))
+                        .ShowColumnLines(true)
+                        .HoverStateEnabled(true)
+                        .ColumnAutoWidth(true)
+                        .AllowColumnResizing(true)
+                        .Columns(c =>
+                        {
+                            c.Add().DataField("part_gb_nm").Caption("입/출고 구분명");
+                            c.Add().DataField("part_cd").Caption("부품코드");
+                            c.Add().DataField("part_nm").Caption("부품명");
+                            c.Add().DataField("part_history_qty").Caption("입/출고수");
+                            c.Add().DataField("part_history_price").Caption("단가");
+                            c.Add().DataField("cost").Caption("금액");
+                            c.Add().DataField("part_inout_date").Caption("입/출고일자");
+                        })
+                    //.OnSelectionChanged("newsSelectionChanged")
+                    .OnFocusedRowChanged("PartsInOutRegi" + "FocusChanged")
+                    )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4">
+            <div class="box mb-0">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <input type="hidden" name="part_history_id" />
+
+                    <div class="divName">
+                        <p>부품 입/출고 등록</p>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">입/출고 구분</label>
+                        <div class="input-group col-4">
+                            <select class="form-control required" name="part_gb" value="">
+                                @foreach (DataRow row in codePart_gb.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">부품</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="part_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="part_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">입/출고 일자</label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-4 datepicker" name="part_inout_date">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">입/출고자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control required" name="part_history_emp_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_history_emp_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">입/출고수</label>
+                        <div class="input-group col-4">
+                            <input type="number" class="form-control required" name="part_history_qty">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">단가</label>
+                        <div class="input-group col-4">
+                            <input type="number" class="form-control required" name="part_history_price">
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="number" class="form-control required" name="cost" readonly>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">정상/기타 구분</label>
+                        <div class="input-group col-4">
+                            <select class="form-control required" name="part_history_status" value="">
+                                @foreach (DataRow row in codeHistory_status.Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">거래처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_buy_cust_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_buy_cust_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">제조처</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_prod_cust_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="part_prod_cust_nm" readonly>
+                            @*<div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="equipmentClearWorkRoomForm()">삭제</button>
+                                </div>*@
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">제조일자</label>
+                        <div class="input-group col-5">
+                            <input type="text" class="form-control col-4 datepicker" name="part_prod_date">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">제조번호</label>
+                        <div class="input-group col-8">
+                            <input type="text" class="form-control col-12 required" name="part_prod_num">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">비고</label>
+                        <div class="input-group col-8">
+                            <textarea class="form-control" cols="100" rows="5" name="part_history_remark"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+

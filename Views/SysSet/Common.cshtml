@@ -1,0 +1,490 @@
+﻿@using HACCP.Libs
+@using HACCP.Libs.Views
+@using System.Web.Script.Serialization
+
+@{
+    Layout = null;
+
+    JavaScriptSerializer serializer = new JavaScriptSerializer();
+    serializer.MaxJsonLength = Int32.MaxValue;
+
+    var commonCodeData = @Html.Raw(serializer.Serialize(Public_Function.DataTableToJSON(ViewBag.commonCodeData)));
+
+    //var commonCodeData = @Html.Raw(Json.Encode(ViewBag.commonCodeData.Data));
+    var commonCodePopupData = @Html.Raw(Json.Encode(ViewBag.commonCodePopupData.Data));
+}
+
+@{
+    string[] CommonGridKey = { "common_cd", "common_part_cd" };
+}
+
+@*공통코드 관리*@
+
+<script type="text/javascript" id="CommonJs">
+
+        // SP 구문, gubun 변수
+        var _commonCRUDGubun = "";
+
+        // 스크립트 시작
+        $(function () {
+
+            if (@commonCodeData) {
+                $("#CommonCodeGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@commonCodeData));
+                $("#CommonCodeGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            var columns = [
+                { dataField: "common_cd", caption: "공통코드" },
+                { dataField: "common_nm", caption: "공통명칭" }
+            ];
+
+            createPopup("CommonCode", "공통코드 조회", @commonCodePopupData, columns, "common_cd");
+
+            CommonEditCheck(false);
+
+        });
+
+        function searchCommonCode() {
+            $("#CommonCodePopup").dxPopup("instance").show();
+
+        }
+
+        function CommonCodeRowDblClick(selectedItems) {
+            $("#CommonCodeSearchForm input[name=common_cd]").val(selectedItems.data.common_cd);
+
+            var popup = $("#CommonCodePopup").dxPopup("instance");
+
+            popup.hide();
+        }
+
+        // 수정중인지 체크
+        function CommonEditCheck(nowEdit) {
+
+            $("#Common input[name=group_nm]").attr("readonly", false);
+            $("#Common input[name=common_cd]").attr("readonly", false);
+            $("#Common input[name=common_nm]").attr("readonly", false);
+            $("#Common input[name=common_part_cd]").attr("readonly", false);
+
+            if (nowEdit) {
+                $("#CommonSave").dxButton().parent().parent().removeClass("display-none");
+                $("#CommonUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#CommonSearch").dxButton().parent().parent().addClass("display-none");
+                $("#CommonInput").dxButton().parent().parent().addClass("display-none");
+                $("#CommonEdit").dxButton().parent().parent().addClass("display-none");
+                $("#CommonDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#CommonForm :disabled").attr('disabled', false);
+                $("#CommonCodeGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+                $("#CommonSave").dxButton().parent().parent().addClass("display-none");
+                $("#CommonUndo").dxButton().parent().parent().addClass("display-none");
+                $("#CommonSearch").dxButton().parent().parent().removeClass("display-none");
+                $("#CommonInput").dxButton().parent().parent().removeClass("display-none");
+                $("#CommonEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#CommonDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#CommonForm :enabled").attr('disabled', true);
+                $("#CommonCodeGrid").dxDataGrid("option", "disabled", false);
+            }
+        }
+
+        // 그리드 선택변경시 처리
+        function CommonSelectCommonCode(e) {
+
+            var grid = $("#CommonCodeGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('CommonCodeGrid', grid.option("focusedRowKey"));
+
+                if (data.hasOwnProperty('items')) {
+                    return;
+                }
+
+                $("#CommonForm input[name=group_nm]").val(data.group_nm);
+                $("#CommonForm input[name=common_cd]").val(data.common_cd);
+                $("#CommonForm input[name=common_nm]").val(data.common_nm);
+                $("#CommonForm input[name=common_part_cd]").val(data.common_part_cd);
+                $("#CommonForm input[name=common_part_nm]").val(data.common_part_nm);
+                $("#CommonForm input[name=dis_seq]").val(data.dis_seq);
+                if (data.use_yn === "Y") {
+                    $("#CommonForm input[name=use_yn][value='Y']").prop("checked", true);
+                } else {
+                    $("#CommonForm input[name=use_yn][value='N']").prop("checked", true);
+                }
+                if (data.common_sys_ck === "Y") {
+                    $("#CommonForm input[name=common_sys_ck][value='Y']").prop("checked", true);
+                } else {
+                    $("#CommonForm input[name=common_sys_ck][value='N']").prop("checked", true);
+                }
+                $("#CommonForm input[name=common_module]").val(data.common_module);
+                $("#CommonForm input[name=interface_cd]").val(data.interface_cd);
+                $("#CommonForm input[name=common_etc]").val(data.common_etc);
+                $("#CommonForm input[name=common_remark]").val(data.common_remark);
+            }
+        }
+
+        // 조회버튼 기능
+        function CommonSearch() {
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysSet/CommonCodeSelect',
+                data: {
+                    common_cd: $('#CommonCodeSearchForm input[name=common_cd]').val()
+                },
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        $("#CommonCodeGrid").dxDataGrid("instance").option("dataSource", json);
+                    } else {
+                        $("#CommonCodeGrid").dxDataGrid("instance").option("dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "CommonCodeGrid");
+
+        }
+
+        // 입력 버튼
+        function CommonInput() {
+            $("#CommonForm")[0].reset();
+            _commonCRUDGubun = "I";
+
+            var grid = $("#CommonCodeGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('CommonCodeGrid', grid.option("focusedRowKey"));
+
+                if (data.key != "") {
+
+                    var isOK = confirm("지금 포커싱 되어있는 공통코드의 하위 노드로 만드시겠습니까?");
+
+                    if (!isOK) {
+                        CommonEditCheck(true);
+                        return;
+                    }
+                    console.log(data);
+
+                    //그룹에 새로운 공통코드를 추가하는 경우
+                    if (data.hasOwnProperty('items') && data.items[0].hasOwnProperty('items') > 0) {
+                        $("#CommonForm input[name=group_nm]").val(data.key);
+                        //$("#CommonForm input[name=common_cd]").val(data.common_cd);
+                        //$("#CommonForm input[name=common_nm]").val(data.common_nm);
+                    } else {
+                    //기존 공통코드에 대해 항목을 추가하는 경우
+                        $("#CommonForm input[name=group_nm]").val(data.items[0].group_nm);
+                        $("#CommonForm input[name=common_cd]").val(data.items[0].common_cd);
+                        $("#CommonForm input[name=common_nm]").val(data.items[0].common_nm);
+                    }
+
+                    //기존 공통코드에 대해 항목을 추가하는 경우
+                    //if (data.hasOwnProperty('items') && data.items.length > 0) {
+                    //    $("#CommonForm input[name=group_nm]").val(data.items[0].group_nm);
+                    //    $("#CommonForm input[name=common_cd]").val(data.items[0].common_cd);
+                    //    $("#CommonForm input[name=common_nm]").val(data.items[0].common_nm);
+
+                    //} else {
+                    //    $("#CommonForm input[name=group_nm]").val(data.group_nm);
+                    //    $("#CommonForm input[name=common_cd]").val(data.common_cd);
+                    //    $("#CommonForm input[name=common_nm]").val(data.common_nm);
+                    //}
+                }
+            }
+            CommonEditCheck(true);
+        }
+
+        // 수정 버튼
+        function CommonEdit() {
+
+            var grid = $("#CommonCodeGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                try {
+
+                    var data = getGridRowByKey('CommonCodeGrid', grid.option("focusedRowKey"));
+                    if (data.common_cd != undefined) {
+                        _commonCRUDGubun = "U";
+                        CommonEditCheck(true);
+
+                        $("#Common input[name=group_nm]").attr("readonly", true);
+                        $("#Common input[name=common_cd]").attr("readonly", true);
+                        $("#Common input[name=common_nm]").attr("readonly", true);
+                        $("#Common input[name=common_part_cd]").attr("readonly", true);
+                    }
+                    else {
+                        _commonCRUDGubun = "";
+                        CommonEditCheck(false);
+                        alert("수정 할 데이터를 선택 해 주세요.");
+                    }
+
+                }
+                catch (e) {
+                    _commonCRUDGubun = "";
+                    CommonEditCheck(true);
+                    alert("수정 할 데이터를 선택 해 주세요.");
+                }
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+
+        }
+
+        // 취소 버튼
+        function CommonUndo() {
+            CommonEditCheck(false);
+            CommonSelectCommonCode();
+        }
+
+        // 저장 버튼
+        function CommonSave() {
+
+            if (!UtilView.checkValidForm("CommonForm")) {
+                return;
+            }
+
+            var form = $('#CommonForm')[0];
+            var data = new FormData(form);
+
+            data.set("gubun", _commonCRUDGubun);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysSet/CommonCodeCRUD',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        var json = JSON.parse(result);
+                        alert(json.messege);
+                    }
+                    CommonSearch();
+                    CommonEditCheck(false);
+                }
+            })
+        }
+
+        // 삭제 버튼
+        function CommonDelete() {
+
+            var grid = $("#CommonCodeGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('CommonCodeGrid', grid.option("focusedRowKey"));
+
+                if (data.hasOwnProperty('items')) {
+                    alert("그룹은 삭제할 수 없습니다.");
+                    return;
+                }
+
+                var isOK = confirm("삭제하시겠습니까?");
+
+                if (!isOK) {
+                    return;
+                }
+
+                _commonCRUDGubun = "D";
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/SysSet/CommonCodeCRUD',
+                    data: {
+                        common_cd: data.common_cd,
+                        common_part_cd: data.common_part_cd,
+                        gubun: _commonCRUDGubun
+                    },
+                    success: function (result) {
+                        if (!UtilView.isEmpty(result) && result.length > 0) {
+                            var json = JSON.parse(result);
+                            alert(json.messege);
+                        }
+                        CommonSearch();
+                        CommonEditCheck(false);
+
+                    }
+                });
+
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+        }
+
+</script>
+
+<div id="Common" autoresize="Y">
+
+    <div id="CommonCodePopup"></div>
+
+    <div id="CommonTop" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="CommonCodeSearchForm">
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">공통코드</span>
+                        </div>
+                        <input type="text" class="form-control" name="common_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchCommonCode()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div id="CommonLeftMain" class="col-8 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("CommonCodeGrid")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(900)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr(CommonGridKey)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("group_nm").Caption("그룹명").GroupIndex(0);
+                        c.Add().DataField("common_cd").Caption("공통코드").AllowHiding(true);
+                        c.Add().DataField("common_nm2").Caption("공통코드명").GroupIndex(1);
+                        c.Add().DataField("common_part_cd").Caption("구분코드");
+                        c.Add().DataField("common_part_nm").Caption("구분명칭");
+                        c.Add().DataField("dis_seq").Caption("순번");
+                        c.Add().DataField("use_yn").Caption("표시여부").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.use_yn == ""Y""; }");
+                    })
+                    .OnFocusedRowChanged("CommonSelectCommonCode")
+                )
+            </div>
+        </div>
+
+        <div id="CommonRightMain" class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>공통코드 정보</p>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="CommonForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">그룹명</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="group_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공통코드</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="common_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공통명칭</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="common_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">구분코드</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12 required" name="common_part_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">구분명칭</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="common_part_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">공통순번</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control col-12" name="dis_seq">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">표시여부</label>
+                            <div class="input-group col-4">
+                                <div class="radioDiv required">
+                                    <label><input type="radio" name="use_yn" value="Y" />예 </label>
+                                    <label><input type="radio" name="use_yn" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">시스템사용</label>
+                            <div class="input-group col-4">
+                                <div class="radioDiv required">
+                                    <label><input type="radio" name="common_sys_ck" value="Y" />예 </label>
+                                    <label><input type="radio" name="common_sys_ck" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">모듈</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="common_module">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">인터페이스 코드</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="interface_cd">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">기타</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="common_etc">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">비고</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="common_remark">
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

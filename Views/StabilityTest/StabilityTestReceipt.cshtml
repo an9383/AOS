@@ -1,0 +1,661 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+
+    var item = @Html.Raw(Json.Encode(ViewBag.item.Data));
+    var employee = @Html.Raw(Json.Encode(ViewBag.employee.Data));
+
+    var StabilityTestReceiptProgramParam = @Html.Raw(Json.Encode(ViewBag.programParam.Data));
+}
+
+<script id="@(pagePrefix)Js">
+
+    var _stabilityTestReceiptItemLotData = "";
+
+    $(function () {
+
+        var StabilityTestReceiptPopupColumns = {
+            "item": [{ dataField: "item_cd", caption: "품목코드" }
+                , { dataField: "item_nm", caption: "품목명" }
+                , { dataField: "item_gb_nm", caption: "제품유형" }
+                , { dataField: "item_pack_size", caption: "포장단위" }],
+            "employee": [{ dataField: "emp_cd", caption: "사원코드" }
+                , { dataField: "emp_nm", caption: "사원명" }
+                , { dataField: "dept_cd", caption: "부서코드" }
+                , { dataField: "dept_nm", caption: "부서명" }]
+        };
+
+        createPopup("StabilityTestReceiptItem", "품목 조회", @item, StabilityTestReceiptPopupColumns.item);
+        createPopup("StabilityTestReceiptEmp", "사원 조회", @employee, StabilityTestReceiptPopupColumns.employee);
+
+        $('input[name=s_item_cd]+div>button'
+            , $("#StabilityTestReceiptSearchForm")).click(function (event) {
+                StabilityTestReceiptPopUpSearch(event);
+            });
+
+        $('input[name=item_cd]+div>button'
+            + ', input[name=create_emp_cd]+div>button'
+            , $("#StabilityTestReceiptWriteForm")).click(function (event) {
+                StabilityTestReceiptPopUpSearch(event);
+            });
+
+        $('#StabilityTestReceipt .datepicker').datepicker({
+            format: "yyyy-mm-dd",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+            clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+            templates: {
+                leftArrow: '&laquo;',
+                rightArrow: '&raquo;'
+            }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+            todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+            weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+            language: "ko",	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+            enableOnReadonly: false
+        });
+
+        $("#StabilityTestReceiptSearchForm input[name=start_date]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+        $("#StabilityTestReceiptSearchForm input[name=end_date]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        StabilityTestReceiptSearch();
+
+        StabilityTestReceiptEditCheck(false, "N");
+
+    });
+
+    var _stabilityTestReceiptHelpPopUpCurInputName = "";
+
+    function StabilityTestReceiptPopUpSearch(e) {
+        _stabilityTestReceiptHelpPopUpCurInputName = UtilView.getParentAttrValByClass(e, ".input-group-append", ".form-control", "name");
+        var popupId = "";
+
+        switch (_stabilityTestReceiptHelpPopUpCurInputName) {
+            case "s_item_cd":
+            case "item_cd":
+                popupId = "StabilityTestReceiptItem";
+                break;
+            case "create_emp_cd":
+                popupId = "StabilityTestReceiptEmp";
+                break;
+            default:
+                popupId = "";
+                break;
+        }
+
+        if (popupId == "") {
+            alert("(오류) popup ID 미설정 오류!");
+        }
+        $('#' + popupId + 'Popup').dxPopup("instance").show();
+    }
+
+    function StabilityTestReceiptItemRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        switch (_stabilityTestReceiptHelpPopUpCurInputName) {
+            case "s_item_cd":
+                $("input[name=s_item_cd]", $("#StabilityTestReceiptSearchForm")).val(data.item_cd);
+                break;
+            case "item_cd":
+                $("input[name=item_cd]", $("#StabilityTestReceiptWriteForm")).val(data.item_cd);
+                $("input[name=item_nm]", $("#StabilityTestReceiptWriteForm")).val(data.item_nm);
+                $("input[name=item_unit]", $("#StabilityTestReceiptWriteForm")).val(data.item_pack_size);
+
+                StabilityTestReceiptGetDetail(data.item_cd);
+
+                break;
+        }
+
+        $("#StabilityTestReceiptItemPopup").dxPopup("instance").hide();
+    }
+
+    function StabilityTestReceiptEmpRowDblClick(selectedItems) {
+        var data = selectedItems.data;
+
+        $("input[name=create_emp_cd]", $("#StabilityTestReceiptWriteForm")).val(data.emp_cd);
+        $("input[name=create_emp_nm]", $("#StabilityTestReceiptWriteForm")).val(data.emp_nm);
+
+        $("#StabilityTestReceiptEmpPopup").dxPopup("instance").hide();
+    }
+
+    function StabilityTestReceiptGetDetail(item_cd) {
+        $.ajax({
+            type: 'GET',
+            url: '/StabilityTest/StabilityTestReceiptGetDetail',
+            data: {
+                item_cd: item_cd
+            },
+            dataType: "json",
+            async: false,
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result[0])[0];
+                    $("input[name=valid_month]", $("#StabilityTestReceiptWriteForm")).val(jsonData.item_validity_period);
+                } catch (e) {
+                    $("input[name=valid_month]", $("#StabilityTestReceiptWriteForm")).val(0);
+                    $("input[name=end_date]", $("#StabilityTestReceiptWriteForm"))
+                        .datepicker("update", new Date());
+                }
+
+                var selectBox = $("#StabilityTestReceiptWriteForm select[name=order_no]");
+                selectBox.empty();
+
+                _stabilityTestReceiptItemLotData = "";
+
+                try {
+
+                    var jsonData = JSON.parse(result[1]);
+
+                    _stabilityTestReceiptItemLotData = jsonData;
+
+                    for (var i = 0; i < jsonData.length; i++) {
+                        var newOption = new Option(jsonData[i].lot_no + ", 제조일자:" + jsonData[i].lot_date, jsonData[i].lot_no);
+                        selectBox.append(newOption);
+                    }
+
+                    StabilityTestReceiptOrderNoChange();
+
+                } catch (e) {
+                    var newOption = new Option("재고없음.", "");
+                    selectBox.append(newOption);
+                    return;
+                }
+            }
+        })
+    }
+
+    // 수정중인지 체크
+    function StabilityTestReceiptEditCheck(nowEdit, status) {
+        
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "StabilityTestReceiptToolbar"
+            , "StabilityTestReceiptGrid"
+            , "StabilityTestReceiptWriteForm"
+            , "item_cd"
+        );
+
+        $("#StabilityTestReceiptWriteForm input[name=gubun]").val(status);
+
+    }
+
+    function StabilityTestReceiptFocusChanged() {
+
+        var grid = $("#StabilityTestReceiptGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('StabilityTestReceiptGrid', grid.option("focusedRowKey"));
+        StabilityTestReceiptGetDetail(data.item_cd);
+
+        UtilView.setDataGridFormBind("StabilityTestReceiptGrid", "StabilityTestReceiptWriteForm");
+    }
+
+
+
+    function StabilityTestReceiptSearch() {
+        UtilView.dataGridSelect('StabilityTestReceiptGrid', 'StabilityTestReceiptSearchForm');
+    }
+
+    function StabilityTestReceiptInput() {
+        StabilityTestReceiptClearDetail();
+        StabilityTestReceiptEditCheck(true, "I");
+    }
+
+    function StabilityTestReceiptEdit() {
+
+        var grid = $("#StabilityTestReceiptGrid").dxDataGrid("instance");
+
+        //console.log(getGridRowByKey('StabilityTestReceiptGrid', grid.option("focusedRowKey")));
+
+        if (grid.option("focusedRowKey") < 0) {
+            alert("수정할 항목이 없습니다.");
+            return;
+        }
+
+        StabilityTestReceiptEditCheck(true, "U");
+    }
+
+    function StabilityTestReceiptDelete() {
+
+        var grid = $("#StabilityTestReceiptGrid").dxDataGrid("instance");
+
+        if (!grid.option("focusedRowKey")) {
+            alert("삭제할 항목이 없습니다.");
+            return;
+        }
+    }
+
+    async function StabilityTestReceiptSave() {
+
+        if (!UtilView.checkValidForm("StabilityTestReceiptWriteForm")) {
+            return;
+        }
+
+        var form = $('#StabilityTestReceiptWriteForm')[0];
+        var formData = new FormData(form);
+
+        UtilView.dataGridTRX(formData, () => StabilityTestReceiptSearch());
+
+        StabilityTestReceiptEditCheck(false, "N");
+    }
+
+    function StabilityTestReceiptUndo() {
+        StabilityTestReceiptEditCheck(false, "N");
+
+        var grid = $("#StabilityTestReceiptGrid").dxDataGrid("instance");
+
+        //console.log(grid.option("focusedRowKey"));
+
+        if (grid.option("focusedRowKey")) {
+            StabilityTestReceiptFocusChanged();
+        } else {
+            StabilityTestReceiptClearDetail();
+        }
+        
+    }
+
+    function StabilityTestReceiptPrint() {
+
+        var btnType;
+        btnType = $(event.target).closest('.dx-button').attr('id');
+
+        //var report = new ReportHelper();
+        //report.addParam({
+        //    objFile: { path: "TestReq", RptFileName: "rptTest_Request" },
+        //    objSp: { SpName: "SP_TestInformReport", gubun: "S", reportParam: "testcontrol_id:" + gridData.testcontrol_id },
+        //    objEtcInfo: { subParam: "" }
+        //});
+
+        //if (btnType.indexOf('Preview') > -1) {
+        //    report.preview();
+        //} else if (btnType.indexOf('Print') > -1) {
+        //    report.print();
+        //}
+    }
+
+    function StabilityTestReceiptClearDetail() {
+        $("#StabilityTestReceiptWriteForm")[0].reset();
+        var selectBox = $("#StabilityTestReceiptWriteForm select[name=order_no]");
+        selectBox.empty();
+        $("input[name=create_date]", $("#StabilityTestReceiptWriteForm"))
+            .datepicker("update", new Date());
+    }
+
+    function StabilityTestSetKeepingCondition() {
+
+        var stability_test_type = $("select[name=stability_test_type]", $("#StabilityTestReceiptWriteForm")).val();
+
+        $.ajax({
+            type: 'GET',
+            url: '/StabilityTest/StabilityTestReceiptGetKeepingCondition',
+            data: {
+                stability_test_type: stability_test_type
+            },
+            dataType: "json",
+            success: function (result) {
+                $("textarea[name=keeping_condition]", $("#StabilityTestReceiptWriteForm")).text(result.message);
+            }
+        })
+    }
+
+    function StabilityTestReceiptOrderNoChange() {
+        var idx = $("#StabilityTestReceiptWriteForm select[name=order_no] option").index($("#StabilityTestReceiptWriteForm select[name=order_no] option:selected"));
+        var data = _stabilityTestReceiptItemLotData[idx];
+
+        $("#StabilityTestReceiptWriteForm input[name=start_date]").datepicker("update", data.lot_date);
+        $("#StabilityTestReceiptWriteForm input[name=start_qty]").val(data.prod_qty_sum);
+        $("#StabilityTestReceiptWriteForm input[name=start_qty_unit]").val(data.item_lot_size);
+
+        var lotDate = new Date(data.lot_date);
+        lotDate.setDate(lotDate.getDate() + parseInt($("input[name=valid_month]", $("#StabilityTestReceiptWriteForm")).val()));
+
+        $("input[name=end_date]", $("#StabilityTestReceiptWriteForm"))
+            .datepicker("update", lotDate);
+    }
+
+    function StabilityTestReceiptSetEndDate() {
+        var lotDate = new Date($("input[name=start_date]", $("#StabilityTestReceiptWriteForm")).val());
+        lotDate.setDate(lotDate.getDate() + parseInt($("input[name=valid_month]", $("#StabilityTestReceiptWriteForm")).val()));
+
+        $("input[name=end_date]", $("#StabilityTestReceiptWriteForm"))
+            .datepicker("update", lotDate);
+    }
+
+</script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div id="StabilityTestReceiptItemPopup"></div>
+    <div id="StabilityTestReceiptEmpPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" id="@(pagePrefix)selectdate1" name="date_type" checked />
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate1">제조일자</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" id="@(pagePrefix)selectdate2" name="date_type" />
+
+                        </div>
+                        <span class="form-control-sm"><label for="@(pagePrefix)selectdate2">작성일자</label></span>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험종류</span>
+                        </div>
+                        <select class="form-control" name="stability_test_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC061")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="s_item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="input-wrapper">
+
+                    <div class="col-3 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control datepicker text-center" name="start_date" autocomplete="off">
+                        <label class="col-1 form-text"> ~ </label>
+                        <input type="text" class="form-control datepicker text-center" name="end_date" autocomplete="off">
+                    </div>
+
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험구분</span>
+                        </div>
+                        <select class="form-control" name="stability_test_type2">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC031")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Preview;Print");}
+        </div>
+    </div>
+
+    <div class="row mb-0">
+
+        <div class="col-8 pr-1 mb-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("StabilityTestReceiptGrid")
+                    .KeyExpr("stability_test_id")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height(900)
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("제품코드");
+                        c.Add().DataField("item_nm").Caption("제품");
+                        c.Add().DataField("item_unit").Caption("단위");
+                        c.Add().DataField("order_no").Caption("제조번호");
+                        c.Add().DataField("start_date").Caption("제조일자");
+                        c.Add().DataField("end_date").Caption("사용기한");
+                        c.Add().DataField("stability_test_type_nm").Caption("시험구분");
+                        c.Add().DataField("doc_no").Caption("문서번호");
+                        c.Add().DataField("stability_test_status_nm").Caption("상태");
+                    })
+                    .OnFocusedRowChanged("StabilityTestReceiptFocusChanged")
+                //.OnToolbarPreparing("HideToolbarButton")
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0 mb-1">
+
+            <div class="box mb-0">
+
+                <form id="StabilityTestReceiptWriteForm">
+
+                    <input type="text" name="gubun" hidden="hidden" />
+
+                    <div class="divName mb-1">
+                        <p>제품 정보</p>
+                    </div>
+
+                    <div class="mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">제품</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required" name="item_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4"></label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="item_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">포장단위</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="item_unit" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">제조번호</label>
+                            <div class="input-group col-7">
+                                <select class="form-control required" name="order_no" onchange="StabilityTestReceiptOrderNoChange()">
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">제조일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control datepicker" name="start_date" onchange="StabilityTestReceiptSetEndDate()">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">제조수량</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control" name="start_qty">
+                            </div>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="start_qty_unit">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">사용기한</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control datepicker" name="end_date">
+                                <input type="number" class="form-control" name="valid_month">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" style="font-size:inherit;">일</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">용기수량</label>
+                            <div class="input-group col-4">
+                                <input type="number" class="form-control" name="stability_qty">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">검체량</label>
+                            <div class="input-group col-7">
+                                <input type="number" class="form-control" name="stability_unit_qty">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" style="font-size:inherit;" name="stability_unit_nm"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">포장형태</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="packing_type">
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="divName mb-1">
+                        <p>안정성 시험 정보</p>
+                    </div>
+
+                    <div class=" mb-1">
+
+                        <div class="input-wrapper">
+                            <label class="col-4">시험종류</label>
+                            <div class="input-group col-7">
+                                <select class="form-control" name="stability_test_type2">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC061")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">시험구분</label>
+                            <div class="input-group col-7">
+                                <select class="form-control required" name="stability_test_type" onchange="StabilityTestSetKeepingCondition()">
+                                    @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "D", "QC031")).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">보존조건</label>
+                            <div class="input-group col-7">
+                                <textarea class="form-control" name="keeping_condition" readonly></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">실시목적</label>
+                            <div class="input-group col-7">
+                                <textarea class="form-control" name="stability_test_purpose"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">특이사항</label>
+                            <div class="input-group col-7">
+                                <textarea class="form-control" name="comment"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">문서번호</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control" name="doc_no">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">비고</label>
+                            <div class="input-group col-7">
+                                <textarea class="form-control" name="stability_test_remark"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">작성자</label>
+                            <div class="input-group col-7">
+                                <input type="text" class="form-control required" name="create_emp_cd">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                                <input type="text" class="form-control" name="create_emp_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">작성일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control required datepicker" name="create_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-4">진행상태</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="stability_test_status_nm" readonly>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

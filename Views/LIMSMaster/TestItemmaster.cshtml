@@ -1,0 +1,419 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    //*********************************************************
+    // ▣ 페이지별 설정
+    //*********************************************************
+
+    // 1. View데이터 설정
+    // 1.1. 검색객체
+    var srch = ViewData["srch"] as HACCP.Models.LIMSMaster.TestItemmaster.SrchParam;
+
+    // 1.2. 좌측 Grid
+    var mainGrid = Html.Raw(Json.Encode(ViewBag.mainGrid.Data));
+
+}
+
+<script id="@(pagePrefix)Js">
+    // 0.공통변수 설정
+    // 0.1. form변수
+    // global변수는 절대 사용하지 않는다.
+
+    // 0.2 UtilView 객체 공통설정
+    // global변수는 절대 사용하지 않는다.
+
+
+    // 1. 화면 Load 영역
+    $(function () {
+                     // 1.1. 좌측 Grid 바인딩
+        if (@mainGrid) {
+            $("#"+"TestItemmaster"+"Grid").dxDataGrid("instance").option("dataSource", JSON.parse(@mainGrid));
+            $("#"+"TestItemmaster"+"Grid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#"+"TestItemmaster"+"Grid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        // 1.2. 검색 설정
+@*
+        $('input:radio[name=rb_gb][value=@srch.rb_gb]', $('#'+"TestItemmasterSearchForm")).prop('checked', true);
+        $('select[name=status]', $('#' + "TestItemmasterSearchForm")).val('@srch.status');
+*@
+
+        //1.4 툴바 활성/비활성
+        TestItemmasterEditCheck(false, 'N');
+
+        //1.5 event설정
+        $('input[name=s_testitem_cd]+div>button', $('#' + "TestItemmasterSearchForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.testitem', '시험항목 조회', 'testitem_cd', $("#TestItemmasterSearchForm input[name=s_testitem_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=s_testitem_cd]", $('#' + "TestItemmasterSearchForm")).val(selectedItems.testitem_cd);
+                }
+            );
+        });
+
+        $('input[name=s_testitem_charge]+div>button', $('#' + "TestItemmasterSearchForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.employee', '사원 조회', 'emp_cd', $("#TestItemmasterSearchForm input[name=s_testitem_charge]").val(),
+                function (selectedItems) {
+                    $("input[name=s_testitem_charge]", $('#' + "TestItemmasterSearchForm")).val(selectedItems.emp_cd);
+                }
+            );
+        });
+
+        $('input[name=testitem_cd]+div>button', $('#' + "TestItemmasterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.testitem', '시험항목 조회', 'testitem_cd', $("#TestItemmasterWriteForm input[name=testitem_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=testitem_cd]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.testitem_cd);
+                    $("input[name=testitem_nm]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.testitem_nm);
+                }
+            );
+        });
+
+        $('input[name=testitem_charge]+div>button', $('#' + "TestItemmasterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.employee', '사원 조회', 'emp_cd', $("#TestItemmasterWriteForm input[name=testitem_charge]").val(),
+                function (selectedItems) {
+                    $("input[name=testitem_charge]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.emp_cd);
+                    $("input[name=testitem_charge_nm]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.emp_nm);
+                }
+            );
+        });
+
+        $('input[name=dept_cd]+div>button', $('#' + "TestItemmasterWriteForm")).click(function (event) {
+            CreatePopupWithFilter('@CodeHelpType.department', '부서 조회', 'dept_cd', $("#TestItemmasterWriteForm input[name=dept_cd]").val(),
+                function (selectedItems) {
+                    $("input[name=dept_cd]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.dept_cd);
+                    $("input[name=dept_nm]", $('#' + "TestItemmasterWriteForm")).val(selectedItems.dept_nm);
+                }
+            );
+        });
+
+        //1.5.3 공통객체
+        // 화면 resize
+        //screenResize();
+    });
+
+    // 2. 검색영역
+   
+
+    // 3. 툴바영역
+    //조회
+    function TestItemmasterSearch() {
+        TestItemmasterSelect();
+    }
+    //입력
+    function TestItemmasterInput() {
+        TestItemmasterEditCheck(true, 'I');
+        TestItemmasterWriteFormClear();
+
+        $.ajax({
+            type: 'POST',
+            url: UtilView.getActionUrl('GetSeqNo'),
+            data: "",
+            success: function (result) {
+                $('input[name=testitem_cd]', $('#' + "TestItemmasterWriteForm")).val(result);
+            }
+        });
+    }
+    //수정
+    function TestItemmasterEdit() {
+        TestItemmasterEditCheck(true,'U');
+    }
+    //삭제
+    function TestItemmasterDelete() {
+        TestItemmasterEditCheck(true, 'D');
+        TestItemmasterTrx("TestItemmasterWriteForm", "TestItemmasterSearchForm");
+    }
+    //저장
+    function TestItemmasterSave() {
+        if (UtilView.checkValidForm("TestItemmasterWriteForm")) {
+            TestItemmasterTrx("TestItemmasterWriteForm", "TestItemmasterSearchForm");
+        }
+    }
+    //취소
+    function TestItemmasterUndo() {
+        TestItemmasterEditCheck(false, 'N');
+        TestItemmasterWriteFormClear();
+        TestItemmasterFocusChanged();
+    }
+    // 엑셀다운로드
+    function TestItemmasterExcel() {
+
+    }
+    // 즐겨찾기
+    function TestItemmasterFavorite() {
+
+    }
+    // 트랜잭션처리
+    function TestItemmasterTrx(formWriteId, formSearchId) {
+        var form = $('#' + formWriteId)[0];
+        var formData = new FormData(form);
+        // form에 추가할 속성
+        //var appendData = { "edate": $('input[name=edate]', $('#' + formSearchId)).val() };
+        var appendData = { };
+
+        UtilView.dataGridTRX2(formData, appendData, () => TestItemmasterSelect());
+    }
+    // 수정중인지 체크
+    function TestItemmasterEditCheck(nowEdit, status) {
+        // (공통) 화면영역별 element 활성/비활성처리
+        UtilView.setActiveElement(nowEdit
+            , status
+            , "@(pagePrefix)Toolbar"
+            , "TestItemmasterGrid"
+            , "@(pagePrefix)WriteForm"
+            , "testitem_cd;testitem_charge_nm;dept_nm"
+        );
+
+    }
+    // 4. 좌측 Grid
+    // 4.1. 검색
+    function TestItemmasterSelect() {
+        // form claear
+        TestItemmasterWriteFormClear();
+        // edit 해제
+        TestItemmasterEditCheck(false, 'N');
+        // 메인grid
+
+        UtilView.dataGridSelect('TestItemmaster' + 'Grid', 'TestItemmaster'+'SearchForm');
+    }
+    // 3.2 Row focus changed
+    function TestItemmasterFocusChanged() {
+        // data 객체, 폼에 바인딩
+        UtilView.setDataGridFormBind("TestItemmaster" + "Grid", "TestItemmaster" + "WriteForm");
+
+        // 우측 gird바인딩
+        //TestItemmasterSelectSub(gridId, "TestItemmaster" + "SubGrid");
+    }
+    // 5. 우측 Form
+    // 5.1. clear form
+    function TestItemmasterWriteFormClear() {
+        $('#'+"TestItemmasterWriteForm")[0].reset();
+        $("textarea",$('#'+"TestItemmasterWriteForm")).text("");
+    }
+
+    // 우측 gird바인딩
+    //5.2 조회 :우측 Grid ($기능입력$)
+    //function TestItemmasterSelectSub(sGridId, tGridId) {
+    //    var sGrid = $('#' + sGridId).dxDataGrid("instance");
+    //    var gridData = getGridRowByKey(sGridId, sGrid.option("focusedRowKey"));
+    //    var data = { afterservice_no: gridData.afterservice_no };
+
+    //    $.ajax({
+    //        type: 'POST',
+    //        url: UtilView.getActionUrl('SelectSub'),
+    //        data: data,
+    //        success: function (result) {
+    //            if (result[0] == "") clear();
+    //            else {
+    //                var jsonResult = JSON.parse(result);
+    //                $('#' + tGridId).dxDataGrid("option", "dataSource", jsonResult);
+    //            }
+    //        }
+    //    })
+    //}
+
+    // 검색폼의 "사용가능 항목만" 체크박스 클릭 이벤트
+    function TestItemmasterUse_ynChkBoxClick(e) {
+        var chkYn = e.checked;
+
+        if (chkYn) $("input[name=s_use_yn]").val("Y");  // checked : 사용가능 항목만
+        else $("input[name=s_use_yn]").val("N");          // unchecked : 전체
+    }
+</script>
+
+<!-- $Contents Wrapper-->
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <!-- $title  -->
+    @*<h4 class="divTitle">시험항목 관리</h4>*@
+
+    @*<h4 class="divTitle float-left" style="margin-right:10px;margin-left:10px;">고장신고</h4>*@
+    <div class="mainTop row">
+        <!-- $검색폼-->
+        <div class="col-8">
+            <form id="@(pagePrefix)SearchForm">
+                <input hidden="hidden" />   <!-- form submit 방지-->
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+                    <div class="input-group input-group-sm col-2">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">종류</span>
+                        </div>
+                        <select class="form-control" name="s_testitem_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "S", "QC003")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">시험항목</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="s_testitem_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">담당자</span>
+                        </div>
+                        <input type="text" class="form-control searchPopupInput" name="s_testitem_charge">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="form-control-sm"><label></label></span>
+                            <input class="input-group-append" type="checkbox" value="Y" id="TestItemmaster_chk_use_yn" name="chk_use_yn" onclick="TestItemmasterUse_ynChkBoxClick(this)" checked />
+                            <input type="hidden" id="s_use_yn" name="s_use_yn" />
+                        </div>
+                        <span class="form-control-sm"><label for="TestItemmaster_chk_use_yn">사용가능 항목만</label></span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @*@{ Html.RenderAction("SetToolbar", "Uc", new { toolbarIndex = 0, isUnAuthBtnRemove = false, visibleBtns = "*" }); }*@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo");}
+
+        </div>
+    </div>
+
+    <!-- $Contents Main-->
+    <div class="row">
+        <!-- $Contets Left-->
+        <div class="col-8">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("TestItemmaster" + "Grid")
+                    //.KeyExpr(new string[]{"testitem_type", "testitem_cd"})
+                    .KeyExpr("testitem_cd")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .Height("900")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                            .Columns(c =>
+                            {
+                                c.Add().DataField("testitem_type_nm").Caption("시험항목종류").GroupIndex(0);
+                                c.Add().DataField("testitem_cd").Caption("항목코드");
+                                c.Add().DataField("testitem_nm").Caption("항목명");
+                                c.Add().DataField("testitem_charge_nm").Caption("담당자");
+                                c.Add().DataField("use_yn").Caption("사용")
+                                    .DataType(GridColumnDataType.Boolean)
+                                    .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+                            })
+                        //.OnSelectionChanged("newsSelectionChanged")
+                        .OnFocusedRowChanged("TestItemmaster" + "FocusChanged")
+                   )
+            </div>
+        </div>
+        <!-- $Contets Right-->
+        <div class="col-4">
+            <div class="box">
+                <form id="@(pagePrefix)WriteForm" class="required-star">
+                    <input type="hidden" name="row_status" />
+                    <div class="divName">
+                        <p>시험항목관리</p>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label class="col-3">시험항목코드</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12 required searchPopupInput" name="testitem_cd">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">시험항목명</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="testitem_nm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">영문명</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control col-12" name="testitem_enm">
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">시험항목종류</label>
+                        <div class="input-group col-4">
+                            <select class="form-control required" name="testitem_type">
+                                @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("공통코드", "N", "QC003")).Rows)
+                                {
+                                    <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">담당자</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control searchPopupInput" name="testitem_charge">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="testitem_charge_nm" readonly>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">사용여부</label>
+                        <div class="input-group col-4">
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="Y" id="use_yn1" name="use_yn" checked />
+                            </div>
+                            <span class="form-control-sm"><label for="use_yn1">사용</label></span>
+                            <div class="input-group-prepend">
+                                <input class="input-group-append" type="radio" value="N" id="use_yn2" name="use_yn" />
+                            </div>
+                            <span class="form-control-sm"><label for="use_yn2">사용안함</label></span>
+                        </div>
+                    </div>
+                    <div class="input-wrapper">
+                        <label class="col-3">시험파트</label>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control searchPopupInput" name="dept_cd">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group col-4">
+                            <input type="text" class="form-control" name="dept_nm" readonly>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+

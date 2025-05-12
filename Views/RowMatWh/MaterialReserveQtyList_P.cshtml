@@ -1,0 +1,145 @@
+﻿@model HACCP.Models.RowMatWh.MaterialReserveQtyList
+@using System.Data
+@{
+    Layout = null;
+    ViewData["Title"] = "MaterialReserveQtyList_P";
+}
+@{
+    var MaterialReserveQtyList_PData = @Html.Raw(Json.Encode(ViewBag.MaterialReserveQtyList_PData.Data));
+    var MaterialReserveQtyList_PAuth = @Html.Raw(Json.Encode(ViewBag.MaterialReserveQtyList_PAuth.Data));
+}
+
+<script id="MaterialReserveQtyList_PJs" type="text/javascript">
+    //SP 구문, gubun 변수
+    var qtyGubun = "";
+    var _MaterialReserveQtyList_PAuth;
+    var MaterialReserveQtyList_PData = @MaterialReserveQtyList_PData;
+
+    $(function () {
+        if (MaterialReserveQtyList_PData.length <= 0) {
+            $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@MaterialReserveQtyList_PData));
+            $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+
+        //사용자 권한
+        _MaterialReserveQtyList_PAuth = JSON.parse(@MaterialReserveQtyList_PAuth)[0];
+
+    });
+
+    //상단 그리드 선택 변경 시, 하단 그리드 이벤트 처리
+    function MaterialReserveQtyList_PFocus_changed() {
+        var gridData = $("#MaterialReserveQtyList_PGrid").dxDataGrid("instance").option("focusedRowKey");
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/MaterialReserveQtyListSelect_S2',
+            data: {
+                item_cd: gridData,
+                option: "2"
+            },
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#MaterialReserveQtyList_PDetailGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#MaterialReserveQtyList_PDetailGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#MaterialReserveQtyList_PDetailGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));                
+                $("#MaterialReserveQtyList_PDetailGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+</script>
+
+<div id="MaterialReserveQtyList_P" autoresize="Y">
+    @*<h4 class="divTitle">자재 예약량 조회</h4>*@
+
+    <div class="row">
+        <!--상단 그리드-->
+        <div class="col-12 pb-1">
+            <div id="MaterialReserveQtyList_PMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MaterialReserveQtyList_PGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("item_cd")
+                    .Height(500)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("자재코드");
+                        c.Add().DataField("item_nm").Caption("자재명");
+                        c.Add().DataField("receipt_qty_unit").Caption("단위").Width(100);
+                        c.Add().DataField("stock_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("reserve_qty").Caption("예약량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    })
+                    .OnFocusedRowChanged("MaterialReserveQtyList_PFocus_changed")
+                )
+            </div>
+        </div>
+
+        <!--하단 그리드-->
+        <div class="col-12">
+
+            <div id="MaterialReserveQtyList_PDetail" class="box mb-0">
+                <div class="divName">
+                    <p>자재 지시 목록</p>
+                </div>
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MaterialReserveQtyList_PDetailGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(false))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))                    
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("order_no")
+                    .Height(900)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("order_no").Caption("포장지시코드");
+                        c.Add().DataField("order_date").Caption("제조일자");
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("qc_no").Caption("시험번호");
+                        c.Add().DataField("order_qty").Caption("지시수량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    })
+                    .Summary(s => s.TotalItems(items =>
+                    {
+                        /* 지시수량 */
+                        items.Add()
+                        .Name("SelectedRowsSummary")
+                        .Column("order_qty")
+                                .ShowInColumn("order_qty")
+                                .ValueFormat("#,##0")
+                                .SummaryType(SummaryType.Sum)
+                                .DisplayFormat("[{0}]");
+                    }))
+
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

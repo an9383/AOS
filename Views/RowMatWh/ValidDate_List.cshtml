@@ -1,0 +1,680 @@
+﻿@model HACCP.Models.RowMatWh.ValidDate_List
+@using HACCP.Libs.Views;
+
+@{
+    Layout = null;
+    ViewData["Title"] = "ValidDate_List";
+    string sData = ViewData["data"] as String;
+}
+@{
+    var ValidDate_ListData = @Html.Raw(Json.Encode(ViewBag.ValidDate_ListData.Data));
+    var ValidDate_ListAuth = @Html.Raw(Json.Encode(ViewBag.ValidDate_ListAuth.Data));
+}
+
+<!--셀 배경색상 설정-->
+<style>
+    #ValidDate_List .Status_1 {
+        background-color: #FFFF00;
+    }
+    #ValidDate_List .Status_2 {
+        background-color: #FFA500;
+    }
+    #ValidDate_List .Status_3 {
+        background-color: #FFB6C1;
+    }
+    #ValidDate_List .Status_4 {
+        background-color: #FF6E6E;
+    }
+    #ValidDate_List .Status_5 {
+        background-color: #FF141E;
+    }
+</style>
+
+<script id="ValidDate_ListJs" type="text/javascript">
+    var _ValidDate_ListAuth;
+    var ValidDate_ListData = @ValidDate_ListData;
+
+        $(function () {
+            setDatePicker("#ValidDate_List .datepicker");
+
+            if (ValidDate_ListData.length <= 0) {
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ValidDate_ListData));
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //사용자 권한
+            _ValidDate_ListAuth = JSON.parse(@ValidDate_ListAuth)[0];
+
+            if (_ValidDate_ListAuth.form_query != "Y") {
+                $("#ValidDate_ListSearch").remove();
+            }
+
+            //우측 Detail 그리드 조작X
+            $("#ValidDate_List_Detail input").prop("disabled", true);
+
+        });
+
+    //조회버튼
+    function ValidDate_ListSearch() {
+
+        var formData = new FormData($("#ValidDate_List_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/ValidDate_List_S',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+    //좌측 row 선택 변경 시, 이벤트 처리
+    function ValidDate_ListFocus_changed(e) {
+        if (!e.row.data) {
+            return;
+        }
+        VD_fillData(e.row.data);
+    }
+
+    //우측 폼 데이터 채우기
+    function VD_fillData(data) {
+        $("#ValidDate_List_Detail input[name=receipt_no]").val(data.receipt_no);
+        $("#ValidDate_List_Detail input[name=item_cd]").val(data.item_cd);
+        $("#ValidDate_List_Detail input[name=item_nm]").val(data.item_nm);
+
+        $("#ValidDate_List_Detail input[name=qc_no]").val(data.qc_no);
+        $("#ValidDate_List_Detail input[name=receipt_remain_qty]").val(data.receipt_remain_qty);
+        $("#ValidDate_List_Detail input[name=valid_date]").val(data.valid_date);
+        $("#ValidDate_List_Detail input[name=valid_date_count]").val(data.valid_date_count);
+
+        if (data.retest_ck === "Y") {
+            $("#ValidDate_List_Detail input[name=retest_ck][value='Y']").prop("checked", true);
+        }
+        else {
+            $("#ValidDate_List_Detail input[name=retest_ck][value='N']").prop("checked", true);
+        }
+    }
+
+    //우측 Grid 재입고 (재시험 대상) 버튼 이벤트
+    function retest_ck_Btn() {
+
+        var grid = $("#ValidDate_ListGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ValidDate_ListGrid", grid.option("focusedRowKey"));
+
+        if (gridData.retest_ck === "Y") {
+            //재고량이 0인경우 시험의뢰 못하도록 수정.
+            if (gridData.receipt_remain_qty == 0) {
+                alert("재고량이 0입니다. 재입고 할 수 없습니다.");
+                return;
+            }
+            //예약량이 0이 아닌 경우 재시험의뢰 못함
+            else if (gridData.receipt_reserve_qty != 0) {
+                alert("해당 시험번호에 예약량이 잡혀있습니다. 재입고 할 수 없습니다.");
+                return;
+            } else {
+                if (gridData.retest_cnt != "Y") {   //재시험현황이 Y가 아니면
+                    var type = "I";
+                    Set_ES(type);
+                } else {
+                    alert("이미 재입고가 진행 되어 진행 할 수 없습니다.");
+                    return;
+                }
+            }
+        } else {
+            alert("재입고 대상이 아닙니다.");
+            return;
+        }
+
+    }
+
+    //재입고(재시험 대상) 버튼
+    function Set_ES(type) {
+        if (type == "I") {
+            var re_receipt = confirm("재입고하시겠습니까?");
+            if (!re_receipt) {
+                alert("취소되었습니다.");
+                return;
+            }
+
+            //전자서명 팝업 화면
+            var popup = $("#ValidDate_ListSignPopup").dxPopup("instance");
+            popup.option("contentTemplate", $("#ValidDate_ListSignPopupTemplate"));
+            popup.show();
+
+
+        } else {
+            var re_receipt_cls = confirm("재입고를 취소 하시겠습니까?");
+            if (!re_receipt_cls) {
+                alert("취소되었습니다.");
+                return;
+            } else {
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/RowMatWh/ValidDate_List_CK',
+                    data: {
+                        receipt_no: gridData.receipt_no,
+                        receipt_id: gridData.receipt_id
+                    },
+                    success: function (result) {
+
+                        if (result[0] != "0") {
+                            alert("시험의뢰를 취소 후 다시 시도하여 주세요.");
+                            return;
+                        }
+
+                        ValidDate_ListSearch();
+
+                    }
+                })
+
+            }
+        }
+    }
+
+    //전자서명
+    function ValidDate_ListSignSubmit() {
+        var data = new FormData($('#ValidDate_ListSign_Form')[0]);
+
+        var grid = $("#ValidDate_ListGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ValidDate_ListGrid", grid.option("focusedRowKey"));
+
+        setTimeout(function () {
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatWh/ValidDate_List_ES',
+                data: {
+                    receipt_no: gridData.receipt_no,
+                    receipt_id: gridData.receipt_id,
+                    emp_cd: data.get("txt_ID"),
+                    validation_type: "2",
+                    remain_qty: gridData.receipt_remain_qty,
+                    item_cd: gridData.item_cd
+                },
+                success: function (result) {
+
+                    //alert(JSON.parse(result).messege);
+                    alert("재입고 하였습니다.");
+
+                    ValidDate_ListSearch();
+
+                }
+            });
+
+
+            var popup = $("#ValidDate_ListSignPopup").dxPopup("instance");
+            popup.hide();
+        }, 1000);
+        
+    }
+
+        //서명 권한 체크(id, pw)
+        //function ValidDate_ListSignSubmit() {
+        //    var data = new FormData($('#ValidDate_ListSign_Form')[0]);
+
+        //    var grid = $("#ValidDate_ListGrid").dxDataGrid("instance");
+        //    var gridData = getGridRowByKey("ValidDate_ListGrid", grid.option("focusedRowKey"));
+
+        //    data.set("gubun", "S");
+
+        //    $.ajax({
+        //        type: 'POST',
+        //        url: '/Comm/IDValidation',
+        //        data: data,
+        //        contentType: false,
+        //        processData: false,
+        //        success: function (result) {
+
+        //            if (result.length <= 0) {
+        //                alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+        //                return;
+        //            }
+
+        //            $("#ValidDate_ListSignConfirmForm input[name='dept_nm']").val(JSON.parse(result)[0].dept_nm);
+        //            $("#ValidDate_ListSignConfirmForm input[name='emp_nm']").val(JSON.parse(result)[0].emp_nm);
+
+        //            setTimeout(function () {
+        //                $.ajax({
+        //                    type: 'POST',
+        //                    url: '/RowMatWh/ValidDate_List_ES',
+        //                    data: {
+        //                        receipt_no: gridData.receipt_no,
+        //                        receipt_id: gridData.receipt_id,
+        //                        emp_cd: data.get("txt_ID"),
+        //                        validation_type: "2",
+        //                        remain_qty: gridData.remain_qty,
+        //                        item_cd: gridData.item_cd
+        //                    },
+        //                    success: function (result) {
+
+        //                        //alert(JSON.parse(result).messege);
+        //                        alert("재입고 하였습니다.");
+
+        //                        ValidDate_ListSearch();
+
+        //                    }
+        //                });
+
+
+        //                var popup = $("#ValidDate_ListSignPopup").dxPopup("instance");
+        //                popup.hide();
+        //            }, 1000);
+        //        }
+        //    });
+        //}
+
+        // 서명 인풋 초기화
+        function VD_clearSignInput() {
+            $('#ValidDate_ListSign_Form')[0].reset();
+            $("#ValidDate_ListSignConfirmForm input[name='dept_nm']").val("");
+            $("#ValidDate_ListSignConfirmForm input[name='emp_nm']").val("");
+        }
+
+    //우측 Grid 지난원료 기타 출고 버튼 이벤트
+    function prematerial_Btn() {
+
+        var grid = $("#ValidDate_ListGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey("ValidDate_ListGrid", grid.option("focusedRowKey"));
+
+
+        if (gridData.receipt_reserve_qty != 0) {
+            alert("예약량이 존재하여 기타출고 처리를 할수 없습니다.");
+            return;
+        }
+
+        var validDate_out = confirm("기타출고 처리하시겠습니까?");
+
+        if (!validDate_out) {
+            alert("취소되었습니다.");
+            return;
+        }
+
+            $.ajax({
+                type: 'POST',
+                url: '/RowMatWh/ValidDate_List_V_OUT',
+                data: {
+                    receipt_no: gridData.receipt_no,
+                    receipt_id: gridData.receipt_id
+                },
+                success: function (result) {
+
+                    ValidDate_ListSearch();
+
+                }
+            })
+    }
+
+    //유통기한 지난원료 화면 grid 출력
+    function preSV() {
+
+        var formData = new FormData($("#ValidDate_List_form")[0]);
+
+        $.ajax({
+            type: 'POST',
+            url: '/RowMatWh/ValidDate_List_SV',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+                if (result.length <= 0) {
+                    $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+
+                    return;
+                }
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ValidDate_ListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+        });
+    }
+
+    //1개월 추가 이벤트
+    function addOneMonths() {
+        var today = new Date();
+
+        var year = today.getFullYear();
+        var month = today.getMonth() + 1;
+        var day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var today_date = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date_S]").val(today_date);
+
+        today.setMonth(today.getMonth() + 1);
+
+        year = today.getFullYear();
+        month = today.getMonth() + 1;
+        day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var oneLater = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date]").val(oneLater);
+
+        ValidDate_ListSearch();
+    }
+
+    //2개월 추가 이벤트
+    function addTwoMonths() {
+
+        var today = new Date();
+
+        var year = today.getFullYear();
+        var month = today.getMonth() + 1;
+        var day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var today_date = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date_S]").val(today_date);
+
+        today.setMonth(today.getMonth() + 2);
+
+        year = today.getFullYear();
+        month = today.getMonth() + 1;
+        day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var oneLater = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date]").val(oneLater);
+
+        ValidDate_ListSearch();
+    }
+
+    //3개월 추가 이벤트
+    function addThreeMonths() {
+        var today = new Date();
+
+        var year = today.getFullYear();
+        var month = today.getMonth() + 1;
+        var day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var today_date = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date_S]").val(today_date);
+
+        today.setMonth(today.getMonth() + 3);
+
+        year = today.getFullYear();
+        month = today.getMonth() + 1;
+        day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var oneLater = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date]").val(oneLater);
+
+        ValidDate_ListSearch();
+    }
+
+    //6개월 추가 이벤트
+    function addSixMonths() {
+        var today = new Date();
+
+        var year = today.getFullYear();
+        var month = today.getMonth() + 1;
+        var day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var today_date = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date_S]").val(today_date);
+
+        today.setMonth(today.getMonth() + 6);
+
+        year = today.getFullYear();
+        month = today.getMonth() + 1;
+        day = today.getDate();
+        month = (month < 10) ? ("0" + month) : month;
+        day = (day < 10) ? ("0" + day) : day;
+
+        var oneLater = year + "-" + month + "-" + day;
+        $("#ValidDate_List_form input[name=Valid_date]").val(oneLater);
+
+        ValidDate_ListSearch();
+    }
+
+    //유효기간 Cell background color 설정
+    function VD_BackgroundColor(cellInfo) {
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === 'valid_date_count') {
+            if (cellInfo.data.valid_date_status != "0")
+                cellInfo.cellElement.addClass('Status_' + cellInfo.data.valid_date_status);
+        }
+    }
+
+</script>
+
+<div id="ValidDate_List" autoresize="Y">
+    @*<h4 class="divTitle">원료 유효기간 현황</h4>*@
+
+    <!--#region 전자 서명 팝업-->
+    @using (Html.DevExtreme().NamedTemplate("ValidDate_ListSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="ValidDate_ListSign_Form">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button onclick="ValidDate_ListSignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <form id="ValidDate_ListSignConfirmForm">
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+
+        </form>
+
+    }
+
+    @(Html.DevExtreme().Popup()
+            .ID("ValidDate_ListSignPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("VD_clearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+    <!--#endregion-->
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="ValidDate_List_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">유통기한</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Valid_date_S" value="@DateTime.Today.ToShortDateString()" />
+                        <label class="p-1">~</label>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="Valid_date" value="@DateTime.Today.AddMonths(1).ToShortDateString()" />
+                    </div>
+
+                    <button type="button" class="btn btn-secondary" onclick="preSV()" style="background-color: #FF141E; color:black;">지난원료</button>
+                    <button type="button" class="btn btn-secondary" onclick="addOneMonths()" style="background-color: #FF6E6E; color:black;">1개월</button>
+                    <button type="button" class="btn btn-secondary" onclick="addTwoMonths()" style="background-color: #FFB6C1; color:black;">2개월</button>
+                    <button type="button" class="btn btn-secondary" onclick="addThreeMonths()" style="background-color: #FFA500; color:black;">3개월</button>
+                    <button type="button" class="btn btn-secondary" onclick="addSixMonths()" style="background-color: #FFFF00; color:black;">6개월</button>
+
+                </div>
+
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search");}
+        </div>
+
+    </div>
+
+    <div class="row">
+        <!--좌측 그리드-->
+        <div class="col-9 pr-0">
+            <div id="ValidDate_List_Main" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("ValidDate_ListGrid")
+                .ShowBorders(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .SearchPanel(searchPanel => searchPanel.Visible(true))
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .HoverStateEnabled(true)
+                .KeyExpr("receipt_no")
+                .Height(900)
+                .OnCellPrepared("VD_BackgroundColor")
+                .FocusedRowEnabled(true)
+                .Columns(c =>
+                {
+                    c.Add().DataField("receipt_no").Caption("입고번호");
+                    c.Add().DataField("item_cd").Caption("원료코드");
+                    c.Add().DataField("item_nm").Caption("원료명");
+                    c.Add().DataField("qc_no").Caption("시험번호");
+                    c.Add().DataField("receipt_remain_qty").Caption("재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    c.Add().DataField("receipt_reserve_qty").Caption("예약량").Format("#,##0").DataType(GridColumnDataType.Number);
+                    c.Add().DataField("valid_date").Caption("유통기한").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                    c.Add().DataField("valid_date_count").Caption("남은기간(일)").Format("#,##0").DataType(GridColumnDataType.Number);
+                    c.Add().DataField("valid_date_status").Caption("유효기간 상태").DataType(GridColumnDataType.Number).Visible(false);
+                    c.Add().DataField("retest_ck").Caption("재시험대상").Width(100);
+                    c.Add().DataField("retest_cnt").Caption("재시험현황").Width(100);
+                })
+                .OnFocusedRowChanged("ValidDate_ListFocus_changed")
+                )
+            </div>
+        </div>
+
+        <!--우측 Detail 화면-->
+        <div class="col-3 pl-1">
+            <div id="ValidDate_List_Detail" class="box mb-0">
+                <div class="divName">
+                    <p>원자재 정보</p>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">입고번호</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="receipt_no" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">코 드</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="item_cd" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">품 명</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="item_nm" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">시험번호</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="qc_no" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">재고량</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="receipt_remain_qty" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">유통기한</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="valid_date" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">남은기간</label>
+                    <div class="input-group col-6">
+                        <input type="text" class="form-control" name="valid_date_count" />
+                    </div>
+                </div>
+
+                <div class="input-wrapper">
+                    <label class="col-3">재시험대상</label>
+                    <div class="input-group col-4">
+                        <div class="radioDiv form-control" style="text-align:center;">
+                            <label><input type="radio" name="retest_ck" value="Y" />Y</label>
+                            <label class="p-1"></label>
+                            <label><input type="radio" name="retest_ck" value="N" />N</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-wrapper align-center">
+                    <button type="button" class="btn btn-secondary" onclick="retest_ck_Btn()">재입고 (재시험 대상)</button>
+                </div>
+
+                <hr />
+
+                <div class="input-wrapper align-center">
+                    <button type="button" class="btn btn-secondary" onclick="prematerial_Btn()">지난원료 기타 출고</button>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

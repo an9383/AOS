@@ -1,0 +1,268 @@
+﻿@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@*제조용수 시험 의뢰*@
+
+<script id="@(pagePrefix)Js">
+
+    var _waterTestScheduleData = "";
+    var _waterTestScheduleSelectedData = "";
+
+    $(function () {
+
+        $("#WaterTestScheduleSearchForm input[name=year]").val('@DateTime.Now.Year');
+        $("#WaterTestScheduleSearchForm input[name=month]").val('@DateTime.Now.Month');
+
+        WaterTestScheduleSearch();
+
+    });
+
+    function ShowWaterTestScheduleCalendar(calendarData) {
+
+        _waterTestScheduleData = calendarData;
+
+        var cnt = 0;
+
+        var setTableHTML = "";
+        setTableHTML += '<table class="calendar w-100">';
+        setTableHTML += '<tr><th class="text-danger">SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th class="text-info">SAT</th></tr>';
+        for (var i = 0; i < 6; i++) {
+            setTableHTML += '<tr height="100">';
+            for (var j = 0; j < 7; j++) {
+
+                var classNm = "";
+
+                if (calendarData[cnt].schedule_yn === "Y") {
+                    if (calendarData[cnt].water_test_status === "2") {
+                        classNm = "cal-test-status-2";
+                    }
+                    else {
+                        classNm = "cal-test-status-3";
+                    }
+                }
+
+                setTableHTML += '<td id="WaterTestScheduleTableCell' + (cnt) + '" '
+                setTableHTML += 'class="' + (calendarData[cnt].thismonth_yn === "N" ? "cal-not-thismonth" : "") + '" '
+                setTableHTML += 'style="text-overflow:ellipsis;overflow:hidden;white-space:nowrap"84 '
+                setTableHTML += 'onclick="WaterTestScheduleCalendarClick(' + (cnt) + ')" '
+                setTableHTML += 'ondblclick="WaterTestScheduleInput()">';
+                setTableHTML += '    <div class="cal-day" id="WaterTestScheduleDay' + (cnt + 1) + '">' + calendarData[cnt].calendar_day + " " + calendarData[cnt].anniversary_nm + '</div>';
+                setTableHTML += '    <hr class="mt-2 mb-2" / >';
+                setTableHTML += '    <div class="cal-schedule">';
+                setTableHTML += '       <div class="input-wrapper mb-1"><span class="col-3 ' + classNm + '">시험일정:</span>';
+                setTableHTML += '       <input class="col-8" type="checkbox" ' + (calendarData[cnt].schedule_yn === "Y" ? "checked" : "") + ' onclick="return false;"/></div>';
+                setTableHTML += '       <div class="input-wrapper mb-1"><span class="col-3 ' + classNm + '">진행상태:</span>';
+                setTableHTML += '       <span class="col-8">' + (calendarData[cnt].water_test_status_nm ? calendarData[cnt].water_test_status_nm : "") + '</span></div>';
+                setTableHTML += '       <div class="input-wrapper mb-1"><span class="col-3 ' + classNm + '">의뢰번호:</span>';
+                setTableHTML += '       <span class="col-8">' + (calendarData[cnt].testrequest_no ? calendarData[cnt].testrequest_no : "") + '</span></div>';
+                setTableHTML += '       <div class="input-wrapper"><span class="col-3 ' + classNm + '">판정결과:</span>';
+                setTableHTML += '       <span class="col-8">' + (calendarData[cnt].test_result_yn_nm ? calendarData[cnt].test_result_yn_nm : "") + '</span></div>';
+                setTableHTML += '    </div>';
+                setTableHTML += '</td>';
+                cnt++;
+            }
+            setTableHTML += '</tr>';
+        }
+
+        setTableHTML += '</table>';
+        $("#WaterTestScheduleCalTab").html(setTableHTML);
+
+        // 주말 표시
+        for (var i = 1; i <= 42; i++) {
+            if (i % 7 === 0) {
+                $("#WaterTestScheduleDay" + i).addClass("text-info");
+            } else if (i % 7 === 1) {
+                $("#WaterTestScheduleDay" + i).addClass("text-danger");
+            } else if (calendarData[i - 1].anniversary_nm != "" && calendarData[i - 1].anniversary_nm != null) {
+                $("#WaterTestScheduleDay" + i).addClass("text-danger");
+            } else if (calendarData[i - 1].calendar_type === "B") {
+                $("#WaterTestScheduleDay" + i).addClass("text-danger");
+            }
+        }
+
+        $(".calendar select").attr("disabled", true);
+
+    }
+
+    function WaterTestScheduleCalendarClick(num) {
+
+        _waterTestScheduleSelectedData = _waterTestScheduleData[num];
+
+        $("#WaterTestSchedule td").removeClass("cal-selected");
+        $("#WaterTestScheduleTableCell" + num).addClass("cal-selected");
+    }
+
+    function WaterTestScheduleSearch() {
+
+        var form = $('#WaterTestScheduleSearchForm')[0];
+        var data = new FormData(form);
+
+        $("#WaterTestScheduleTitle").text(data.get("year") + "년 " + data.get("month") + "월 " + "["
+            + $("#WaterTestScheduleSearchForm option:selected").text() + "]시험 스케줄");
+
+        $.ajax({
+            type: 'POST',
+            url: '/ManufactureWaterMng/WaterTestScheduleSelect',
+            data: data,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                _waterTestScheduleSelectedData = "";
+                ShowWaterTestScheduleCalendar(JSON.parse(result));
+
+            }
+        })
+    }
+
+    function WaterTestScheduleInput() {
+
+        if (!_waterTestScheduleSelectedData) {
+            alert("날짜를 선택해주세요");
+            return;
+        }
+
+        var data = _waterTestScheduleSelectedData;
+
+        if (data.schedule_yn === "Y" && data.water_test_status === "2") {
+            if (!confirm("시험의뢰 하시겠습니까?")) {
+                return;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/ManufactureWaterMng/WaterTestScheduleTestRequest',
+                data: {
+                    test_type: data.test_type,
+                    water_type: data.water_type,
+                    calendar_date: data.calendar_date
+                },
+                success: function (result) {
+
+                    WaterTestScheduleSearch();
+
+                }
+            })
+        }
+        else {
+            alert("시험계획을 진행해 주세요.");
+            return;
+        }
+        
+    }
+
+    function WaterTestScheduleDelete() {
+
+        if (!_waterTestScheduleSelectedData) {
+            alert("날짜를 선택해주세요");
+            return;
+        }
+
+        var data = _waterTestScheduleSelectedData;
+
+        if (data.schedule_yn === "N") {
+            return;
+        }
+        else if (data.water_test_status === "3") {
+            if (!confirm("제조용수 시험이 진행중입니다. 삭제하시겠습니까?")) {
+                return;
+            }
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/ManufactureWaterMng/WaterTestScheduleDelete',
+            data: {
+                test_type: data.test_type,
+                water_type: data.water_type,
+                calendar_date: data.calendar_date,
+                testrequest_no: data.testrequest_no
+            },
+            success: function (result) {
+
+                WaterTestScheduleSearch();
+
+            }
+        })
+    }
+
+</script>
+
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)" autoresize="Y">
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm" onchange="WaterTestScheduleSearch()">
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">연 월</span>
+                        </div>
+
+                        <input type="number" class="form-control col-5" name="year" min="1" max="9999" value="@DateTime.Now.Year" />
+                        <div class="input-group-append"><span class="input-group-text">년</span></div>
+                        <input type="number" class="form-control col-5" name="month" min="1" max="12" value="@DateTime.Now.Month" />
+                        <div class="input-group-append"><span class="input-group-text">월</span></div>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="WaterTestScheduleInput()">시험의뢰</button>
+                </div>
+
+                <div class="input-wrapper">
+                    <div class="input-group input-group-sm col-5">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">POINT</span>
+                        </div>
+                        <select class="form-control" name="water_type">
+                            @foreach (DataRow row in ((DataTable)Public_Function.GetMaster("제조용수시험", "N", "")).Rows)
+                            {
+                                <option value="@row["keyfield"]">@row["displayfield"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <!-- $CRUD버튼-->
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Delete");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+
+            <div class="box w-100 mb-0">
+
+                <div class="divName">
+                    <p id="WaterTestScheduleTitle"></p>
+                </div>
+
+                <div id="WaterTestScheduleCalTab" class="cal w-100">
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

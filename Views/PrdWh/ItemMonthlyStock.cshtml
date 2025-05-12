@@ -1,0 +1,282 @@
+﻿@model HACCP.Models.PrdWh.ItemMonthlyStock
+@using HACCP.Libs.Views;
+@{
+    Layout = null;
+    ViewData["Title"] = "ItemMonthlyStock";
+}
+@{
+    var ItemMonthlyStockData = @Html.Raw(Json.Encode(ViewBag.ItemMonthlyStockData.Data));
+    var ItemMonthlyStockAuth = @Html.Raw(Json.Encode(ViewBag.ItemMonthlyStockAuth.Data));
+}
+
+<script id="ItemMonthlyStockJs" type="text/javascript">
+        var _ItemMonthlyStockAuth;
+        var ItemMonthlyStockData = @ItemMonthlyStockData;
+
+        //이동 페이지 정보
+        var ItemUseList2_ItemPageInfo = [
+            {
+                tabName: "완제품 사용 내역(수불장)",
+                tabId: "ItemUseList2_Item",
+                url:"/PrdWh/ItemUseList2_Item"
+            }
+        ]
+
+        $(function () {
+            $('.datepicker').datepicker({
+                format: "yyyy-mm",	//데이터 포맷 형식(yyyy : 년 mm : 월 dd : 일 )
+                startDate: '-10y',	//달력에서 선택 할 수 있는 가장 빠른 날짜. 이전으로는 선택 불가능 ( d : 일 m : 달 y : 년 w : 주)
+                endDate: '+10y',	//달력에서 선택 할 수 있는 가장 느린 날짜. 이후로 선택 불가 ( d : 일 m : 달 y : 년 w : 주)
+                autoclose: true,	//사용자가 날짜를 클릭하면 자동 캘린더가 닫히는 옵션
+                calendarWeeks: false, //캘린더 옆에 몇 주차인지 보여주는 옵션 기본값 false 보여주려면 true
+                clearBtn: false, //날짜 선택한 값 초기화 해주는 버튼 보여주는 옵션 기본값 false 보여주려면 true
+                //datesDisabled: ['2019-06-24', '2019-06-26'],//선택 불가능한 일 설정 하는 배열 위에 있는 format 과 형식이 같아야함.
+                //daysOfWeekDisabled: [0, 6],	//선택 불가능한 요일 설정 0 : 일요일 ~ 6 : 토요일
+                //daysOfWeekHighlighted: [3], //강조 되어야 하는 요일 설정
+                disableTouchKeyboard: false,	//모바일에서 플러그인 작동 여부 기본값 false 가 작동 true가 작동 안함.
+                immediateUpdates: false,	//사용자가 보는 화면으로 바로바로 날짜를 변경할지 여부 기본값 :false
+                multidate: false, //여러 날짜 선택할 수 있게 하는 옵션 기본값 :false
+                multidateSeparator: ",", //여러 날짜를 선택했을 때 사이에 나타나는 글짜 2019-05-01,2019-06-01
+                templates: {
+                    leftArrow: '&laquo;',
+                    rightArrow: '&raquo;'
+                }, //다음달 이전달로 넘어가는 화살표 모양 커스텀 마이징
+                showWeekDays: true,// 위에 요일 보여주는 옵션 기본값 : true
+                //title: "테스트",	//캘린더 상단에 보여주는 타이틀
+                todayHighlight: true,	//오늘 날짜에 하이라이팅 기능 기본값 :false
+                toggleActive: false,	//이미 선택된 날짜 선택하면 기본값 : false인경우 그대로 유지 true인 경우 날짜 삭제
+                weekStart: 0,//달력 시작 요일 선택하는 것 기본값은 0인 일요일
+                language: "ko"	//달력의 언어 선택, 그에 맞는 js로 교체해줘야한다.
+
+            });//datepicker end
+
+            if (ItemMonthlyStockData.length <= 0) {
+                $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            } else {
+                $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@ItemMonthlyStockData));
+                $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+            }
+
+            //사용자 권한
+            _ItemMonthlyStockAuth = JSON.parse(@ItemMonthlyStockAuth)[0];
+
+            if (_ItemMonthlyStockAuth.form_query != "Y") {
+                $("#ItemMonthlyStockSearch").remove();
+            }
+
+            //체크 박스 체크 디폴트
+            $("input:checkbox[name='IMS_use_ck_S']:checkbox[value='Y']").prop('checked', true);
+        });
+
+        //체크박스 값 변화
+        function IMS_changeChk() {
+            if (!$("#ItemMonthlyStock_form input[name=IMS_use_ck_S]").prop("checked")) {
+                $("#ItemMonthlyStock_form input[name=IMS_use_ck_S]").val("%");
+            } else {
+                $("#ItemMonthlyStock_form input[name=IMS_use_ck_S]").val("Y");
+            }
+        }
+
+        //매월 1일 설정
+        function IMS_convertSDate() {
+
+            var IMS_stime = $("#ItemMonthlyStock_form input[name=IMS_start_date]").val();
+            var IMS_syear = IMS_stime.substr(0, 4);
+            var IMS_smonths = IMS_stime.substr(5, 2);
+
+            var IMS_sconTime = new Date(IMS_syear, IMS_smonths - 1, "01");
+
+            var IMS_sy = IMS_sconTime.getFullYear();
+            var IMS_sm = (1 + IMS_sconTime.getMonth());
+            IMS_sm = IMS_sm >= 10 ? IMS_sm : '0' + IMS_sm;
+            var IMS_sd = IMS_sconTime.getDate();
+            IMS_sd = IMS_sd >= 10 ? IMS_sd : '0' + IMS_sd;
+
+            return IMS_sy + '-' + IMS_sm + '-' + IMS_sd;
+        }
+        //매월 말일 설정
+        function IMS_convertEDate() {
+
+            var IMS_etime = $("#ItemMonthlyStock_form input[name=IMS_start_date]").val();
+            var IMS_eyear = IMS_etime.substr(0, 4);
+            var IMS_emonths = IMS_etime.substr(5, 2);
+
+            var IMS_econTime = new Date(IMS_eyear, IMS_emonths, "01");
+
+            IMS_econTime.setDate(IMS_econTime.getDate() - 1);
+
+            var IMS_ey = IMS_econTime.getFullYear();
+            var IMS_em = (1 + IMS_econTime.getMonth());
+            IMS_em = IMS_em >= 10 ? IMS_em : '0' + IMS_em;
+            var IMS_ed = IMS_econTime.getDate();
+            IMS_ed = IMS_ed >= 10 ? IMS_ed : '0' + IMS_ed;
+
+            return IMS_ey + '-' + IMS_em + '-' + IMS_ed;
+        }
+
+        // 조회버튼 기능
+        function ItemMonthlyStockSearch() {
+
+            var formData = new FormData($("#ItemMonthlyStock_form")[0]);
+            formData.set("start_date", IMS_convertSDate());
+            formData.set("end_date", IMS_convertEDate());
+            formData.set("use_ck_S", $("#ItemMonthlyStock_form input[name=IMS_use_ck_S]").val());
+
+            $.ajax({
+                type: 'POST',
+                url: '/PrdWh/ItemMonthlyStock_S',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    // 검색 결과가 없을 경우
+                    if (result.length <= 0) {
+                        $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("dataSource", []);
+
+                        return;
+                    }
+
+
+                    if (JSON.parse(result).sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+
+                }
+            });
+
+        }
+
+        //셀 버튼 아이콘
+        function IMS_cellWithButton(container, cellInfo) {
+            $("<div>").html("<div style='float:left; padding-top: 7%;'>" + cellInfo.value + "</div><div style='float:right;' class='ItemMonthlyStock_icon-plus'></div>")
+                .appendTo(container);
+
+            $(".ItemMonthlyStock_icon-plus").dxButton({
+                icon: "search",
+                onClick: function (e) {
+
+                }
+            });
+
+        }
+
+        //셀 버튼 클릭 시 페이지 열기
+        function ItemUseList2_ItemList(e) {
+            var grid = $("#ItemMonthlyStockGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("ItemMonthlyStockGrid", grid.option("focusedRowKey"));
+
+            if (e.columnIndex == 10) {
+                var param = {
+                    start_date: IMS_convertSDate(),
+                    end_date: IMS_convertEDate(),
+                    item_cd: gridData.item_cd,
+                    item_nm: gridData.item_nm
+                };
+
+                ItemUseList2_ItemPageInfo[0].param = param;
+
+                openOtherPage(ItemUseList2_ItemPageInfo[0]);
+            }
+        }
+
+        //재조회시 0번 Focus
+        //function ItemMonthlyStockFocus() {
+        //    $("#ItemMonthlyStockGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        //}
+
+</script>
+
+<div id="ItemMonthlyStock" autoresize="Y">
+    @*<h4 class="divTitle">완제품 월간 수불</h4>*@
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+            <form id="ItemMonthlyStock_form">
+                <div class="input-wrapper">
+                    <div class="col-5 input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">기간</span>
+                        </div>
+                        <input type="text" class="form-control input-sm datepicker text-center" name="IMS_start_date" value="@DateTime.Today.AddDays(1 - DateTime.Today.Day).ToString("yyyy-MM")" />
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">재고없는 품목 제외</span>
+                        </div>
+                        <label class="p-1"></label>
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="checkbox" value="Y" name="IMS_use_ck_S" onclick="IMS_changeChk()" />
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{ Html.SetToolbar(0, true, "Search");}
+            @*@(Html.DevExtreme().Toolbar()
+                .ID("ItemMonthlyStockToolBar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("ItemMonthlyStockSearch")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("ItemMonthlyStockSearch")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )*@
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div id="ItemMonthlyStockMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("ItemMonthlyStockGrid")
+                    .ShowBorders(true)
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                    .HoverStateEnabled(true)
+                    .ShowColumnLines(true)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .KeyExpr("item_cd")
+                    .Height(900)
+                    .OnCellClick("ItemUseList2_ItemList")
+                    //.OnContentReady("ItemMonthlyStockFocus")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("item_cd").Caption("품목코드");
+                        c.Add().DataField("item_nm").Caption("품목명");
+                        c.Add().DataField("unit").Caption("단위");
+                        c.Add().DataField("old_qty").Caption("이전재고").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("ye_qty").Caption("입고예정량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("in_qty").Caption("입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("etc_in_qty").Caption("기타입고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("out_qty").Caption("출고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("etc_out_qty").Caption("기타출고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("theory_qty").Caption("이론재고량").Format("#,##0").DataType(GridColumnDataType.Number);
+                        c.Add().DataField("detail").Caption("상세").Width(50).CellTemplate(new JS("IMS_cellWithButton"));
+                    })
+                )
+            </div>
+        </div>
+    </div>
+
+
+</div>

@@ -1,0 +1,758 @@
+﻿@model HACCP.Models.MenuUser
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "MenuUser";
+    string sData = ViewData["data"] as String;
+
+    var menuUsers = @Html.Raw(Json.Encode(ViewBag.menuUsers.Data));
+    var userListJson = @Html.Raw(Json.Encode(ViewBag.userPopupList.Data));
+    var MenuUserAuth = @Html.Raw(Json.Encode(ViewBag.MenuUserAuth.Data));
+}
+
+@*사용자등록*@
+
+@*<script type="text/javascript" src="~/js/haccp/SysOp/MenuUser.js"></script>*@
+
+<script id="MenuUserJs">
+
+        var _isDuplicatedId = false;
+        var _isPasswordOk = true;
+        var _menuUserAuth;
+
+        // 페이지 로드시 오른쪽 form, 저장, 취소 버튼 비활성화
+        $(function () {
+            MenuUser_EditCheck(false);
+
+            var ds = @userListJson;
+
+            var columns = [
+                { dataField: "emp_cd", caption: "사원코드" },
+                { dataField: "emp_nm", caption: "사원명" },
+                { dataField: "dept_cd", caption: "부서코드" },
+                { dataField: "dept_nm", caption: "부서명" }
+            ];
+
+            createPopup("MenuUser", "사원조회", ds, columns, "emp_cd");
+
+            $($("#MenuUserAttatchDocInsertBtn")).click(function (event) {
+                MenuUserSignUpload(event);
+            });
+
+            if ((@menuUsers).length > 0) {
+                $("#MenuUserGrid").dxDataGrid("option", "dataSource", JSON.parse(@menuUsers));
+                $("#MenuUserGrid").dxDataGrid("instance").option("focusedRowIndex", 1);
+            }
+            else {
+                $("#MenuUserGrid").dxDataGrid("option", "dataSource", []);
+            }
+            if ((@MenuUserAuth).length > 0) {
+                _menuUserAuth = JSON.parse(@MenuUserAuth)[0];
+            }
+            else {
+                _menuUserAuth = "";
+            }
+
+            if (_menuUserAuth.form_edit != "Y") {
+                $("#MenuUserEdit").remove();
+            }
+            if (_menuUserAuth.form_delete != "Y") {
+                $("#MenuUserDelete").remove();
+            }
+
+        });
+
+        // 로그아웃 컬럼 버튼 표시를 위한 로그인 체크
+        var isLogedIn = function (e) {
+            return e.row.data.current_on != null && e.row.data.current_on != "";
+        }
+
+        // 사원 조회 팝업
+        function searchUserBtn() {
+
+            var popup = $("#MenuUserPopup").dxPopup("instance");
+            popup.show();
+        }
+
+        // 사원조회 팝업 로우 더블클릭
+        function MenuUserRowDblClick(selectedItems) {
+
+            $("#MenuUserForm input[name=emp_cd]").val(selectedItems.data.emp_cd);
+
+            MenuUserSearch();
+
+            var popup = $("#MenuUserPopup").dxPopup("instance");
+
+            popup.hide();
+        }
+
+        // 수정중인지 체크
+        function MenuUser_EditCheck(nowEdit) {
+
+            if (nowEdit) {
+
+                $("#MenuUserSave").dxButton().parent().parent().removeClass("display-none");
+                $("#MenuUserUndo").dxButton().parent().parent().removeClass("display-none");
+                $("#MenuUserEdit").dxButton().parent().parent().addClass("display-none");
+                $("#MenuUserDelete").dxButton().parent().parent().addClass("display-none");
+
+                $("#MenuUserRightForm :disabled").attr('disabled', false);
+                $("#MenuUserGrid").dxDataGrid("option", "disabled", true);
+            }
+            if (!nowEdit) {
+
+                $("#MenuUserSave").dxButton().parent().parent().addClass("display-none");
+                $("#MenuUserUndo").dxButton().parent().parent().addClass("display-none");
+                $("#MenuUserEdit").dxButton().parent().parent().removeClass("display-none");
+                $("#MenuUserDelete").dxButton().parent().parent().removeClass("display-none");
+
+                $("#MenuUserRightForm :enabled").attr('disabled', true);
+                $("#MenuUserGrid").dxDataGrid("option", "disabled", false);
+
+                _isIdChanged = false;
+                _isDuplicatedId = false;
+            }
+
+        }
+
+        // 죄측 그리드 선택 변경시 실행
+        function MenuUserFocus_changed(e) {
+
+            if (!e.row || !e.row.data) {
+                return;
+            }
+
+            if (e.row.rowType === "group") {
+                return;
+            }
+
+            fillData(e.row.data);
+        }
+
+        // 우측 폼에 데이터 채우기
+        function fillData(data) {
+
+            console.log(data);
+
+            $("#MenuUserRightForm")[0].reset();
+
+            $("#MenuUserRightForm input[name=emp_cd]").val(data.emp_cd);
+            $("#MenuUserRightForm input[name=emp_nm]").val(data.emp_nm);
+            $("#MenuUserRightForm input[name=dept_cd]").val(data.dept_cd);
+            $("#MenuUserRightForm input[name=dept_nm]").val(data.dept_nm);
+            $("#MenuUserRightForm input[name=user_id]").val(data.user_id);
+            $("#MenuUserRightForm input[name=user_passwd]").val(data.user_passwd);
+            $("#MenuUserRightForm input[name=pre_user_passwd]").val(data.user_passwd);
+            $("#MenuUserRightForm select[name=user_security]").val(data.user_security);
+            $("#MenuUserRightForm input[name=user_nm]").val(data.user_nm);
+            if (data.use_check === "Y") {
+                $("#MenuUserRightForm input:radio[name='use_check']:radio[value='Y']").prop('checked', true);
+            } else {
+                $("#MenuUserRightForm input:radio[name='use_check']:radio[value='N']").prop('checked', true);
+            }
+            $("#MenuUserRightForm input[name=start_time]").val(data.start_time);
+            $("#MenuUserRightForm input[name=end_time]").val(data.end_time);
+
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/SelectSign',
+                data: {
+                    fingerprint_emp: data.emp_cd
+                },
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        $("#MenuUserSignDiv").attr('src', '/Content/image/defaultSign.png');
+                    }
+
+                    $("#MenuUserSignDiv").attr('src', result);
+                }
+            })
+
+            // TO-DO. 수정 항목들 수정 로직 추가
+        }
+
+        // 조회
+        function MenuUserSearch() {
+
+            var form = $('#MenuUserForm')[0];
+            var data = new FormData(form);
+
+            menutab('MenuUserMenuTab', 'MenuUserMenuDiv', 1);
+
+            $('#MenuUserRightForm')[0].reset();
+            $("textarea", $('#MenuUserRightForm')).text("");
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/SysOp/SelectMenuUser',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+                    if (!UtilView.isEmpty(result) && result.length > 0) {
+                        $("#MenuUserGrid").dxDataGrid("option", "dataSource", JSON.parse(result));
+                    } else {
+                        $("#MenuUserGrid").dxDataGrid("option", "dataSource", []);
+                    }
+                }
+            })
+            UtilView.setGridFocus("G", "MenuUserGrid");
+        }
+
+        // 수정
+        function MenuUserEdit() {
+            var grid = $("#MenuUserGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                MenuUser_EditCheck(true);
+            }
+            else {
+                alert("선택된 데이터가 없습니다.");
+            }
+        }
+
+        // 저장
+        function MenuUserSave() {
+
+            if (!UtilView.checkValidForm("MenuUserRightForm")) {
+                return;
+            }
+
+            var errorCnt = 0;
+            if (_isDuplicatedId) {
+                errorCnt++;
+
+                $("#checkResText").text("중복된 ID는 사용할수 없습니다.");
+                $("#checkResText").addClass("text-danger");
+            }
+
+            if (!_isPasswordOk) {
+                errorCnt++;
+            }
+
+            if (errorCnt > 0) {
+                alert("사용자 ID, 비밀번호, 사용여부는 필수 입력항목입니다.");
+                return;
+            }
+
+            var form = $('#MenuUserRightForm')[0];
+            var data = new FormData(form);
+
+            data.set("chk_user_id", !_isDuplicatedId ? 'Y' : 'N');
+            data.set("chk_user_passwd", _isPasswordOk ? 'Y' : 'N');
+
+            if (data.get("use_check") === "N")
+                gubun = "U";
+            else
+                gubun = "I";
+
+            data.set("gubun", gubun);
+
+            $.ajax({
+                type: 'POST',
+                enctype: 'multipart/form-data',
+                url: '/SysOp/MenuUserCRUD',
+                data: data,
+                processData: false,
+                contentType: false,
+                success: function (result) {
+                    //MenuUser_EditCheck(false);
+                    //MenuUserSearch();                
+                }
+            })
+
+            $("#checkResText").text("");
+            $("#checkResText").removeClass();
+            $("#passwordCheckText").text("");
+            $("#passwordCheckText").removeClass();
+
+            MenuUser_EditCheck(false);
+            MenuUserSearch();                
+
+        }
+
+        // 취소
+        function MenuUserUndo() {
+
+            var grid = $("#MenuUserGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                var data = getGridRowByKey('MenuUserGrid', grid.option("focusedRowKey"));
+                console.log(data);
+
+                fillData(data);
+            }
+
+            $("#checkResText").text("");
+            $("#checkResText").removeClass();
+            $("#passwordCheckText").text("");
+            $("#passwordCheckText").removeClass();
+
+
+            MenuUser_EditCheck(false);
+        }
+
+        // 삭제
+        function MenuUserDelete() {
+            var grid = $("#MenuUserGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                if (!confirm("선택된 사용자의 정보를 삭제하시겠습니까?")) {
+
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    enctype: 'multipart/form-data',
+                    url: '/SysOp/MenuUserCRUD',
+                    data: {
+                        emp_cd: $("#MenuUserRightForm input[name=emp_cd]").val(),
+                        gubun: "D"
+                    },
+                    success: function (result) {
+                        MenuUser_EditCheck(false);
+                        MenuUserSearch();
+                    }
+                });
+            }
+            else {
+                alert("선택된 사용자가 없습니다.");
+                return;
+            }
+
+        }
+
+        // ID 중복 체크
+        function MenuUserduplicateCheck() {
+
+            $("#checkResText").text("");
+            $("#checkResText").removeClass();
+            $.ajax({
+                type: 'POST',
+                url: '/SysOp/IdDuplicateCheck',
+                data: {
+                    emp_cd: $("#MenuUserRightForm input[name=emp_cd]").val(),
+                    user_id: $("#MenuUserRightForm input[name=user_id]").val()
+                },
+                success: function (result) {
+                    var res;
+
+                    _isIdChanged = false;
+
+                    if (result == -1) {
+                        _isDuplicatedId = true;
+                        res = {
+                            text: "ID를 입력해주세요.",
+                            class: "text-danger"
+                        }
+                    } else if (result == 1) {
+                        _isDuplicatedId = true;
+
+                        res = {
+                            text: "이미 사용중인 ID 입니다.",
+                            class: "text-danger"
+                        }
+                    } else {
+                        _isDuplicatedId = false;
+
+                        res = {
+                            text: "사용 가능한 ID 입니다.",
+                            class: "text-success"
+                        }
+                    }
+
+                    $("#checkResText").text(res.text);
+                    $("#checkResText").addClass(res.class);
+                }
+            })
+        }
+
+        // 패스워드 적합성 검사
+        function MenuUserPasswordCheck() {
+
+            $("#passwordCheckText").removeClass();
+
+            //$.ajax({
+            //    type: 'POST',
+            //    url: '/SysOp/PasswordReuseCheck',
+            //    data: {
+            //        emp_cd: $("#MenuUserFormEmpCd").val(),
+            //        user_passwd: $("input[name=user_passwd]").val()
+            //    },
+            //    success: function (result) {
+
+            //    }
+            //});
+
+            if ($("#MenuUserRightForm input[name=user_passwd]").val().length <= 0) {
+                $("#passwordCheckText").text("패스워드를 입력해주세요.");
+                $("#passwordCheckText").addClass("text-danger");
+                _isPasswordOk = false;
+                return;
+            }
+
+            if ($("#MenuUserRightForm input[name=user_passwd]").val().length < 6) {
+                $("#passwordCheckText").text("입력하신 패스워드는 허용하는 최소자수(6)에 미달합니다.");
+                $("#passwordCheckText").addClass("text-danger");
+                _isPasswordOk = false;
+                return;
+            }
+
+            if ($("#MenuUserRightForm input[name=user_passwd]").val().length > 50) {
+                $("#passwordCheckText").text("입력하신 패스워드는 허용하는 최대자수(50)를 초과했습니다.");
+                $("#passwordCheckText").addClass("text-danger");
+                _isPasswordOk = false;
+                return;
+            }
+
+            if ($("#MenuUserRightForm input[name=user_passwd]").val() === $("#MenuUserRightForm input[name=pre_user_passwd]").val()) {
+                $("#passwordCheckText").text("사용가능합니다.");
+                $("#passwordCheckText").addClass("text-success");
+                _isPasswordOk = true;
+
+            } else {
+                $("#passwordCheckText").text("입력하신 패스워드가 서로 일치하지 않습니다.");
+                $("#passwordCheckText").addClass("text-danger");
+                _isPasswordOk = false;
+            }
+        }
+
+        // 우측 하단 탭 이동(사용자 등록, 사용자 사인/지문 관리)
+        function menutab(tabId, divId, tabNum) {
+            $("#" + divId + " > div").addClass("display-none");
+            $("#" + tabId + " a").removeClass("active");
+
+            $("#" + divId + "_" + tabNum).removeClass("display-none");
+            $("#" + tabId + " li:nth-child(" + tabNum + ")").children('a').addClass("active");
+        }
+
+        // 사인 업로드 버튼
+        function MenuUserSignUpload() {
+
+            var fileUploader = $('#MenuUserSignUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        }
+
+        // 사인 업로드
+        function singUploadValueChanged(e) {
+
+            var url = e.component.option("uploadUrl");
+            url = updateQueryStringParameter(url, "empCd", $("#MenuUserRightForm input[name=emp_cd]").val());
+
+            e.component.option("uploadUrl", url);
+        }
+
+        // 사인 쿼리스트링 생성
+        function updateQueryStringParameter(uri, key, value) {
+            var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+            var separator = uri.indexOf('?') !== -1 ? "&" : "?";
+            if (uri.match(re)) {
+                return uri.replace(re, '$1' + key + "=" + value + '$2');
+            }
+            else {
+                return uri + separator + key + "=" + value;
+            }
+        }
+
+</script>
+
+
+<div id="MenuUser" autoresize="Y">
+
+    <div id="MenuUserPopup"></div>
+
+    @* === 그리드 상단 검색조건 === *@
+    <div id="MenuUserTop" class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="MenuUserForm">
+
+                <div class="input-wrapper" @*style="border:1px blue solid;"*@>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사원코드</span>
+                        </div>
+                        <input type="text" class="form-control" name="emp_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchUserBtn()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="0" name="user_security" checked="checked" />
+                        </div>
+                        <span class="form-control-sm"><label>전체사원</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" name="user_security" />
+                        </div>
+                        <span class="form-control-sm"><label>등록사원</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" name="user_security" />
+                        </div>
+                        <span class="form-control-sm"><label>허가사원</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        @* === CRUD 버튼 === *@
+    <div class="CRUD-btn col-4">
+        @{Html.SetToolbar(0, true, "Search;Edit;Delete;Save;Undo"); }
+    </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-8 pr-1">
+            @* === 메인 그리드 === *@
+
+            <fieldset id="MenuUserLeftMain" class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("MenuUserGrid")
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Height(900)
+                    .KeyExpr("emp_cd")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .AllowColumnResizing(true)
+                    .ColumnAutoWidth(true)
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .HoverStateEnabled(true)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("emp_cd").Caption("사원코드");
+                        c.Add().DataField("emp_nm").Caption("사원명");
+                        c.Add().DataField("retire_yn").Caption("퇴사여부").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.retire_yn == ""Y""; }");
+                        c.Add().DataField("finger_ck").Caption("지문등록").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.finger_ck == ""Y""; }");
+                        c.Add().DataField("door_finger_ck").Caption("도어락지문등록").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.door_finger_ck == ""Y""; }");
+                        c.Add().DataField("door2_finger_ck").Caption("도어락2지문등록").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.door2_finger_ck == ""Y""; }");
+                        c.Add().DataField("use_check").Caption("사용여부").DataType(GridColumnDataType.Boolean)
+                                .CalculateCellValue(@"function(rowData) { return rowData.use_check == ""Y""; }");
+                        c.Add().DataField("current_on").Caption("로그온상태");
+                        @*c.Add().Type(GridCommandColumnType.Buttons)
+                            .Buttons(btn =>
+                            {
+                            btn.Add()
+                                .Hint("LogOut")
+                                .Icon("clear")
+                                .Visible(new JS("isLogedIn"));
+                                        .OnClick(@<text>cloneIconClick</text>);
+                                }).Caption("로그아웃");*@
+                        c.Add().DataField("dept_nm").Caption("부서명").GroupIndex(0);
+                    })
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .OnFocusedRowChanged("MenuUserFocus_changed")
+                )
+
+            </fieldset>
+
+        </div>
+
+        <div id="MaterialMaster2RightMain" class="col-4 pl-0">
+
+            <div class="box">
+
+                <div class="divName">
+                    <p>사용자 등록</p>
+                </div>
+
+                @* === 사용자 등록, 사용자 사인/지문 관리 탭 === *@
+                <ul class="nav nav-tabs" id="MenuUserMenuTab">
+                    <li class="nav-item">
+                        <a class="nav-link active" onclick="menutab('MenuUserMenuTab', 'MenuUserMenuDiv', 1)">사용자 등록</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" onclick="menutab('MenuUserMenuTab', 'MenuUserMenuDiv', 2)">사용자 사인/지문 관리</a>
+                    </li>
+                </ul>
+
+
+                <div id="MenuUserMenuDiv">
+
+                    @* === 주요정보 === *@
+                    <div class="menuDiv" id="MenuUserMenuDiv_1">
+
+                        <form id="MenuUserRightForm">
+
+                            <div class="input-wrapper">
+                                <label class="col-3">사원코드</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="emp_cd" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">사원명</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="emp_nm" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">부서코드</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="dept_cd" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">부서명</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control col-12" name="dept_nm" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">사용자 ID</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control required" name="user_id" onkeydown="MenuUserduplicateCheck()" onblur="MenuUserduplicateCheck()">
+                                </div>
+                                <text id="checkResText"></text>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">패스워드</label>
+                                <div class="input-group col-4">
+                                    <input type="password" class="form-control required" name="user_passwd" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">패스워드 확인</label>
+                                <div class="input-group col-4">
+                                    <input type="password" class="form-control required" name="pre_user_passwd" onkeyup="MenuUserPasswordCheck()" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3"></label>
+                                <div class="input-group col-8">
+                                    <text id="passwordCheckText"></text>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">별명</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="user_nm" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">보안등급</label>
+                                <div class="input-group col-4">
+                                    <select class="form-control" name="user_security">
+                                        <option value="0">0</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">출입통제 ID</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control " name="user_doorlock_id" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">출입통제 P/W</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control " name="user_doorlock_password" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">허용여부</label>
+                                <div class="input-group col-4">
+                                    <label>사용 <input type="radio" value="Y" name="use_check" /></label>
+                                    <label>사용불가 <input type="radio" value="N" name="use_check" /></label>
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">시작일시</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="start_time" readonly="readonly" />
+                                </div>
+                            </div>
+
+                            <div class="input-wrapper">
+                                <label class="col-3">종료일시</label>
+                                <div class="input-group col-4">
+                                    <input type="text" class="form-control" name="end_time" readonly="readonly" />
+                                </div>
+                            </div>
+
+                        </form>
+
+                    </div>
+
+                    <div class="menuDiv display-none" id="MenuUserMenuDiv_2">
+
+                        <div class="input-wrapper display-flex">
+
+                            <label class="col-4">사용자 사인/지문 관리</label>
+                            <div class="col-6">
+                                <img id="MenuUserSignDiv" class="sign-image" src="" alt="" />
+                            </div>
+
+                            <div class="align-end-only input-wrapper">
+                                <button id="MenuUserAttatchDocInsertBtn" class="btn btn-sm btn-secondary" type="button">사인첨부</button>
+                                @(Html.DevExtreme().FileUploader()
+                                    .Visible(false)
+                                    .ID("MenuUserSignUploader")
+                                    .Name("signImage")
+                                    .Multiple(false)
+                                    .Accept("image/*")
+                                    .UploadMode(FileUploadMode.Instantly)
+                                    .UploadUrl(Url.Action("UploadSignAsync", "SysOp"))
+                                    .MaxFileSize(1000000)
+                                    .OnValueChanged("singUploadValueChanged")
+                                    .OnUploaded("MenuUserSearch")
+                                )
+                            </div>
+                        </div>
+
+                        <div class="align-center">
+                            <span class="text-warning">권장 사이즈 : 210 px * 70 px</span>
+                            <br />
+                            <span class="text-warning">권장 확장자 : .png</span>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

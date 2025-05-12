@@ -1,0 +1,750 @@
+﻿@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "SignSet_InputDetail";
+
+    var signData = @Html.Raw(Json.Encode(ViewBag.signData.Data));
+    var signatoryData = @Html.Raw(Json.Encode(ViewBag.signatoryData.Data));
+    var delegateData = @Html.Raw(Json.Encode(ViewBag.delegateData.Data));
+    var empData = @Html.Raw(Json.Encode(ViewBag.empData.Data));
+    var signPopupData = @Html.Raw(Json.Encode(ViewBag.signPopupData.Data));
+
+}
+
+@*전자서명 권한 설정*@
+
+<script id="SignSet_InputDetailJs">
+
+    var _empPopupCellClickEvent;
+    var SignSet_InputDetail_Focus;
+
+    $(function () {
+
+        if (@signData) {
+            $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@signData));
+        }
+        else {
+            $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+        if (@signatoryData) {
+            $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@signatoryData));
+        }
+        else {
+            $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+        if (@delegateData) {
+            $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@delegateData));
+        }
+        else {
+            $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+        if (@empData) {
+            $("#SignSetDetailEmpDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@empData));
+        }
+        else {
+            $("#SignSetDetailEmpDataGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+         var columns1 = [
+             { dataField: "sign_set_cd", caption: "서명코드" },
+             { dataField: "sign_set_nm", caption: "서명이름" }
+         ];
+         var columns2 = [
+             { dataField: "emp_cd", caption: "사원코드" },
+             { dataField: "emp_nm", caption: "사원명" },
+             { dataField: "dept_cd", caption: "부서코드" },
+             { dataField: "dept_nm", caption: "부서명" },
+         ];
+
+        createPopup("SignSet_InputDetail", "서명코드 조회", @signPopupData, columns1, "sign_set_cd");
+        createPopup("SignSet_InputDetailEmp", "사원 조회", @empData, columns2, "emp_cd");
+
+         signatoryEditChk(false);
+
+    });
+
+    //function signSetSearchBtn() {
+    //    $("#SignSet_InputDetailPopup").dxPopup("instance").show();
+    //}
+
+    //function SignSet_InputDetailRowDblClick(selectedItems) {
+
+    //    var data = selectedItems.data;
+
+    //    $("#SignSet_InputDetail input[name=sign_set_cd]").val(data.sign_set_cd);
+    //    $("#SignSet_InputDetail input[name=sign_set_nm]").val(data.sign_set_nm);
+
+    //    var select = $("input[name=signDetailSelect]:checked").val();
+    //    var sign_set_cd = $("#SignSet_InputDetail input[name=sign_set_cd]").val();
+
+    //    $("#SignSet_InputDetailPopup").dxPopup("instance").hide();
+
+    //}
+
+    function SignSetDetailSearch() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectSignSetData',
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", jsonData);
+
+                } catch (e) {
+                    $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+    }
+
+
+    // 서명자 조회
+    function selectSignatory(signSetCd) {
+
+        $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectSignatory',
+            async:false,
+            data: {
+                sign_set_cd: signSetCd
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+                    $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", jsonData);
+
+                    selectDelegate(jsonData[0]);
+
+                } catch (e) {
+                    $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+    }
+
+    // 전자서명 포커스 이동
+    function focusChangedSignDetail(e) {
+        if (e != undefined || e != null) {
+            SignSet_InputDetail_Focus = e.row.key;
+            var signSetCd = e.row.data.sign_set_cd;
+            selectSignatory(signSetCd);
+        }
+        else {
+            var grid = $("#SignSetDetailDataGrid").dxDataGrid("instance");
+            if (grid.totalCount() > 0) {
+                try {
+                    var data = getGridRowByKey('SignSetDetailDataGrid', SignSet_InputDetail_Focus);
+                    selectSignatory(data.sign_set_cd);
+                }
+                catch (e) {
+
+                }
+            }
+        }
+    }
+
+    function SignSetDetail_Ready(e) {
+
+        if (e.component.totalCount() <= 0) {
+            try {
+                $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", []);
+                $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+            } catch (e) {
+            }
+        }
+        else {
+            focusChangedSignDetail();
+        }
+    }
+
+    //저장 버튼 비활성화
+    function SignSetDetail_ToolbarEdit(e) {
+
+        var toolbarItems = e.toolbarOptions.items;
+
+        $.each(toolbarItems, function (_, item) {
+            if (item.name == "saveButton") {
+                item.visible = false;
+            }
+        });
+    }
+
+    // 대리자 조회
+    function selectDelegate(data) {
+
+        var grid = $("#SignatoryDataGrid").dxDataGrid("instance");
+        if (grid.totalCount() > 0) {
+            var gridData = getGridRowByKey('SignatoryDataGrid', grid.option("focusedRowKey"));
+
+            $("#DelegateDataGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+            $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+
+            GetDelegateData(gridData.sign_set_cd, gridData.sign_set_dt_id);
+        }
+        else {
+            GetDelegateData(data.sign_set_cd, data.sign_set_dt_id);
+        }
+    }
+
+
+    function GetDelegateData(sign_set_cd, sign_set_dt_id) {
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectDelegate',
+            data: {
+                sign_set_cd: sign_set_cd,
+                sign_set_dt_id: sign_set_dt_id
+            },
+            success: function (result) {
+
+                try {
+                    var jsonData = JSON.parse(result);
+
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", jsonData);
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+                } catch (e) {
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("focusedRowKey", "");
+                }
+            }
+        });
+
+    }
+
+    // 수정중인지 체크
+    function signatoryEditChk(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#SignSet_InputDetailSave").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputDetailUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputDetailEdit").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputDetailDelete").dxButton().parent().parent().addClass("display-none");
+
+        }
+        if (!nowEdit) {
+
+            $("#SignSet_InputDetailSave").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputDetailUndo").dxButton().parent().parent().addClass("display-none");
+            $("#SignSet_InputDetailEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#SignSet_InputDetailDelete").dxButton().parent().parent().removeClass("display-none");
+
+        }
+    }
+
+    // 입력 버튼 클릭
+    function signSetDetailInput() {
+        signatoryEditChk(true);
+    }
+
+    // 수정 버튼 클릭
+    function SignSet_InputDetailEdit() {
+        signatoryEditChk(true);
+
+        var editing = {
+            allowAdding: true,
+            allowUpdating: true,
+            selectTextOnEditStart: true,
+            mode: 'batch'
+        }
+
+        $("#SignatoryDataGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 서명자 삭제
+    function SignSet_InputDetailDelete() {
+
+        if (!confirm("선택된 서명자를 삭제하시겠습니까?")) {
+            return;
+        }
+
+        if ($("#DelegateDataGrid").dxDataGrid("instance").totalCount() > 0) {
+            alert("대리자를 모두 삭제후 삭제 가능합니다.");
+            return;
+        }
+
+        var grid = $("#SignatoryDataGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('SignatoryDataGrid', grid.option("focusedRowKey"));
+
+        var data = {
+            gubun: "D1",
+            sign_set_cd: gridData.sign_set_cd,
+            sign_set_dt_id: gridData.sign_set_dt_id
+        }
+
+        signatoryCRUD(data);
+    }
+
+    // 저장 버튼 클릭
+    async function SignSet_InputDetailSave() {
+
+        await $("#SignatoryDataGrid").dxDataGrid("instance").saveEditData();
+
+        signatoryEditChk(false);
+
+        var editing = {
+            allowAdding: false,
+            allowUpdating: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#SignatoryDataGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 취소 버튼 클릭
+    function SignSet_InputDetailUndo() {
+        signatoryEditChk(false);
+
+        var editing = {
+            allowAdding: false,
+            allowUpdating: false,
+            selectTextOnEditStart: false,
+        }
+
+        $("#SignatoryDataGrid").dxDataGrid("option", "editing", editing);
+    }
+
+    // 서명자 초기화
+    function initSignatory(e) {
+        var ds = $("#SignatoryDataGrid").dxDataGrid("option", "dataSource");
+
+        e.data.sign_set_dt_seq = (ds.length + 1);
+    }
+
+    // 사원 그리드 목록 조회
+    function getEmpGrid(e) {
+
+        _empPopupCellClickEvent = e;
+
+        if (e.columnIndex == 2 && e.row.isEditing) {
+
+            var empPopup = $("#SignSet_InputDetailEmpPopup").dxPopup("instance");
+            empPopup.show();
+        }
+    }
+
+    // 서명자 그리드 책임자 팝업 로우 더블클릭
+    function SignSet_InputDetailEmpRowDblClick(selectedItems) {
+
+        var data = selectedItems.data;
+
+        var dataGrid = $("#SignatoryDataGrid").dxDataGrid("instance");
+        dataGrid.cellValue(_empPopupCellClickEvent.rowIndex, "emp_cd", data.emp_cd);
+        dataGrid.cellValue(_empPopupCellClickEvent.rowIndex, "emp_nm", data.emp_nm);
+
+        var empPopup = $("#SignSet_InputDetailEmpPopup").dxPopup("instance");
+        empPopup.hide();
+    }
+
+    // 서명자 정보 수정
+    function signatoryUpdate(info) {
+
+        var data = info.data;
+
+        _isEdited = true;
+
+        data.gubun = "U";
+
+        signatoryCRUD(data);
+    }
+
+    // 서명자 정보 입력
+    function signatoryInsert(info) {
+
+        var data = info.data;
+
+        _isEdited = true;
+
+        var grid = $("#SignSetDetailDataGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('SignSetDetailDataGrid', grid.option("focusedRowKey"));
+
+        data.gubun = "I1";
+        data.sign_set_cd = gridData.sign_set_cd;
+        data.sign_set_dt_id = "";
+
+        signatoryCRUD(data);
+
+    }
+
+    // 서명자 정보 CRUD
+    function signatoryCRUD(data) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SignatoryCRUD',
+            data: data,
+            success: function (result) {
+
+                try {
+                    var json = JSON.parse(result);
+
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                } catch (e) {
+                    var grid = $("#SignSetDetailDataGrid").dxDataGrid("instance");
+                    var gridData = getGridRowByKey('SignSetDetailDataGrid', grid.option("focusedRowKey"));
+
+                    selectSignatory(gridData.sign_set_cd);
+                }
+            }
+        });
+    }
+
+    // 대리자 추가
+    function addDelegate() {
+
+        var grid = $("#SignatoryDataGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('SignatoryDataGrid', grid.option("focusedRowKey"));
+
+        if (gridData.representative_yn === "N") {
+            alert("대리서명이 불가능한 서명입니다.");
+            return;
+        }
+
+        var empGrid = $("#SignSetDetailEmpDataGrid").dxDataGrid("instance");
+        var empGridData = getGridRowByKey('SignSetDetailEmpDataGrid', empGrid.option("focusedRowKey"));
+
+        var data = {
+            gubun: "I2",
+            sign_set_cd: gridData.sign_set_cd,
+            sign_set_dt_id: gridData.sign_set_dt_id,
+            emp_cd: empGridData.emp_cd
+        }
+
+        delegateCRUD(data);
+    }
+
+    // 대리자 제거
+    function removeDelegate() {
+
+        var grid = $("#SignatoryDataGrid").dxDataGrid("instance");
+        var gridData = getGridRowByKey('SignatoryDataGrid', grid.option("focusedRowKey"));
+
+        var grid2 = $("#DelegateDataGrid").dxDataGrid("instance");
+        var gridData2 = getGridRowByKey('DelegateDataGrid', grid2.option("focusedRowKey"));
+
+        var data = {
+            gubun: "D2",
+            sign_set_cd: gridData.sign_set_cd,
+            sign_set_dt_id: gridData.sign_set_dt_id,
+            emp_cd: gridData2.emp_cd
+        }
+
+        delegateCRUD(data);
+    }
+
+    // 대리자 CRUD
+    function delegateCRUD(data) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/DelegateCRUD',
+            data: data,
+            success: function (result) {
+
+                //if (JSON.parse(result).sessionLoss) {
+                //    alert("세션이 만료되었습니다.");
+                //    sessionStorage.clear();
+                //    location.replace("/Comm/Login");
+                //}
+
+                selectDelegate();
+
+            }
+        });
+    }
+
+    // 상단 검색조건 구분 라디오 박스 선택 변경
+    $("input:radio[name=signDetailSelect]").click(function () {
+
+        var select = $("input[name=signDetailSelect]:checked").val();
+        var sign_set_cd = $("#SignSet_InputDetail input[name=sign_set_cd]").val();
+
+        selectSignSetDetail(select, sign_set_cd);
+    })
+
+    // 전자서명 목록 조회
+    function selectSignSetDetail(select, sign_set_cd) {
+        $.ajax({
+            type: 'POST',
+            url: '/SysOp/SelectSignDetail',
+            data: {
+                select: select,
+                sign_set_cd: sign_set_cd
+            },
+            success: function (result) {
+
+                if (JSON.parse(result).sessionLoss) {
+                    alert("세션이 만료되었습니다.");
+                    sessionStorage.clear();
+                    location.replace("/Comm/Login");
+                }
+
+                if (result.length <= 0) {
+                    $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#SignatoryDataGrid").dxDataGrid("instance").option("dataSource", []);
+                    $("#DelegateDataGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+
+                $("#SignSetDetailDataGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+            }
+        });
+    }
+
+</script>
+
+
+<div id="SignSet_InputDetail" autoresize="Y">
+
+    <div id="SignSet_InputDetailPopup"></div>
+    <div id="SignSet_InputDetailEmpPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <div class="input-wrapper">
+
+                <form id="SignSet_InputDetailSearchForm">
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">구분</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="1" name="signDetailSelect" checked="checked" />
+                        </div>
+                        <span class="form-control-sm"><label>시험관리 사용</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="2" name="signDetailSelect" />
+                        </div>
+                        <span class="form-control-sm"><label>문서관리 사용</label></span>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @(Html.DevExtreme().Toolbar()
+                .ID("SignSetDetailToolbar")
+                .Items(items =>
+                {
+                    items.Add()
+                        .Widget(w => w
+                        .Button()
+                        .Type(ButtonType.Default)
+                        .StylingMode(ButtonStylingMode.Contained)
+                        .ID("SignSetDetailSearch")
+                        .Icon("search")
+                        .Text("조회")
+                        .OnClick("SignSetDetailSearch")
+                        )
+                        .Location(ToolbarItemLocation.After);
+                })
+            )
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-12">
+            <div class="box">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("SignSetDetailDataGrid")
+                    .KeyExpr("sign_set_cd")
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Height(350)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .OnFocusedRowChanged("focusChangedSignDetail")
+                    .OnContentReady("SignSetDetail_Ready")
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("sign_set_cd")
+                            .Caption("서명코드");
+                        columns.Add()
+                            .DataField("sign_set_nm")
+                            .Caption("서명이름");
+                        columns.Add()
+                            .DataField("sign_set_nm_dis")
+                            .Caption("서명이름(Display)");
+                        columns.Add()
+                            .DataField("sign_set_content")
+                            .Width(700)
+                            .Caption("서명내용");
+                    })
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-4">
+
+            <div class="CRUD-btn">
+                @{Html.SetToolbar(0, true, "Edit;Delete;Save;Undo"); }
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                .ID("SignatoryDataGrid")
+                .KeyExpr("sign_set_dt_id")
+                .ShowBorders(true)
+                .FocusedRowEnabled(true)
+                .FocusedRowIndex(0)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .Height(900)
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .OnInitNewRow("initSignatory")
+                .OnCellClick("getEmpGrid")
+                .OnRowUpdated("signatoryUpdate")
+                .OnRowInserted("signatoryInsert")
+                .OnFocusedRowChanged("selectDelegate")
+                .OnToolbarPreparing("SignSetDetail_ToolbarEdit")
+                .Columns(columns =>
+                {
+                    columns.Add()
+                        .DataField("sign_set_dt_seq")
+                        .Caption("순서")
+                        .AllowSorting(true).SortIndex(0).SortOrder(SortOrder.Asc);
+                    columns.Add()
+                        .DataField("sign_set_dt_nm")
+                        .Caption("서명의미");
+                    columns.Add()
+                        .DataField("emp_cd")
+                        .Caption("책임자코드");
+                    columns.Add()
+                        .DataField("emp_nm")
+                        .Caption("책임자");
+                    columns.Add()
+                        .DataField("necessary_yn")
+                        .Caption("필수")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.necessary_yn == ""Y"" || rowData.necessary_yn == true); }");
+                    columns.Add()
+                        .DataField("representative_yn")
+                        .Caption("대리")
+                        .DataType(GridColumnDataType.Boolean)
+                        .CalculateCellValue(@"function(rowData) { return (rowData.representative_yn == ""Y"" || rowData.representative_yn == true); }");
+                })
+            )
+            </div>
+        </div>
+
+        <div class="col-3 pr-1 pl-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("DelegateDataGrid")
+                    .KeyExpr("emp_cd")
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_nm")
+                            .Caption("대리자");
+                        columns.Add()
+                            .DataField("use_yn")
+                            .Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+                    })
+                )
+            </div>
+        </div>
+
+        <div class="col-1 employeeGroupBtn">
+            <button class="btn btn-primary addBtn" onclick="addDelegate()">
+                @(Html.DevExtreme().Button()
+                        .ID("SignSetInputDetailLeftArrow")
+                        .Icon("arrowleft")
+                    )
+            </button>
+            <button class="btn btn-danger removeBtn" onclick="removeDelegate()">
+                @(Html.DevExtreme().Button()
+                        .ID("SignSetInputDetailRightArrow")
+                        .Icon("arrowright")
+                    )
+            </button>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID("SignSetDetailEmpDataGrid")
+                    .KeyExpr("emp_cd")
+                    .ShowBorders(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .ColumnAutoWidth(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Columns(columns =>
+                    {
+                        columns.Add()
+                            .DataField("emp_nm")
+                            .Caption("이름");
+                        columns.Add()
+                            .DataField("emp_cd")
+                            .Caption("사번");
+                        columns.Add()
+                            .DataField("dept_nm")
+                            .Caption("부서명");
+                    })
+                )
+            </div>
+        </div>
+
+    </div>
+
+</div>

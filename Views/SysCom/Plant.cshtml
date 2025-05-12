@@ -1,0 +1,694 @@
+﻿@using System.Data
+@using HACCP.Libs.Views
+
+@{
+    Layout = null;
+    ViewData["Title"] = "Plant";
+
+    var plantData = @Html.Raw(Json.Encode(ViewBag.plantData.Data));
+    var empData = @Html.Raw(Json.Encode(ViewBag.empData.Data));
+}
+
+@*사업장 관리*@
+
+<script id="PlantJs">
+
+    var _plantCRUDGubun;
+    var _plantMainYn;
+
+    $(function () {
+        setDatePicker("#Plant .datepicker");
+
+        var plant_data = @plantData;
+
+        if (plant_data.length > 0) {
+            $("#PlantGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@plantData));
+            $("#PlantGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        else {
+            $("#PlantGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+        var columns = [
+        { dataField: "emp_cd", caption: "사원코드" },
+        { dataField: "emp_nm", caption: "사원명" },
+        { dataField: "dept_cd", caption: "부서코드" },
+        { dataField: "dept_nm", caption: "부서명" }
+        ];
+
+        createPopup("Plant", "사원조회", @empData, columns, "emp_cd");
+
+        plantEditCheck(false);
+
+        $($("#PlantImageUploaderBtn")).click(function (event) {
+
+            var fileUploader = $('#PlantImageUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+        $($("#PlantIconUploaderBtn")).click(function (event) {
+
+            var fileUploader = $('#PlantIconUploader').dxFileUploader('instance');
+            fileUploader._isCustomClickEvent = true;
+            fileUploader._$fileInput.click();
+        });
+
+    });
+
+    // 수정중인지 체크
+    function plantEditCheck(nowEdit) {
+
+        if (nowEdit) {
+
+            $("#PlantSave").dxButton().parent().parent().removeClass("display-none");
+            $("#PlantUndo").dxButton().parent().parent().removeClass("display-none");
+            $("#PlantInput").dxButton().parent().parent().addClass("display-none");
+            $("#PlantEdit").dxButton().parent().parent().addClass("display-none");
+            $("#PlantDelete").dxButton().parent().parent().addClass("display-none");
+
+            $("#plantForm :disabled").attr('disabled', false);
+            $("#PlantGrid").dxDataGrid("option", "disabled", true);
+        }
+        if (!nowEdit) {
+
+            $("#PlantSave").dxButton().parent().parent().addClass("display-none");
+            $("#PlantUndo").dxButton().parent().parent().addClass("display-none");
+            $("#PlantInput").dxButton().parent().parent().removeClass("display-none");
+            $("#PlantEdit").dxButton().parent().parent().removeClass("display-none");
+            $("#PlantDelete").dxButton().parent().parent().removeClass("display-none");
+
+            $("#plantForm :enabled").attr('disabled', true);
+            $("#PlantGrid").dxDataGrid("option", "disabled", false);
+        }
+
+    }
+
+    // 다음 주소 찾기 api
+    function findAddress() {
+        new daum.Postcode({
+            oncomplete: function (data) {
+                // 팝업에서 검색결과 항목을 클릭했을때 실행할 코드를 작성하는 부분.
+
+                // 도로명 주소의 노출 규칙에 따라 주소를 표시한다.
+                // 내려오는 변수가 값이 없는 경우엔 공백('')값을 가지므로, 이를 참고하여 분기 한다.
+                var roadAddr = data.roadAddress; // 도로명 주소 변수
+                var extraRoadAddr = ''; // 참고 항목 변수
+
+                // 법정동명이 있을 경우 추가한다. (법정리는 제외)
+                // 법정동의 경우 마지막 문자가 "동/로/가"로 끝난다.
+                if (data.bname !== '' && /[동|로|가]$/g.test(data.bname)) {
+                    extraRoadAddr += data.bname;
+                }
+                // 건물명이 있고, 공동주택일 경우 추가한다.
+                if (data.buildingName !== '' && data.apartment === 'Y') {
+                    extraRoadAddr += (extraRoadAddr !== '' ? ', ' + data.buildingName : data.buildingName);
+                }
+                // 표시할 참고항목이 있을 경우, 괄호까지 추가한 최종 문자열을 만든다.
+                if (extraRoadAddr !== '') {
+                    extraRoadAddr = ' (' + extraRoadAddr + ')';
+                }
+
+                // 우편번호와 주소 정보를 해당 필드에 넣는다.
+                document.getElementById('postCode').value = data.zonecode;
+                document.getElementById("roadAddress").value = roadAddr;
+                //document.getElementById("sample4_jibunAddress").value = data.jibunAddress;
+
+            }
+        }).open({
+            popupName: 'postcodePopup',
+            autoClose: true
+        });
+    }
+
+
+    // --------- 전화번호 , 팩스번호 '-' 입력 ---------------------------------------------
+    var autoHypenPhone = function (str) {
+        str = str.replace(/[^0-9]/g, '');
+        var tmp = '';
+        if (str.length < 4) {
+            return str;
+        } else if (str.length < 7) {
+            tmp += str.substr(0, 3);
+            tmp += '-';
+            tmp += str.substr(3);
+            return tmp;
+        } else if (str.length < 11) {
+            tmp += str.substr(0, 3);
+            tmp += '-';
+            tmp += str.substr(3, 3);
+            tmp += '-';
+            tmp += str.substr(6);
+            return tmp;
+        } else {
+            tmp += str.substr(0, 3);
+            tmp += '-';
+            tmp += str.substr(3, 4);
+            tmp += '-';
+            tmp += str.substr(7);
+            return tmp;
+        }
+
+        return str;
+    }
+
+    var phoneNum = document.getElementById('phoneNum');
+    var faxNum = document.getElementById('faxNum');
+
+    phoneNum.onkeyup = function () {
+        this.value = autoHypenPhone(this.value);
+    }
+    faxNum.onkeyup = function () {
+        this.value = autoHypenPhone(this.value);
+    }
+    // ------------------------------------------------------------------------------------------------------
+
+
+    function plantEmpSearch() {
+        $("#PlantPopup").dxPopup("instance").show();
+    }
+
+    function PlantRowDblClick(selectedItems) {
+
+        $("#Plant input[name=plant_emp_cd]").val(selectedItems.data.emp_cd);
+        $("#Plant input[name=plant_emp_nm]").val(selectedItems.data.emp_nm);
+
+        $("#PlantPopup").dxPopup("instance").hide();
+    }
+
+    function selectPlant() {
+
+        var grid = $("#PlantGrid").dxDataGrid("instance");
+        var data = getGridRowByKey('PlantGrid', grid.option("focusedRowKey"));
+        if (UtilView.isEmpty(data)) return;
+
+        $("#Plant input[name=plant_cd]").val(data.PLANT_CD);
+        $("#Plant input[name=plant_nm]").val(data.PLANT_NM);
+        $("#Plant input[name=plant_busin_no]").val(data.PLANT_BUSIN_NO);
+        $("#Plant input[name=plant_corpo_no]").val(data.PLANT_CORPO_NO);
+        $("#Plant input[name=plant_emp_cd]").val(data.PLANT_EMP_CD);
+        $("#Plant input[name=plant_emp_nm]").val(data.EMP_NM);
+        $("#Plant input[name=plant_catgo]").val(data.PLANT_CATGO);
+        $("#Plant input[name=plant_busin_nm]").val(data.PLANT_BUSIN_NM);
+        $("#Plant input[name=plant_post_cd]").val(data.PLANT_POST_CD);
+        $("#Plant input[name=plant_adress1]").val(data.PLANT_ADRESS1);
+        $("#Plant input[name=plant_adress2]").val(data.PLANT_ADRESS2);
+        $("#Plant input[name=plant_telephone]").val(data.PLANT_TELEPHONE);
+        $("#Plant input[name=plant_fax]").val(data.PLANT_FAX);
+        $("#Plant select[name=plant_office]").val(data.PLANT_OFFICE);
+        $("#Plant input[name=plant_open_date]").val(data.PLANT_OPEN_DATE);
+        $("#Plant input[name=plant_close_date]").val(data.PLANT_CLOSE_DATE);
+        if (data.main_yn === "Y") {
+            $("#Plant input[name=main_yn]").prop("checked", true);
+        } else {
+            $("#Plant input[name=main_yn]").prop("checked", false);
+        }
+        $("#Plant input[name=use_yn][value=" + data.use_yn + "]").prop("checked", true);
+
+        displayCompanyIcon(data.PLANT_CD);
+        _plantMainYn = data.main_yn;
+
+    }
+
+    function displayCompanyIcon(plant_cd) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/displayCompanyIcon',
+            data: {
+                plant_cd: plant_cd
+            },
+            success: function (result) {
+                if (UtilView.isEmpty(result)) return;
+
+                var src1 = JSON.parse(result)[0].company_full_image;
+                var src2 = JSON.parse(result)[0].company_small_image;
+
+                if (src1 === "" || src1 == null) {
+                    $("#companyFullImage").attr('src', '/Content/image/defaultSign.png');
+                } else {
+                    $("#companyFullImage").attr('src', src1);
+                }
+
+                if (src2 === "" || src2 == null) {
+                    $("#companySmallImage").attr('src', '/Content/image/defaultSign.png');
+                } else {
+                    $("#companySmallImage").attr('src', src2);
+                }
+
+            }
+
+        });
+
+    }
+
+    function uploadImage() {
+        displayCompanyIcon($("#Plant input[name=plant_cd]").val());
+    }
+
+    function PlantSearch() {
+        searchPlant();
+    }
+
+    function PlantInput() {
+        _plantCRUDGubun = "I";
+        $("#plantForm")[0].reset();
+        $("#companyFullImage").attr('src', '/Content/image/defaultSign.png');
+        $("#companySmallImage").attr('src', '/Content/image/defaultSign.png');
+        $("#Plant input[name=plant_cd]").val("PC001");
+        plantEditCheck(true);
+    }
+
+    function PlantEdit() {
+        _plantCRUDGubun = "U";
+        plantEditCheck(true);
+
+    }
+
+    function PlantDelete() {
+
+        if (!confirm("선택된 사업장을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/plantCRUD',
+            data: {
+                plant_cd: $("#Plant input[name=plant_cd]").val(),
+                gubun: "D"
+            },
+            success: function (result) {
+                searchPlant();
+            }
+        });
+    }
+
+    function PlantSave() {
+
+        if (!UtilView.checkValidForm("plantForm")) {
+            return;
+        }
+
+        var formData = new FormData($("#plantForm")[0]);
+
+        formData.set("gubun", _plantCRUDGubun);
+
+        $.ajax({
+            type: 'POST',
+            url: '/SysCom/plantCRUD',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (result) {
+
+                if (result == '') {
+                    alert('동일한 코드의 사업장이 존재합니다.\r\n확인 후 다시 시도해주십시오.');
+                }
+                else {
+                    alert(result);
+                    plantEditCheck(false);
+                    searchPlant();
+                }
+            }
+        });
+    }
+
+    function searchPlant() {
+
+        $("#plantForm")[0].reset();
+        $("#companyFullImage").attr('src', '/Content/image/defaultSign.png');
+        $("#companySmallImage").attr('src', '/Content/image/defaultSign.png');
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/SysCom/selectPlant',
+            data: {
+                use_yn: $('#Plant input[name="use_yn_radio"]:checked').val()
+            },
+            success: function (result) {
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+                    $("#PlantGrid").dxDataGrid("instance").option("dataSource", JSON.parse(result));
+                    MainPlantCountCheck();
+                } else {
+                    $("#PlantGrid").dxDataGrid("instance").option("dataSource", []);
+                }
+            }
+        });
+
+        UtilView.setGridFocus("G", "PlantGrid");
+
+    }
+
+    function PlantUndo() {
+        plantEditCheck(false);
+        selectPlant();
+    }
+
+    function complanyImageUploadValueChanged1(e) {
+
+        if (e.value.length) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                $('#companyFullImage').attr('src', e.target.result);
+            }
+            reader.readAsDataURL(e.value[0]);
+        }
+    }
+
+    function complanyImageUploadValueChanged2(e) {
+
+        if (e.value.length) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                $('#companySmallImage').attr('src', e.target.result);
+            }
+            reader.readAsDataURL(e.value[0]);
+        }
+    }
+
+    function PlantExcel() {
+        gridExportToExcel("PlantGrid", "사업장관리_" + "@DateTime.Now.ToShortDateString()");
+    }
+
+    function MainPlantCountCheck(e) {
+
+        if (_plantMainYn === "Y") {
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/SysCom/MainPlantCountCheck',
+            async: false,
+            success: function (result) {
+
+                var json = JSON.parse(result)[0];
+
+                if (json.cnt === 1) {
+                    alert("메인 사업장은 한 곳만 등록할 수 있습니다.");
+                    $("#plantForm input[name=main_yn]").prop("checked", false);
+                    return;
+                } else {
+                    $("#plantForm input[name=main_yn]").prop("checked", true);
+                    return;
+                }
+            }
+        });
+    }
+
+</script>
+
+<div id="Plant" autoresize="Y">
+
+    <div id="PlantPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="PlantSearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-5">
+
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">사용여부</span>
+                        </div>
+
+                        <label class="p-1"></label>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="%" name="use_yn_radio" checked="checked" onclick="searchPlant()" />
+                        </div>
+                        <span class="form-control-sm"><label>전체</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="Y" name="use_yn_radio" onclick="searchPlant()" />
+                        </div>
+                        <span class="form-control-sm"><label>예</label></span>
+
+                        <div class="input-group-prepend">
+                            <input class="input-group-append" type="radio" value="N" name="use_yn_radio" onclick="searchPlant()" />
+                        </div>
+                        <span class="form-control-sm"><label>아니오</label></span>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @* === CRUD 버튼 === *@
+            @{Html.SetToolbar(0, true, "Search;Input;Edit;Delete;Save;Undo;Excel"); }
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-8 pr-1">
+            <div class="box mb-0">
+
+                @(Html.DevExtreme().DataGrid()
+                    .ID("PlantGrid")
+                    .KeyExpr("PLANT_CD")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .ColumnAutoWidth(true)
+                    .HoverStateEnabled(true)
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .FocusedRowEnabled(true)
+                    .AllowColumnResizing(true)
+                    .Height(900)
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .SearchPanel(searchPanel => searchPanel.Visible(true))
+                    .Export(e => e.Enabled(true).AllowExportSelectedData(true))
+                    .OnToolbarPreparing("HideToolbarButton")
+                    .OnFocusedRowChanged("selectPlant")
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("Data_root").Caption("Interface");
+                        c.Add().DataField("PLANT_CD").Caption("사업장코드");
+                        c.Add().DataField("PLANT_NM").Caption("사업장명칭");
+                        c.Add().DataField("main_yn").Caption("메인사업장여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.main_yn == ""Y"" || rowData.main_yn == true); }");
+                        c.Add().DataField("use_yn").Caption("사용여부")
+                            .DataType(GridColumnDataType.Boolean)
+                            .CalculateCellValue(@"function(rowData) { return (rowData.use_yn == ""Y"" || rowData.use_yn == true); }");
+                    })
+                    .ShowBorders(true)
+                )
+
+            </div>
+        </div>
+
+        <div class="col-4 pl-0">
+            <div class="box">
+
+                <div class="divName">
+                    <p>사업장 정보</p>
+                    <span id="signSetValdationChk" class="text-danger display-none col-8"></span>
+                </div>
+
+                <div class="menuDiv">
+
+                    <form id="plantForm">
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업장코드 <star>*</star></label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12 required" name="plant_cd">
+                            </div>
+                            <label class="col-2">메인사업장</label>
+                            <div class="input-group col-2">
+                                <input type="checkbox" class="form-control" name="main_yn" value="Y" onclick="MainPlantCountCheck(event)"/>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업자명칭</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="plant_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업자등록번호</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="plant_busin_no">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">법인등록번호</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="plant_corpo_no">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="plant_emp_cd" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="plantEmpSearch()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="plant_emp_nm" readonly>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">업태</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="plant_catgo">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">종목</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="plant_busin_nm">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업장우편번호</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control" name="plant_post_cd" id="postCode" readonly="readonly">
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="findAddress()">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사업장주소</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" id="roadAddress" name="plant_adress1">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">상세주소</label>
+                            <div class="input-group col-8">
+                                <input type="text" class="form-control col-12" name="plant_adress2">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">전화번호</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="plant_telephone" id="phoneNum" maxlength="13" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">팩스번호</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control col-12" name="plant_fax" id="faxNum" maxlength="13" />
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">개업일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control datepicker col-12" name="plant_open_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">폐업일자</label>
+                            <div class="input-group col-4">
+                                <input type="text" class="form-control datepicker col-12" name="plant_close_date">
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">관할세무서</label>
+                            <div class="input-group col-4">
+                                <select class="form-control col-12" name="plant_office">
+                                    <option value="0"> </option>
+                                    @foreach (DataRow row in ((DataTable)ViewBag.taxOffice).Rows)
+                                    {
+                                        <option value="@row["keyfield"]">@row["displayfield"]</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper">
+                            <label class="col-3">사용여부 <star>*</star></label>
+                            <div class="input-group col-3">
+                                <div class="radioDiv required col-12">
+                                    <label><input type="radio" name="use_yn" value="Y" />예 </label>
+                                    <label><input type="radio" name="use_yn" value="N" />아니오 </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="companyImageDiv">
+                            <div class="input-wrapper display-flex">
+                                <label class="col-3">회사 이미지</label>
+                                <div class="col-5 pr-0 pl-0">
+                                    <img id="companyFullImage" class="company-full-image" src="" alt="" />
+                                </div>
+                                <button id="PlantImageUploaderBtn" class="btn btn-sm btn-secondary" type="button">등록</button>
+                                @(Html.DevExtreme().FileUploader()
+                                    .Visible(false)
+                                    .SelectButtonText("등록")
+                                    .Name("company_full_image")
+                                    .ID("PlantImageUploader")
+                                    .Multiple(false)
+                                    .Accept("image/*")
+                                    .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png" })
+                                    .UploadMode(FileUploadMode.UseForm)
+                                    .MaxFileSize(5000)
+                                    .OnValueChanged("complanyImageUploadValueChanged1")
+                                    .OnUploaded("uploadImage")
+                                )
+                            </div>
+
+                            <div class="input-wrapper display-flex">
+                                <label class="col-3">회사 아이콘</label>
+                                <div class="col-3 pr-0 pl-0">
+                                    <img id="companySmallImage" class="company-small-image" src="" alt="" />
+                                </div>
+                                <button id="PlantIconUploaderBtn" class="btn btn-sm btn-secondary" type="button">등록</button>
+                                @(Html.DevExtreme().FileUploader()
+                                    .Visible(false)
+                                    .SelectButtonText("등록")
+                                    .Name("company_small_image")
+                                    .ID("PlantIconUploader")
+                                    .Multiple(false)
+                                    .Accept("image/*")
+                                    .AllowedFileExtensions(new[] { ".jpg", ".jpeg", ".gif", ".png" })
+                                    .UploadMode(FileUploadMode.UseForm)
+                                    .MaxFileSize(5000)
+                                    .OnValueChanged("complanyImageUploadValueChanged2")
+                                    .OnUploaded("uploadImage")
+                                )
+                            </div>
+                        </div>
+                    </form>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>

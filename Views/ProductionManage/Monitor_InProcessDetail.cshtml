@@ -1,0 +1,425 @@
+﻿
+@using System.Data
+@using HACCP.Libs
+@using HACCP.Libs.Views
+
+@{
+    //*********************************************************
+    // ▣ 페이지 공통 정의
+    //*********************************************************
+
+    //1. 페이지 접두어 지정
+    var pagePrefix = ViewContext.RouteData.Values["action"].ToString();
+    var pageControllerNm = ViewContext.RouteData.Values["controller"].ToString();
+
+    ViewBag.Title = pagePrefix;
+    Layout = null;
+}
+
+@{
+    var MonitorInProcessDetail = Html.Raw(Json.Encode(ViewBag.MonitorInProcessDetail.Data));
+    var MakingItems = Html.Raw(Json.Encode(ViewBag.MakingItems.Data));
+}
+
+@*제품별 모니터링*@
+
+    <script id="@(pagePrefix)Js">
+
+        var PagePrefix        = "@(pagePrefix)";                   //js사용, 페이지접두어
+        var PageControllerNm  = "@(pageControllerNm)";     //js사용, 페이지컨트롤러명
+        var FormNmSearch      = PagePrefix + "SearchForm";    // 폼명-검색용
+        var FormNmWrite = PagePrefix + "WriteForm";     // 폼명-등록용
+
+        UtilView.m_controller = PageControllerNm;
+        UtilView.m_actionPrefix = PagePrefix;
+
+        $(function () {
+
+            if ((@MonitorInProcessDetail).length > 0) {
+
+                $("#" + PagePrefix + "Grid").dxDataGrid("option", "dataSource", JSON.parse(@MonitorInProcessDetail));
+            }
+
+            var popupColumns = [
+                { dataField: "item_cd", caption: "제품코드" },
+                { dataField: "item_nm", caption: "제품명" }
+            ];
+
+            createPopup(PagePrefix + "Item", "품목 조회", @MakingItems, popupColumns);
+
+            setDatePicker("#Monitor_InProcessDetail .datepicker");
+
+            $("#" + FormNmSearch + " input[name=sdate]").datepicker("update", '@DateTime.Now.AddMonths(-1).ToShortDateString()');
+            $("#" + FormNmSearch + " input[name=edate]").datepicker("update", '@DateTime.Now.ToShortDateString()');
+
+        });
+
+        // 검색용 제조제품 팝업
+        function Monitor_InProcessDetailSelectItem() {
+            $("#Monitor_InProcessDetailItemPopup").dxPopup("instance").show();
+        }
+
+        // 검색용 제조제품 팝업
+        function Monitor_InProcessDetailItemRowDblClick(selectedItems) {
+
+            var data = selectedItems.data;
+
+            $("#Monitor_InProcessDetailSearchForm input[name=item_cd]").val(data.item_cd);
+
+            $("#Monitor_InProcessDetailItemPopup").dxPopup("instance").hide();
+        }
+
+        // 조회
+        function Monitor_InProcessDetailSearch() {
+
+            UtilView.dataGridSelect('Monitor_InProcessDetailGrid', 'Monitor_InProcessDetailSearchForm');
+
+        }
+
+        // 제품별 모니터링 그리드 포커스 변경
+        function Monitor_InProcessDetailFocusChanged() {
+
+            var grid = $("#Monitor_InProcessDetailGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("Monitor_InProcessDetailGrid", grid.option("focusedRowKey"));
+
+            var data = {
+                order_no: gridData.order_no
+            };
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/Monitor_InProcessDetailSelectDetail',
+                async: false,
+                data: data,
+                dataType: 'json',
+                success: function (result) {
+
+                    var jsonRes1 = JSON.parse(result[0]);
+                    var jsonRes2 = JSON.parse(result[1]);
+
+                    var parentDiv = document.getElementById("MonitorInProcessDetailProcessDiv");
+                    var parentDiv2 = document.getElementById("MonitorInProcessDetailProcessDiv2");
+
+                    parentDiv2.classList.add('display-flex');
+
+                    while ( parentDiv.hasChildNodes() ) {
+                        parentDiv.removeChild(parentDiv.firstChild);
+                    }
+
+                    while (parentDiv2.hasChildNodes()) {
+                        parentDiv2.removeChild(parentDiv2.firstChild);
+                    }
+
+                    for (var i = 0; i < jsonRes1.length; i++) {
+
+                        if (i > 0 && jsonRes1[i].process_nm === jsonRes1[i - 1].process_nm) {
+                            return;
+                        }
+
+                        var btn = document.createElement('input');
+                        btn.setAttribute('type', 'button');
+                        btn.setAttribute('value', jsonRes1[i].process_nm);
+                        btn.setAttribute('name', jsonRes1[i].order_proc_id);
+                        btn.classList.add('btn', "col-2", "margin-top");
+
+                        btn.addEventListener("click", function () {
+                            testFunc(event)
+                        });
+
+                        parentDiv.appendChild(btn);
+
+                        if ((i + 1) % 5 === 0) {
+                            var br = document.createElement('br');
+                            parentDiv.appendChild(br);
+                        } else {
+                            if (i < jsonRes1.length - 1) {
+                                var p = document.createElement('span');
+                                p.innerText = ' => ';
+
+                                parentDiv.appendChild(p);
+                            }
+                        }
+
+                        if (gridData.process_nm === jsonRes1[i].process_nm) {
+
+                            btn.classList.add('btn-success');
+
+                            btn.click();
+                        } else{
+                            btn.classList.add('btn-secondary');
+                        }
+                    }
+
+                    for (var i = 0; i < jsonRes2.length; i++) {
+
+                        var div = document.createElement('div');
+                        var table = document.createElement('table');
+                        var tbody = document.createElement('tbody');
+
+                        div.classList.add('col-2');
+                        div.classList.add('mb-2');
+
+                        table.border = 1;
+                        table.width = '100%';
+
+                        tbody.innerHTML =
+                            '<tr><td colspan="2" align="center" style="background-color:#c5d8de;"><p class="mb-1">' + jsonRes2[i].process_nm + '</p></td></tr>'
+                            + '<tr><td>시작일자</td>'
+                            + '<td>' + (jsonRes2[i].order_proc_start_time ? jsonRes2[i].order_proc_start_time : "") + '</td></tr>'
+                            + '<tr><td>종료일자</td>'
+                            + '<td>' + (jsonRes2[i].order_proc_end_time ? jsonRes2[i].order_proc_end_time : "") + '</td></tr>'
+                            + '<tr><td>공정수율</td>'
+                            + '<td>' + (jsonRes2[i].rate ? jsonRes2[i].rate : "") + '</td></tr>'
+                            + '<tr><td>작업상태</td>'
+                            + '<td>' + (jsonRes2[i].order_proc_make_status ? jsonRes2[i].order_proc_make_status : "") + '</td></tr>'
+                            + '<tr><td>인수인계상태</td>'
+                            + '<td>' + (jsonRes2[i].prder_proc_transfer_status ? jsonRes2[i].prder_proc_transfer_status : "") + '</td></tr>'
+                            + '<tr><td colspan="2">시험의뢰번호</td></tr>'
+                            + '<tr><td colspan="2">' + (jsonRes2[i].qcno ? jsonRes2[i].qcno : '&nbsp;') + '</td></tr>'
+                            + '<tr><td>작업자-1</td>'
+                            + '<td>' + (jsonRes2[i].worker1 ? jsonRes2[i].worker1 : "") + '</td></tr>'
+                            + '<tr><td>작업자-2</td>'
+                            + '<td>' + (jsonRes2[i].worker2 ? jsonRes2[i].worker2 : "") + '</td></tr>';
+
+                        table.appendChild(tbody);
+                        div.appendChild(table);
+                        parentDiv2.appendChild(div);
+
+                    }
+                }
+            });
+        }
+
+        function testFunc(event) {
+
+            document.getElementById('Monitor_InProcessDetailWriteForm').reset();
+            $("#Monitor_InProcessDetailWriteForm span[name=item_unit]").text("");
+            $("#Monitor_InProcessDetailWriteForm span[name=order_proc_content_unit]").text("");
+
+            var grid = $("#Monitor_InProcessDetailGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("Monitor_InProcessDetailGrid", grid.option("focusedRowKey"));
+
+            var order_proc_id = event.target.name;
+
+            $.ajax({
+                type: 'GET',
+                url: '/ProductionManage/MonitorInProcessDetailSelectProcessDetail',
+                data: {
+                    order_no: gridData.order_no,
+                    order_proc_id: order_proc_id
+                },
+                dataType: 'json',
+                async: false,
+                success: function (result) {
+
+                    var json = JSON.parse(result);
+
+                    if (json.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    $("#Monitor_InProcessDetailWriteForm input[name=order_proc_receive_ea_qty]").val(json[0].order_proc_receive_ea_qty);
+                    $("#Monitor_InProcessDetailWriteForm input[name=order_proc_manage_rate]").val(json[0].order_proc_manage_rate);
+                    $("#Monitor_InProcessDetailWriteForm input[name=order_proc_real_qty]").val(json[0].order_proc_real_qty);
+                    $("#Monitor_InProcessDetailWriteForm input[name=order_proc_real_ea_qty]").val(json[0].order_proc_real_ea_qty);
+                    $("#Monitor_InProcessDetailWriteForm input[name=sample_ea_qty]").val(json[0].sample_ea_qty);
+                    $("#Monitor_InProcessDetailWriteForm input[name=order_proc_content]").val(json[0].order_proc_content);
+                    $("#Monitor_InProcessDetailWriteForm span[name=item_unit]").text(json[0].item_unit);
+                    $("#Monitor_InProcessDetailWriteForm span[name=order_proc_content_unit]").text(json[0].order_proc_content_unit);
+
+                }
+            })
+
+    }
+
+    function Monitor_InProcessDetailExcel() {
+        gridExportToExcel("Monitor_InProcessDetailGrid", "제품별_모니터링_" + "@DateTime.Now.ToShortDateString()");
+    }
+
+
+    </script>
+
+<div id="@(pagePrefix)" page-ctrl-name="@(pageControllerNm)">
+    <div id="@(pagePrefix)ItemPopup"></div>
+
+    <div class="mainTop row">
+
+        <div class="col-8">
+
+            <form id="@(pagePrefix)SearchForm">
+
+                <div class="input-wrapper">
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">지시일자</span>
+                        </div>
+                        <input type="text" class="form-control datepicker" name="sdate">
+                        <input type="text" class="form-control datepicker" name="edate">
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조제품</span>
+                        </div>
+                        <input type="text" class="form-control" name="item_cd">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="@(pagePrefix)SelectItem()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm col-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">제조번호</span>
+                        </div>
+                        <input type="text" class="form-control " name="lot_no">
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="CRUD-btn col-4">
+            @{Html.SetToolbar(0, true, "Search;Excel");}
+        </div>
+
+    </div>
+
+    <div class="row">
+
+        <div class="col-4 pr-1">
+            <div class="box mb-0">
+                @(Html.DevExtreme().DataGrid()
+                    .ID(pagePrefix + "Grid")
+                    .Selection(s => s.Mode(SelectionMode.Single))
+                    .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual))
+                    .Height(871)
+                    .ColumnAutoWidth(true)
+                    .KeyExpr("order_no")
+                    .ShowBorders(true)
+                    .ShowColumnLines(true)
+                    .HoverStateEnabled(true)
+                    .FocusedRowEnabled(true)
+                    .FocusedRowIndex(0)
+                    .Columns(c =>
+                    {
+                        c.Add().DataField("lot_no").Caption("제조번호");
+                        c.Add().DataField("order_no").Caption("제조오더번호");
+                        c.Add().DataField("order_date").Caption("제조지시일자");
+                        c.Add().DataField("item_nm").Caption("제품명");
+                        c.Add().DataField("order_qty").Caption("지시수량");
+                        c.Add().DataField("process_nm").Caption("공정");
+                        c.Add().DataField("order_proc_make_status").Caption("작업상태");
+                        c.Add().DataField("order_proc_trans_status").Caption("인수인계상태");
+                        c.Add().DataField("").Caption("다음공정");
+
+                    })
+                    .OnFocusedRowChanged(pagePrefix + "FocusChanged")
+                )
+            </div>
+        </div>
+
+        <div class="col-8 pl-0">
+
+            <div class="box-height-auto mb-1">
+
+                <div class="divName">
+                    <p>표준공정 순서</p>
+                </div>
+
+                <div class="col-12" style="height: 80px;">
+
+                    <div id="MonitorInProcessDetailProcessDiv"></div>
+
+                </div>
+
+                <hr />
+
+                <div class="col-12 menuDiv">
+
+                    <form id="@(pagePrefix)WriteForm">
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">총 투입량</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="order_proc_receive_ea_qty" readonly="readonly">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" name="item_unit" style="font-size:inherit;"></span>
+                                </div>
+                            </div>
+
+                            <label class="col-2">관리수율</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="order_proc_manage_rate" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">생산량</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="order_proc_real_qty" readonly="readonly">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" style="font-size:inherit;">G</span>
+                                </div>
+                            </div>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="order_proc_real_ea_qty" readonly="readonly">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" name="item_unit" style="font-size:inherit;"></span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">샘플링</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="sample_ea_qty" readonly="readonly">
+                            </div>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <label class="col-2">단위중량</label>
+                            <div class="input-group col-3">
+                                <input type="text" class="form-control" name="order_proc_content" readonly="readonly">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" name="order_proc_content_unit" style="font-size:inherit;"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+            <div class="box-height-auto mb-0">
+
+                <div class="divName">
+                    <p>공정진행 이력</p>
+                </div>
+
+                <div class="col-12 menuDiv" style="height: 498px;">
+
+                    <div id="MonitorInProcessDetailProcessDiv2" class="row"></div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,1457 @@
+﻿@{
+    Layout = null;
+    ViewBag.Title = "CCP_format";
+}
+@{ 
+    var CCP_formatData = @Html.Raw(Json.Encode(ViewBag.CCP_formatData.Data));
+    var CCP_item_cd = @Html.Raw(Json.Encode(ViewBag.CCP_item_cd.Data));
+}
+@{
+    string[] CCP_ExamKey = { "order_no", "process_cd", "lot_no" };
+}
+<style>
+    #CCP_format .lightcyan {
+        background-color: lightcyan;
+        color: black;
+    }
+</style>
+
+<script id="CCP_formatJs" type="text/javascript">        
+
+        //그리드 출력
+        var CCP_formatData = @CCP_formatData;
+        
+        //로그인 user_cd/nm
+        var CCP_format_LoginUserCd = sessionStorage.getItem("loginCD");@*"@HACCP.Libs.Public_Function.User_cd";*@
+        var CCP_format_LoginUserNm = sessionStorage.getItem("loginNM");@*"@HACCP.Libs.Public_Function.User_nm";*@
+        var CCP_format_empCd = "";
+        var CCP_format_empNm = "";
+        //전자서명 진행 구분값
+        var CCP_format_SignGubun = "";
+        var CCP_format_SignSeq = "0";
+        //CCP 공정 구분 코드
+        var ccp_cd;
+        var _devSignData = null;
+        var _devSignOK = false;
+
+
+    $(function () {
+        //#region 날짜 api
+        setDatePicker("#CCP_format .datepicker");
+        //#endregion
+
+        //#region 그리드 데이터 생성
+        if (CCP_formatData.length <= 0) {
+            $("#CCP_formatGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_formatGrid").dxDataGrid("instance").option("focusedRowEnabled", false);
+        } else {
+            $("#CCP_formatGrid").dxDataGrid("instance").option("dataSource", JSON.parse(@CCP_formatData));
+            $("#CCP_formatGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+            $("#CCP_formatGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+        }
+        //#endregion
+
+        //#region 품목 팝업 세팅
+        var is = @CCP_item_cd;
+
+        //품목 팝업
+        var columns = [
+            { dataField: "item_cd", caption: "품목코드" },
+            { dataField: "item_nm", caption: "품목명" }
+        ];
+        createPopup("CCP_Item_cd", "품목 조회", is, columns, "item_cd");
+        //#endregion
+
+
+    });
+
+    //#region 모니터링 결과 Grid
+        //모니터링 Grid 숨기기
+        function gridDisplay() {
+            $("#CCP_MonitorGrid_211").addClass("display-none");
+            $("#CCP_MonitorGrid_901").addClass("display-none");
+            $("#CCP_MonitorGrid_902").addClass("display-none");
+            $("#CCP_MonitorGrid_903").addClass("display-none");
+            $("#CCP_MonitorGrid_904").addClass("display-none");
+            $("#CCP_MonitorGrid_905").addClass("display-none");
+        }
+
+        //모니터링 Grid 데이터 초기화
+    function gridClear() {
+
+        $("#CCP_Header input[name=CCP_gubun]").val("");
+        $("#CCP_Header input[name=CCP_order_no]").val("");
+        $("#CCP_Header input[name=CCP_process_cd]").val("");
+        $("#CCP_Header input[name=CCP_item_cd]").val("");
+        $("#CCP_Header input[name=CCP_lot_no]").val("");
+        $("#CCP_Header input[name=CCP_ccp_cd]").val("");
+
+        $("#CCP_Header input[name=CCP_index_key]").val("");
+
+            $("#CCP_MonitorGrid_211").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_MonitorGrid_901").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_MonitorGrid_902").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_MonitorGrid_903").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_MonitorGrid_904").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_MonitorGrid_905").dxDataGrid("instance").option("dataSource", []);
+
+            $("#CCP_SignGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_ExamGrid").dxDataGrid("instance").option("dataSource", []);
+            $("#CCP_DeviationGrid").dxDataGrid("instance").option("dataSource", []);
+        }
+
+    //#endregion
+
+    //#region 공정 번호 List 이벤트
+
+    //공정리스트 조회
+    function CCP_formatSearch() {
+            //공정리스트 Grid 초기화
+            $("#CCP_ListGrid").dxDataGrid("instance").option("dataSource", []);
+            gridClear();
+
+            if ($("#CCP_formatGrid").dxDataGrid("option", "focusedRowIndex") < 0) {
+
+                return;
+            }
+
+            //#region CCP일지 종류 구분
+            CCP_TypeTrans();
+
+            var gubun = $("#CCP_Header input[name=CCP_equip_type]").val();
+            var table_no = "";
+
+                if (gubun == 1) {               //금속검출기
+                    ccp_cd = "904";
+                    table_no = ccp_cd;
+                } else if (gubun == 2) {        //X-Ray검출기
+                    ccp_cd = "903";
+                    table_no = ccp_cd;
+                } else if (gubun == 4) {        //건조기
+                    ccp_cd = "901";
+                    table_no = ccp_cd;
+                } else if (gubun == 5) {        //살균기
+                    ccp_cd = "902";
+                    table_no = ccp_cd;
+                } else if (gubun == 6) {        //농축기
+                    ccp_cd = "905";
+                    table_no = ccp_cd;
+                } else if (gubun == 14) {        //유동층건조기
+                    ccp_cd = "906";
+                    table_no = "901";
+                } else {                        //이외의 공정
+                    ccp_cd = "905"; //여과
+                    table_no = ccp_cd;
+                }
+
+            //#endregion
+
+            //#region 조회 영역 clear
+            if ($("#CCP_List_form input[name=CCP_item_cd]").val() == "") {
+                $("#CCP_List_form input[name=CCP_Item_nm]").val("");
+            }
+            //#endregion
+
+            //#region formData 값 세팅
+            var grid = $("#CCP_formatGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("CCP_formatGrid", grid.option("focusedRowKey"));
+            var CCP_sdate = $("#CCP_List_form input[name=CCP_sDate]").val();
+            var CCP_edate = $("#CCP_List_form input[name=CCP_eDate]").val();
+            var CCP_item_cd = $("#CCP_List_form input[name=CCP_item_cd]").val();
+
+            var formData = new FormData($("#CCP_List_form")[0]);
+            formData.set("process_cd", gridData.ccp_cd);
+            formData.set("CCP_sDate", CCP_sdate);
+            formData.set("CCP_eDate", CCP_edate);
+            formData.set("CCP_item_cd", CCP_item_cd);
+            //#endregion
+
+            $.ajax({
+                type: 'POST',
+                url: '/Mont/getCCP_Order',
+                data: formData,
+                dataType: 'json',
+                async : false,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    //모니터링 결과 grid 초기화 및 해당 Grid 출력
+                    gridDisplay();
+                    $("#CCP_MonitorGrid_" + table_no).removeClass("display-none");
+
+                    if (result.length <= 0) {
+                        $("#CCP_ListGrid").dxDataGrid("instance").option("dataSource", []);
+                        $("#CCP_ListGrid").dxDataGrid("instance").option("focusedRowIndex", -1);
+                        return;
+                    }
+
+                    var json = JSON.parse(result);
+                    if (json.sessionLoss) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    //List Grid 채우기
+                    $("#CCP_ListGrid").dxDataGrid("instance").option("dataSource", json);
+                    $("#CCP_ListGrid").dxDataGrid("instance").option("focusedRowEnabled", true);
+                    $("#CCP_ListGrid").dxDataGrid("instance").option("focusedRowIndex", 0);
+
+                    //CCP_ListRowChanged();
+                    CCP_ListRowChangedSearch(json[0]);
+                }
+            });
+        }
+
+        //CCP 일지 종류 설비종류에 따라 gubun값 주기 위해 설비종류 출력.
+        function CCP_TypeTrans() {
+            var grid = $("#CCP_formatGrid").dxDataGrid("instance");
+            var gridData = getGridRowByKey("CCP_formatGrid", grid.option("focusedRowKey"));
+
+            var ccp_cd = gridData.ccp_cd;
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Mont/getCCP_Type',
+                data: {
+                    ccp_cd: ccp_cd
+                },
+                success: function (result) {
+                    if (result != "") {
+                        var jsonData = JSON.parse(result);
+
+                        if (jsonData.hasOwnProperty('sessionLoss')) {
+                            alert("세션이 만료되었습니다.");
+                            sessionStorage.clear();
+                            location.replace("/Comm/Login");
+                        }
+
+                        if (jsonData.length > 0) {
+                            var CCP_gubun = jsonData[0].equip_type2;
+                            $("#CCP_Header input[name=CCP_equip_type]").val(CCP_gubun);
+                        } else {
+                            $("#CCP_Header input[name=CCP_equip_type]").val('');
+                        }
+                    } else {
+                        $("#CCP_Header input[name=CCP_equip_type]").val('');
+                    }
+                }
+            });
+        }
+    //#endregion
+
+    //#region 점검결과 및 승인 이벤트
+    function CCP_ListRowChanged(e) {
+        if (!e.row) {
+            return;
+        }
+        CCP_ListRowChangedSearch(e.row.data);
+    }
+
+    function CCP_ListRowChangedSearch(data) {
+
+        //Grid 초기화
+        gridClear();
+
+        //#region data 값 세팅
+        var grid_Format = $("#CCP_formatGrid").dxDataGrid("instance");
+        var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+        var gridData_Format = null;
+        var gridData_List = null;
+        var order_no = data.order_no;
+        var process_cd = "";
+        var item_cd = data.item_cd;
+        var lot_no = data.lot_no;
+        var HaccpCode = $("#CCP_Header input[name=HACCPCode]").val();
+        var ccp_cd = "";
+
+        if (grid_Format.totalCount() > 0) {
+            gridData_Format = getGridRowByKey("CCP_formatGrid", grid_Format.option("focusedRowKey"));
+            process_cd = gridData_Format.ccp_cd;
+            ccp_cd = gridData_Format.ccp_cd;
+        }
+        //if (grid_List.totalCount() > 0) {
+
+
+        //    //if ($("#CCP_ListGrid").dxDataGrid("option", "focusedRowIndex") < 0) {
+
+        //    //    return;
+        //    //}
+
+        //    gridData_List = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+        //    order_no = gridData_List.order_no;
+        //    item_cd = gridData_List.item_cd;
+        //    lot_no = gridData_List.lot_no;
+        //}
+
+        //#endregion
+
+        //#region report param값 설정
+        $("#CCP_Header input[name=CCP_gubun]").val(ccp_cd);
+        $("#CCP_Header input[name=CCP_order_no]").val(order_no);
+        $("#CCP_Header input[name=CCP_process_cd]").val(process_cd);
+        $("#CCP_Header input[name=CCP_item_cd]").val(item_cd);
+        $("#CCP_Header input[name=CCP_lot_no]").val(lot_no);
+        $("#CCP_Header input[name=CCP_ccp_cd]").val(ccp_cd);
+
+        $("#CCP_Header input[name=CCP_index_key]").val(ccp_cd + "-" + order_no);
+
+        var table_no = process_cd;
+        if (process_cd == "906") { //유동층 건조기
+            table_no = "901"; //건조기 테이블 공유
+        }
+        //#endregion
+
+
+        var DataList = new Array();
+
+
+        //CCP데이터 미리보기
+        $.ajax({
+            type: 'POST',
+            url: '/Mont/getCCP_preview',
+            async: false,
+            data: {
+                CCP_gubun: ccp_cd,
+                order_no: order_no,
+                process_cd: process_cd,
+                item_cd: item_cd,
+                lot_no: lot_no,
+                HaccpCode: HaccpCode,
+                index_key: ccp_cd + "-" + order_no,
+                sign_set_cd: "9402"
+            },
+            success: function (result) {
+                //if (!Array.isArray(result)) {
+
+                //    var json = JSON.parse(result);
+
+                //    if (json.hasOwnProperty('sessionLoss')) {
+                //        alert("세션이 만료되었습니다.");
+                //        sessionStorage.clear();
+                //        location.replace("/Comm/Login");
+                //    }
+
+                //}
+                if (!UtilView.isEmpty(result) && result.length > 0) {
+
+                    for (var i = 0; i < result.length; i++) {
+                        DataList[i] = JSON.parse(result[i]);
+
+                        if (DataList[i].data === "empty") {
+                            if (i == 1) {       //0 : Header, 1 : 전자서명, 2 : 모니터링 결과, 3 : 가동시간, 4 : 이탈사항
+                                $("#CCP_MonitorGrid_" + table_no).dxDataGrid("instance").option("dataSource", []);
+                            } else if (i == 2) {
+                                $("#CCP_ExamGrid").dxDataGrid("instance").option("dataSource", []);
+                            } else if (i == 3) {
+                                $("#CCP_DeviationGrid").dxDataGrid("instance").option("dataSource", []);
+                            }
+                        } else {
+                            if (i == 1) {
+                                $("#CCP_MonitorGrid_" + table_no).dxDataGrid("instance").option("dataSource", DataList[1]);
+                            } else if (i == 2) {
+                                $("#CCP_ExamGrid").dxDataGrid("instance").option("dataSource", DataList[2]);
+                            } else if (i == 3) {
+                                $("#CCP_DeviationGrid").dxDataGrid("instance").option("dataSource", DataList[3]);
+                            }
+                        }
+
+                    }
+                    CCP_SignerSearch(ccp_cd + "-" + order_no);
+                }
+            }
+        });
+
+    }
+        //#region 전자서명 정보 가져오기
+    function CCP_SignerSearch(index_key) {
+
+        if ("" == index_key || null == index_key) {
+            var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+            var grid_Format = $("#CCP_formatGrid").dxDataGrid("instance");
+            if (grid_List.totalCount() > 0 && grid_Format.totalCount()) {
+                var gridData_List = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+                var gridData_Format = getGridRowByKey("CCP_formatGrid", grid_Format.option("focusedRowKey"));
+
+                var ccp_cd = gridData_Format.ccp_cd;
+                var order_no = gridData_List.order_no;
+                index_key = ccp_cd + "-" + order_no;
+            }
+        }
+
+        $.ajax({
+            type: 'POST',
+            async: false,
+            url: '/Mont/CCP_SignerSearch',
+            data: {
+                index_key: index_key,
+                sign_set_cd: "9401"
+            },
+            success: function (result) {
+
+                if (result != "") {
+                    var jsonData = JSON.parse(result);
+
+                    if (jsonData.hasOwnProperty('sessionLoss')) {
+                        alert("세션이 만료되었습니다.");
+                        sessionStorage.clear();
+                        location.replace("/Comm/Login");
+                    }
+
+                    if (jsonData.length > 0) {
+                        $("#CCP_SignGrid").dxDataGrid("option", "dataSource", jsonData);
+                    } else {
+                        $("#CCP_SignGrid").dxDataGrid("option", "dataSource", []);
+                    }
+                } else {
+                    $("#CCP_SignGrid").dxDataGrid("option", "dataSource", []);
+                }
+            }
+        });
+            
+        }
+        //#endregion
+
+    //#endregion
+
+    //#region 팝업 기능
+    //품목 팝업
+    function CCP_Item_cdPopup() {
+        var popup = $("#CCP_Item_cdPopup").dxPopup("instance");
+        popup.show();
+    }
+
+    //공정 팝업 더블클릭
+    function CCP_Item_cdRowDblClick(selectedItems) {
+        $("#CCP_List_form input[name=CCP_item_cd]").val(selectedItems.data.item_cd);
+        $("#CCP_List_form input[name=CCP_Item_nm]").val(selectedItems.data.item_nm);
+
+        var popup = $("#CCP_Item_cdPopup").dxPopup("instance");
+        popup.hide();
+
+    }
+
+    //#region 전자서명 기능
+        //전자서명 팝업
+        function CCP_format_SignClick(e) {
+            var signGridData = e.data;
+            _devSignOK = false;
+
+            if (e.columnIndex == 3) {
+                var popup = $("#CCP_formatPopup").dxPopup("instance");
+                popup.option("contentTemplate", $("#CCP_formatSignPopupTemplate"));
+
+                var sign_emp_nm = signGridData.sign_emp_nm;
+                var sign_time = signGridData.sign_time;
+                CCP_format_SignSeq = signGridData.sign_set_dt_seq;
+
+                //1.서명 정보가 있을 경우
+                if ((sign_emp_nm != "" && sign_emp_nm != null) || (sign_time != "" && sign_time != null)) {
+                    //다음단계 서명 확인
+                    if (signGridData.next_sign_yn > 0) {
+                        alert("다음 단계의 서명이 되어있어 취소할 수 없습니다.");
+                        return;
+                    }
+
+                    var ok = confirm("전자서명을 취소하시겠습니까?");
+
+                    if (ok) {
+                        CCP_format_SignGubun = "cancel";
+                        //서명 팝업 창 띄우기
+                        popup.show();
+                    }
+                }
+                //2.서명 정보가 없을 경우
+                else {
+                    if (signGridData.sign_set_dt_seq > 1) {
+                        //이전단계 서명 확인
+                        if (signGridData.prev_sign_yn == null || signGridData.prev_sign_yn == "" || signGridData.prev_sign_yn == "0") {
+                            alert("이전단계 서명이 완료되지 않았습니다.");
+                            return;
+                        }
+                    }
+                    CCP_format_SignGubun = "update";
+                    //서명 팝업 창 띄우기
+                    popup.show();
+                }
+            }
+        }
+
+        //전자서명 폼 -> ID, PW 입력 확인
+        function CCP_format_SignSubmit() {
+            var data = new FormData($("#CCP_format_Signform")[0]);
+
+            //유효 ID 여부 확인
+            var checkUser = CCP_format_IDValidation(data);
+            if (checkUser) {
+
+                //취소
+                if (CCP_format_SignGubun == "cancel") {
+                    if (CCP_formatAuthorityCheck(CCP_format_empCd)) {
+                        if (CCP_format_SignCancel()) {
+                            alert("전자서명이 취소되었습니다.");
+                            CCP_SignerSearch();
+                        } else {
+                            return;
+                        }
+                    } else {
+                        alert("권한이 없는 사용자거나 잘못된 ID,PW 입니다.");
+                    }
+                }
+
+                //등록
+                if (CCP_format_SignGubun == "update") {
+                    var representative_yn = "N";
+
+                    if (CCP_formatAuthorityCheck(CCP_format_empCd)) {
+                        representative_yn = "Y";
+                    } else {
+                        alert("권한이 없는 사용자이거나 잘못된 ID,PW 입니다.");
+                        return;
+                    }
+
+                    if (CCP_format_SignSave(representative_yn)) {
+                        alert("서명을 저장하였습니다.");
+                        CCP_SignerSearch();
+                    } else {
+                        alert("전자서명 도중 오류가 발생했습니다.");
+                    }
+
+                }
+            }
+
+            setTimeout(function () {
+                var popup = $("#CCP_formatPopup").dxPopup("instance");
+                popup.hide();
+            }, 1000);
+
+        }
+
+        //유효 ID Validation
+        function CCP_format_IDValidation(data) {
+            var check = false;
+
+            //로그인 user 정보
+            //var data = new FormData($("#CCP_format_Signform")[0]);
+            data.set("gubun", "S");
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Comm/IDValidation',
+                data: data,
+                contentType: false,
+                processData: false,
+                success: function (result) {
+
+                    if (result.length <= 0) {
+                        alert("잘못된 ID,PW 입니다.");
+                    } else {
+                        var jsonData = JSON.parse(result);
+
+                        CCP_format_empCd = jsonData[0].emp_cd;
+                        CCP_format_empNm = jsonData[0].emp_nm;
+
+                        if (CCP_format_LoginUserCd != CCP_format_empCd) {
+                            alert("로그인 사용자와 서명자가 일치하지 않습니다!");
+                        }
+
+                        if (CCP_format_LoginUserCd == CCP_format_empCd) {
+                            check = true;
+                        }
+
+                        $("#CCP_format_Confirmform input[name='dept_nm']").val(jsonData[0].dept_nm);
+                        $("#CCP_format_Confirmform input[name='emp_nm']").val(jsonData[0].emp_nm);
+                    }
+                }
+            });
+            return check;
+        }
+
+        //서명자와 권한자 체크
+        function CCP_formatAuthorityCheck(emp_cd) {
+            var check = false;
+
+            if (_devSignOK == false) {
+                $.ajax({
+                    type: 'GET',
+                    url: '/Comm/AuthorityCheck',
+                    data: {
+                        emp_cd: emp_cd,
+                        sign_set_cd: "9401",
+                        sign_set_seq: CCP_format_SignSeq
+                    },
+                    async: false,
+                    success: function (result) {
+                        if (result.length > 0) {
+                            check = true;
+                        }
+                    }
+                });
+            }
+            else {
+                $.ajax({
+                    type: 'GET',
+                    url: '/Comm/AuthorityCheck',
+                    data: {
+                        emp_cd: emp_cd,
+                        sign_set_cd: _devSignData.sign_set_cd,
+                        sign_set_seq: _devSignData.sign_set_dt_seq
+                    },
+                    async: false,
+                    success: function (result) {
+                        if (result.length > 0) {
+                            check = true;
+                        }
+                    }
+                });
+            }
+            return check;
+
+        }
+
+        //전자서명 저장
+        function CCP_format_SignSave(representative_yn) {
+            if (_devSignOK == false) {
+                var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+                var gridData_List = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+                var grid_Format = $("#CCP_formatGrid").dxDataGrid("instance");
+                var gridData_Format = getGridRowByKey("CCP_formatGrid", grid_Format.option("focusedRowKey"));
+
+                var ccp_cd = gridData_Format.ccp_cd;
+                var order_no = gridData_List.order_no;
+
+                var check = false;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Mont/CCP_format_SignSave',
+                    data: {
+                        sign_emp_cd: CCP_format_LoginUserCd,            //서명자코드
+                        sign_type: "2",                                 //2.패스워드방식
+                        representative_yn: representative_yn,           //대리자 유무
+                        index_key: ccp_cd + "-" + order_no,          //문서별 서명코드
+                        sign_set_cd: "9401",                            //페이지권한코드
+                        sign_set_dt_seq: CCP_format_SignSeq             //작성자:1 , 검토자:2, 승인자:3
+                    },
+                    async: false,
+                    success: function (result) {
+                        if (result != "") {
+                            if (result == "Y") {
+                                check = true;
+                            }
+                        }
+                    }
+                });
+            }
+            else {
+
+                _devSignData.representative_yn = representative_yn;
+
+                var check = false;
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/Mont/CCP_format_SignSave',
+                    //data: _signData,
+                    data: {
+                        sign_emp_cd: CCP_format_LoginUserCd,                      //서명자코드
+                        sign_type: "2",                                             //2.패스워드방식
+                        representative_yn: _devSignData.representative_yn,          //대리자 유무
+                        index_key: _devSignData.index_key,                          //문서별 서명코드
+                        sign_set_cd: _devSignData.sign_set_cd,                      //페이지권한코드
+                        sign_set_dt_seq: _devSignData.sign_set_dt_seq               //작성자:1 , 검토자:2
+                    },
+                    async: false,
+                    success: function (result) {
+                        if (result != "") {
+                            if (result == "Y") {
+                                check = true;
+                            }
+                        }
+
+                        var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+                        var gridData = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+                        CCP_ListRowChangedSearch(gridData);
+
+                    }
+                });
+            }
+            return check;
+        }
+
+        //전자서명 취소
+    function CCP_format_SignCancel() {
+
+        if (_devSignOK == false) {
+
+            var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+            var gridData_List = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+            var grid_Format = $("#CCP_formatGrid").dxDataGrid("instance");
+            var gridData_Format = getGridRowByKey("CCP_formatGrid", grid_Format.option("focusedRowKey"));
+
+            var ccp_cd = gridData_Format.ccp_cd;
+            var order_no = gridData_List.order_no;
+
+            var check = false;
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Mont/CCP_format_SignCancel',
+                data: {
+                    index_key: ccp_cd + "-" + order_no,
+                    sign_set_dt_seq: CCP_format_SignSeq,
+                    sign_set_cd: "9401"
+                },
+                success: function (result) {
+                    if (result != "") {
+
+                        if (result == "Y") {
+                            check = true;
+                        }
+
+                    }
+                }
+            });
+        }
+        else {
+            var check = false;
+
+            $.ajax({
+                type: 'POST',
+                async: false,
+                url: '/Mont/CCP_format_SignCancel',
+                data: {
+                    index_key: _devSignData.index_key,                          //문서별 서명코드
+                    sign_set_cd: _devSignData.sign_set_cd,                      //페이지권한코드
+                    sign_set_dt_seq: _devSignData.sign_set_dt_seq               //작성자:1 , 검토자:2, 승인자:3
+                },
+                async: false,
+                success: function (result) {
+                    if (result != "") {
+                        if (result == "Y") {
+                            check = true;
+                        }
+                    }
+                    var grid_List = $("#CCP_ListGrid").dxDataGrid("instance");
+                    var gridData = getGridRowByKey("CCP_ListGrid", grid_List.option("focusedRowKey"));
+                    CCP_ListRowChangedSearch(gridData);
+                }
+            });
+        }
+            return check;
+        }
+
+        //전자 서명 입력 초기화
+        function CCP_format_clearSignInput() {
+            $("#CCP_format_Signform")[0].reset();
+            $("#CCP_format_Confirmform input[name='dept_nm']").val("");
+            $("#CCP_format_Confirmform input[name='emp_nm']").val("");
+        }
+    //#endregion
+
+
+    function get_index_key(signData) {
+        var index_key = "";
+        var sign_data = signData;
+
+        if (sign_data == null || sign_data == undefined || sign_data == "" || sign_data.deviation_gubun == null || sign_data.equipment_idx == undefined)
+            return;
+
+        if (sign_data.deviation_gubun == "EXCEPTION" || sign_data.deviation_gubun == "EQUIPMENT") {
+
+            switch ($("#CCP_Header input[name=CCP_equip_type]").val()) {
+                case "1":
+                    index_key = "EMD-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "2":
+                    index_key = "EQX-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "3":
+                    index_key = "EQW-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "4":
+                    index_key = "EDR-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "5":
+                    index_key = "ETZ-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "7":
+                    index_key = "EQP-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "8":
+                    index_key = "EFM-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "9":
+                    index_key = "EEM-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "10":
+                    index_key = "EQT-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                case "14":
+                    index_key = "EDR-" + sign_data.equipment_idx + "-" + sign_data.audit_id;
+                    break;
+                default:
+                    index_key = "OWD-" + sign_data.equipment_idx; //order_work_data
+                    break;
+            }
+            console.log(index_key);
+        }
+
+        else if (sign_data.deviation_gubun == "PROCESSEXAM") {
+            index_key = "OWD-" + sign_data.equipment_idx; //order_work_data
+        }
+
+        return index_key;
+
+    }
+
+    function SetSignParam(signData, seq, audit_id) {
+        console.log(signData);
+
+        var data = new (Object);
+        if (seq == "1") { //작성자
+            data.sign_emp_cd = signData.signer;
+            data.sign_time = signData.signer_sign_time;
+            data.prev_sign_yn = "";
+            if (signData.confirmer != null && signData.confirmer != undefined && signData.confirmer != "") {
+                data.next_sign_yn = "Y";
+            }
+            else {
+                data.next_sign_yn = "";
+            }
+        }
+        else if (seq == "2") {//확인자
+            data.sign_emp_cd = signData.confirmer;
+            data.sign_time = signData.confirmer_sign_time;
+            if (signData.signer != null && signData.signer != undefined && signData.signer != "") {
+                data.prev_sign_yn = "Y";
+            }
+            else {
+                data.prev_sign_yn = "";
+            }
+            data.next_sign_yn = "";
+        }
+
+        if (signData.audit_id == undefined) {
+            signData.audit_id = audit_id;
+        }
+
+        data.sign_set_dt_seq = seq;
+        data.sign_set_cd = "9402";
+        data.index_key = get_index_key(signData);
+
+        return data;
+    }
+
+    //그리드에서 클릭
+    function CCP_Deviation_SignClick(e) {
+
+        var signGridData = null;
+
+        if (e.data == undefined) {
+            return;
+        }
+
+        //작성자 (변경자)
+        //if (e.column.dataField == "_signer_sign") {
+        if (e.column.dataField == "signer_nm") {
+            if (e.data.equipment_idx == undefined) {
+                alert("백업 기록이 없으므로 서명이 불가합니다.");
+                return;
+            }
+            signGridData = SetSignParam(e.data, 1);
+        }
+        //확인자 (confirmer)
+        //else if (e.column.dataField == "_confirmer_sign") {
+        else if (e.column.dataField == "confirmer_nm") {
+            if (e.data.equipment_idx == undefined) {
+                alert("백업 기록이 없으므로 서명이 불가합니다.");
+                return;
+            }
+            signGridData = SetSignParam(e.data, 2);
+        }
+        if (signGridData != null) {
+            if (signGridData.index_key != null) {
+                CCP_DeviationSignPopup(signGridData);
+            }
+            else {
+                alert("백업 기록이 없으므로 서명이 불가합니다.");
+            }
+        }
+    }
+
+    //일탈 전자서명 팝업
+    function CCP_DeviationSignPopup(data) {
+
+        _devSignData = null;
+        _devSignData = data;
+
+        _devSignOK = true;
+
+        var popup = $("#CCP_formatPopup").dxPopup("instance");
+        popup.option("contentTemplate", $("#CCP_formatSignPopupTemplate"));
+
+        var sign_emp_nm = data.sign_emp_cd;
+        var sign_time = data.sign_time;
+
+
+        //1.서명 정보가 있을 경우
+        if ((sign_emp_nm != "" && sign_emp_nm != null) || (sign_time != "" && sign_time != null)) {
+            //다음단계 서명 확인
+            if (data.next_sign_yn == "Y") {
+                alert("다음 단계의 서명이 되어있어 취소할 수 없습니다.");
+                return;
+            }
+
+            var ok = confirm("전자서명을 취소하시겠습니까?");
+
+            if (ok) {
+                CCP_format_SignGubun = "cancel";
+                //서명 팝업 창 띄우기
+                popup.show();
+            }
+        }
+        //2.서명 정보가 없을 경우
+        else {
+            if (data.sign_set_dt_seq > 1) {
+                //이전단계 서명 확인
+                if (data.prev_sign_yn != "Y") {
+                    alert("이전단계 서명이 완료되지 않았습니다.");
+                    return;
+                }
+            }
+            CCP_format_SignGubun = "update";
+            //서명 팝업 창 띄우기
+            popup.show();
+        }
+    }
+
+    //#endregion
+
+    //#region CCP 미리보기 및 인쇄
+    function CCP_format_Print() {
+        if ($("#CCP_ListGrid").dxDataGrid("instance").option("focusedRowIndex") < 0) {
+            alert("미리보기 및 인쇄할 대상이 없습니다.");
+            return;
+        }
+        
+        var btnType;
+        btnType = $(event.target).closest('.btn').attr('id');
+
+        var order_no = $("#CCP_Header input[name=CCP_order_no]").val();
+        var process_cd = $("#CCP_Header input[name=CCP_process_cd]").val();
+        var item_cd = $("#CCP_Header input[name=CCP_item_cd]").val();
+        var lot_no = $("#CCP_Header input[name=CCP_lot_no]").val();
+        var HaccpCode = $("#CCP_Header input[name=HACCPCode]").val();
+
+        var CCP_gubun = $("#CCP_Header input[name=CCP_gubun]").val();    //설비종류에 따라 공정 분류
+
+        var index_key = $("#CCP_Header input[name=CCP_index_key]").val();
+        var sign_set_cd = "9402";
+
+
+
+        var report = new ReportHelper();
+        var table_no = "";
+
+        if (CCP_gubun == "906") {
+            table_no = "901";
+        }
+        else {
+            table_no = process_cd;
+        }
+            
+        var CCP_TblName = "CCP_" + table_no + "_H,CCP_" + table_no + "_M,CCP_" + table_no + "_E,CCP_" + table_no + "_D,CCP_" + table_no + "_S";
+        
+        report.addParam({
+            objFile: { path: "CCP", RptFileName: "rpt_CCP_" + table_no },
+            objSp: { SpName: "SP_CCP_Monitoring", gubun: process_cd, reportParam: "HaccpCode:" + HaccpCode + ";order_no:" + order_no + ";process_cd:" + process_cd + ";item_cd:" + item_cd + ";lot_no:" + lot_no + ";index_key:" + index_key + ";sign_set_cd:" + sign_set_cd + ";CCP_gubun:" + CCP_gubun},
+            objEtcInfo: { subParam: "" },
+            objTblNm: { tblName: CCP_TblName }
+        });
+
+
+        if (btnType.indexOf('Preview') > -1) {
+            report.preview();
+        } else if (btnType.indexOf('Print') > -1) {
+            report.print();
+        }
+    }
+
+    //값에 따라 그리드 배경색상 변경
+    function CCP_ListGrid_OnCellPrepared(cellInfo) {
+
+        if (cellInfo.rowType == "data" && cellInfo.column.dataField === "index_key") {
+
+            if ("O" == cellInfo.data.index_key) {
+                cellInfo.cellElement.addClass('lightcyan');
+            } 
+
+        }
+    }
+    //#endregion
+
+</script>
+
+<div id="CCP_format" autoresize="Y">
+
+    <!--#region 팝업-->
+    <!--품목 팝업-->
+    <div id="CCP_Item_cdPopup"></div>
+
+    <!--전자서명 팝업-->
+    @(Html.DevExtreme().Popup()
+            .ID("CCP_formatPopup")
+            .Width(500)
+            .Height(420)
+            .ShowTitle(true)
+            .Title("작업자 인증")
+            .OnHidden("CCP_format_clearSignInput")
+            .Visible(false)
+            .DragEnabled(true)
+            .CloseOnOutsideClick(false)
+        )
+
+    @using (Html.DevExtreme().NamedTemplate("CCP_formatSignPopupTemplate"))
+    {
+        <h6>전자서명은 수기서명과 동일한 효력을 갖습니다.</h6>
+
+        <form id="CCP_format_Signform">
+
+            <div class="input-wrapper">
+                <label class="col-3">아이디</label>
+                <input type="text" class="col-8 form-control" name="txt_ID">
+
+                <label class="col-3">비밀번호</label>
+                <input type="password" class="col-8 form-control" name="txt_Pass">
+            </div>
+
+        </form>
+        <div class="align-content-end">
+            <button class="btn btn-secondary" onclick="CCP_format_SignSubmit()">확인</button>
+        </div>
+
+        <br />
+        <hr />
+
+        <form id="CCP_format_Confirmform">
+
+            <label class="col-3">부서</label>
+            <input type="text" class="col-8 form-control" name="dept_nm" readonly="readonly" />
+            <label class="col-3">성명</label>
+            <input type="text" class="col-8 form-control" name="emp_nm" readonly="readonly" />
+
+        </form>
+
+    }
+    <!--#endregion-->
+
+<div class="row" style="height:auto">
+
+    <!--#region 상단 헤더 문서명-->
+    <div id="CCP_Header" class="col-12 pb-1">
+        <div class="box mb-0" style="padding-top:1px">
+            <form id="CCP_Header_form">
+
+                <div class="input-wrapper">
+                    <span class="col-1">문서명</span>
+                    <div class="input-group col-2">
+                        <input type="text" class="form-control" name="doc_cd" value="@ViewBag.ReportCode" readonly />
+                        <input type="hidden" name="full_doc_cd" value="@ViewBag.HaccpCode" />
+                    </div>
+                    <div class="input-group col-4">
+                        <input type="text" class="form-control" name="doc_nm" value="@ViewBag.doc_name" readonly />
+                    </div>
+
+                    <input type="hidden" name="CCP_ChgSerNo" value="@ViewBag.ChgSerNo" />
+                    <input type="hidden" name="CCP_order_no" />
+                    <input type="hidden" name="CCP_process_cd" />
+                    <input type="hidden" name="CCP_item_cd" />
+                    <input type="hidden" name="CCP_lot_no" />
+                    <input type="hidden" name="CCP_ccp_cd" />
+
+                    <input type="hidden" name="CCP_equip_type" />
+                    <input type="hidden" name="CCP_gubun" />             <!--리포트 양식 gubun값-->
+
+                    <input type="hidden" name="CCP_index_key" />
+
+                    <!--미리보기 및 인쇄-->
+                    <label style="float: right">&nbsp;</label>
+                    <button type="button" class="btn btn-secondary" id="CCP_formatPrint" style="float: right" onclick="CCP_format_Print()">인쇄</button>
+                    <label style="float: right">&nbsp;</label>
+                    <button type="button" class="btn btn-secondary" id="CCP_formatPreview" style="float:right" onclick="CCP_format_Print()">미리보기</button>
+                </div>
+
+            </form>
+        </div>
+
+    </div>
+    <!--#endregion-->
+    <div id="CCP_Search" class="col-12 pb-1">
+        <div class="box mb-0" style="padding-top:1px">
+            <form id="CCP_List_form">
+                <div class="input-wrapper">
+                    <label class="col-1">조회기간</label>
+                    <div class="input-group col-1">
+                        <input type="text" class="form-control input-sm datepicker text-center required" name="CCP_sDate" value="@DateTime.Today.AddMonths(-1).ToShortDateString()" />
+                    </div>
+                    <div class="input-group col-1">
+                        <input type="text" class="form-control input-sm datepicker text-center required" name="CCP_eDate" value="@DateTime.Today.ToShortDateString()" />
+                    </div>
+                    <label class="col-1">품목코드</label>
+                    <div class="input-group col-3">
+                        <input type="text" class="form-control required" name="CCP_item_cd" />
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" onclick="CCP_Item_cdPopup()">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="CCP_Item_nm" readonly />
+                    </div>
+                    <label style="float: right">&nbsp;</label>
+                    <button type="button" class="btn btn-secondary" name="CCP_Search" style="float:right" onclick="CCP_formatSearch()">조회</button>
+
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!--#region 점검표 그리드-->
+    <div class="col-6 mb-0 pr-0">
+        <div id="CCP_format" class="box mb-1 pb-0" style="height:auto">
+            <div class="divName">
+                <p>점검표</p>
+            </div>
+
+            @(Html.DevExtreme().DataGrid()
+                .ID("CCP_formatGrid")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .Height(170)
+                .HoverStateEnabled(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .KeyExpr("ccp_cd")
+                .Columns(c =>
+                {
+                    c.Add().DataField("ccp_cd").Caption("CCP코드").Width(150);
+                    c.Add().DataField("ccp_description").Caption("CCP명");
+                    c.Add().DataField("ccp_nm").Caption("CCP일지");
+                })
+                .OnFocusedRowChanged("CCP_formatSearch")
+                )
+        </div>
+    </div>
+    <!--#endregion-->
+    <!--#region 전자서명-->
+    <div class="col-6 mb-0 pl-1">
+        <div id="CCP_Sign" class="box mb-1 pb-0" style="height:auto">
+            <div class="divName">
+                <p>전자서명</p>
+            </div>
+
+            @(Html.DevExtreme().DataGrid()
+                            .ID("CCP_SignGrid")
+                            .ShowBorders(true)
+                            .ShowColumnLines(true)
+                            .ShowRowLines(true)
+                            .KeyExpr("sign_set_dt_id")
+                            .OnCellClick("CCP_format_SignClick")
+                            .Height(170)
+                            .Selection(s => s.Mode(SelectionMode.Single))
+                            .Columns(c =>
+                            {
+                            c.Add()
+                                    .DataField("displayfield")
+                                    .Caption("구분");
+                            c.Add()
+                                    .DataField("sign_emp_nm")
+                                    .Caption("서명자");
+                            c.Add()
+                                    .DataField("sign_time")
+                                    .Width(180)
+                                    .Caption("서명일자");
+                            c.Add()
+                                    .AllowFiltering(false)
+                                    .AllowSorting(false)
+                                    .DataField("sign_image")
+                                    .Name("sign_image")
+                                    .Caption("서명")
+                                    .Width(100)
+                                    .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                })
+                                )
+        </div>
+    </div>
+
+    <!--#endregion-->
+    <!--#region 공정 번호 List 그리드-->
+    <div id="CCP_List" class="col-12">
+        <div class="box mb-0" style="height:auto">
+
+            <div id="CCP_ListGrid" class="box mb-1" style="height:auto">
+                @(Html.DevExtreme().DataGrid()
+                .ID("CCP_ListGrid")
+                .ShowBorders(true)
+                .Selection(s => s.Mode(SelectionMode.Single))
+                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                .Height(190)
+                .HoverStateEnabled(true)
+                .ShowColumnLines(true)
+                .ColumnAutoWidth(true)
+                .AllowColumnResizing(true)
+                .KeyExpr("order_no")
+                .Columns(c =>
+                {
+                    c.Add().DataField("order_work_end_time").Caption("지시일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.Date);
+                    c.Add().DataField("item_cd").Caption("품번");
+                    c.Add().DataField("item_nm").Caption("품명");
+                    c.Add().DataField("order_no").Caption("작업지시번호");
+                    c.Add().DataField("lot_no").Caption("Lot번호");
+                    c.Add().DataField("order_qty").Caption("지시수량");
+                    c.Add().DataField("order_batch_size_unit").Caption("단위");
+                    c.Add().DataField("index_key").Caption("서명여부").Width("8%");//.Visible(false);
+                })
+                .OnFocusedRowChanged("CCP_ListRowChanged")
+                .OnCellPrepared("CCP_ListGrid_OnCellPrepared")
+                )
+            </div>
+
+        </div>
+    </div>
+
+    <!--#endregion-->
+    <!--#region 점검결과-->
+    <div class="col-12" style="height:auto">
+        <div id="CCP_Result" class="box mb-1" style="height:auto">
+            <div class="divName">
+                <p>점검결과</p>
+            </div>
+            <!--모니터링-->
+            <!--#region 세척-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_211")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명(Lot번호)");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("temper").Caption("건조온도");
+                                    c.Add().DataField("hr").Caption("건조시간(분)");
+                                    c.Add().DataField("humi").Caption("수분측정(%)");
+                                    c.Add().DataField("structure_cd").Caption("비고(건조기명)");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 건조-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_901")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명(Lot번호)");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("temper").Caption("건조온도");
+                                    c.Add().DataField("hr").Caption("건조시간(분)");
+                                    //c.Add().DataField("humi").Caption("수분측정(%)");
+                                    c.Add().DataField("structure_cd").Caption("비고(건조기명)");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 살균-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_902")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("ster_temp").Caption("살균온도");
+                                    c.Add().DataField("ster_liter").Caption("살균유량");
+                                    c.Add().DataField("ster_hr").Caption("살균유지시간");
+                                    c.Add().DataField("structure_cd").Caption("비고(온도기록계 부착)");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region X-Ray-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_903")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명(Lot번호)");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("Fe").Caption("①FE");
+                                    c.Add().DataField("SUS").Caption("②SUS");
+                                    c.Add().DataField("Product").Caption("제품만통과");
+                                    c.Add().DataField("Fe_Prd").Caption("①+제품");
+                                    c.Add().DataField("SUS_Prd").Caption("②+제품");
+                                    c.Add().DataField("detection_result").Caption("검출결과");
+                                    c.Add().DataField("structure_cd").Caption("비고");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 금속검출-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_904")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명(Lot번호)");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("Fe").Caption("①FE");
+                                    c.Add().DataField("SUS").Caption("②SUS");
+                                    c.Add().DataField("Product").Caption("제품만통과");
+                                    c.Add().DataField("Fe_Prd").Caption("①+제품");
+                                    c.Add().DataField("SUS_Prd").Caption("②+제품");
+                                    c.Add().DataField("detection_result").Caption("검출결과");
+                                    c.Add().DataField("structure_cd").Caption("비고");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 여과-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_MonitorGrid_905")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(145)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("confirm_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("item_nm").Caption("제품명(Lot번호)");
+                                    c.Add().DataField("confirm_time").Caption("점검시간");
+                                    c.Add().DataField("filter_break").Caption("여과망 파손여부");
+                                    c.Add().DataField("filter_size").Caption("여과망 크기");
+                                    c.Add().DataField("stir_tank_press").Caption("압력 확인(농축액)");
+                                    c.Add().DataField("structure_cd").Caption("비고");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 일탈유무-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_ExamGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(130)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("order_work_start_time")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("equip_nm").Caption("설비명");
+                                    c.Add().DataField("order_work_start_time").Caption("최초 가동시간").Format("yyyy-MM-dd HH:mm").DataType(GridColumnDataType.DateTime);
+                                    c.Add().DataField("order_work_end_time").Caption("가동 종료시간").Format("yyyy-MM-dd HH:mm").DataType(GridColumnDataType.DateTime);
+                                    c.Add().DataField("breakaway").Caption("이탈유무");
+                                    c.Add().DataField("order_work_data_remark").Caption("특이사항");
+                                })
+                                )
+            <!--#endregion-->
+            <!--#region 일탈사항-->
+            @(Html.DevExtreme().DataGrid()
+                                .ID("CCP_DeviationGrid")
+                                .ShowBorders(true)
+                                .Selection(s => s.Mode(SelectionMode.Single))
+                                .Scrolling(scrolling => scrolling.Mode(GridScrollingMode.Virtual).ShowScrollbar(ShowScrollbarMode.Always))
+                                .Height(115)
+                                .HoverStateEnabled(true)
+                                .ShowColumnLines(true)
+                                .ColumnAutoWidth(true)
+                                .WordWrapEnabled(true)
+                                .AllowColumnResizing(true)
+                                .KeyExpr("deviation_contents")
+                                .Columns(c =>
+                                {
+                                    c.Add().DataField("deviation_contents").Caption("이탈사항");
+                                    c.Add().DataField("request_contents").Caption("조치사항 및 결과");
+                                    c.Add().DataField("despatch_dept_time").Caption("조치 일자").Format("yyyy-MM-dd").DataType(GridColumnDataType.DateTime);
+                                    c.Add().DataField("signer_nm").Caption("작업자");
+                                    c.Add().DataField("confirmer_nm").Caption("확인자");
+                                    @*c.Add()
+                                        .DataField("_signer_sign")
+                                        .Name("signer_sign")
+                                        .Caption("작업자")
+                                        .Width(100)
+                                        .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);
+                                    c.Add().DataField("confirmer_nm").Caption("확인자").Visible(false);
+                                    c.Add()
+                                        .DataField("_confirmer_sign")
+                                        .Name("confirmer_sign")
+                                        .Caption("확인자")
+                                        .Width(100)
+                                        .CellTemplate(@<text>
+                                            <div>
+                                                <img src="<%- value %>" alt="" style="width:80px; height:25px;"/>
+                                            </div>
+                                        </text>);*@
+                                })
+                                .OnCellClick("CCP_Deviation_SignClick")
+                                )
+            <!--#endregion-->
+        </div>
+    </div>
+    <!--#endregion-->
+</div>
+
+</div>
