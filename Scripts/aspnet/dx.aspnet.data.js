@@ -1,4 +1,4 @@
-// Version: 2.8.6
+// Version: 2.6.1
 // https://github.com/DevExpress/DevExtreme.AspNet.Data
 // Copyright (c) Developer Express Inc.
 
@@ -7,27 +7,23 @@
 (function(factory) {
     "use strict";
 
-    function unwrapESModule(module) {
-        return module && module.__esModule && module.default ? module.default : module;
-    }
-
     if(typeof define === "function" && define.amd) {
         define(function(require, exports, module) {
             module.exports = factory(
-                unwrapESModule(require("devextreme/core/utils/ajax")),
+                require("devextreme/core/utils/ajax"),
                 require("jquery").Deferred,
                 require("jquery").extend,
-                unwrapESModule(require("devextreme/data/custom_store")),
-                unwrapESModule(require("devextreme/data/utils"))
+                require("devextreme/data/custom_store"),
+                require("devextreme/data/utils")
             );
         });
     } else if (typeof module === "object" && module.exports) {
         module.exports = factory(
-            unwrapESModule(require("devextreme/core/utils/ajax")),
+            require("devextreme/core/utils/ajax"),
             require("jquery").Deferred,
             require("jquery").extend,
-            unwrapESModule(require("devextreme/data/custom_store")),
-            unwrapESModule(require("devextreme/data/utils"))
+            require("devextreme/data/custom_store"),
+            require("devextreme/data/utils")
         );
     } else {
         DevExpress.data.AspNet = factory(
@@ -66,11 +62,21 @@
             onAjaxError = options.onAjaxError;
 
         function send(operation, requiresKey, ajaxSettings, customSuccessHandler) {
-            var d = Deferred(),
-                thenable,
-                beforeSendResult;
+            var d = Deferred();
 
-            function sendCore() {
+            if(requiresKey && !keyExpr) {
+                d.reject(new Error("Primary key is not specified (operation: '" + operation + "', url: '" + ajaxSettings.url + "')"));
+            } else {
+                if(operation === "load") {
+                    ajaxSettings.cache = false;
+                    ajaxSettings.dataType = "json";
+                } else {
+                    ajaxSettings.dataType = "text";
+                }
+
+                if(onBeforeSend)
+                    onBeforeSend(operation, ajaxSettings);
+
                 ajaxUtility.sendRequest(ajaxSettings).then(
                     function(res, textStatus, xhr) {
                         if(customSuccessHandler)
@@ -93,28 +99,6 @@
                             d.reject(xhr, textStatus);
                     }
                 );
-            }
-
-            if(requiresKey && !keyExpr) {
-                d.reject(new Error("Primary key is not specified (operation: '" + operation + "', url: '" + ajaxSettings.url + "')"));
-            } else {
-                if(operation === "load") {
-                    ajaxSettings.cache = false;
-                    ajaxSettings.dataType = "json";
-                } else {
-                    ajaxSettings.dataType = "text";
-                }
-
-                if(onBeforeSend) {
-                    beforeSendResult = onBeforeSend(operation, ajaxSettings);
-                    if(beforeSendResult && typeof beforeSendResult.then === "function")
-                        thenable = beforeSendResult;
-                }
-
-                if(thenable)
-                    thenable.then(sendCore, function(error) { d.reject(error); });
-                else
-                    sendCore();
             }
 
             return d.promise();
