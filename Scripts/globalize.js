@@ -1,16 +1,16 @@
 /**
- * Globalize v1.7.0
+ * Globalize v1.5.0
  *
- * https://github.com/globalizejs/globalize
+ * http://github.com/jquery/globalize
  *
- * Copyright OpenJS Foundation and other contributors
+ * Copyright jQuery Foundation and other contributors
  * Released under the MIT license
- * https://jquery.org/license
+ * http://jquery.org/license
  *
- * Date: 2021-08-02T11:53Z
+ * Date: 2020-03-25T12:19Z
  */
 /*!
- * Globalize v1.7.0 2021-08-02T11:53Z Released under the MIT license
+ * Globalize v1.5.0 2020-03-25T12:19Z Released under the MIT license
  * http://git.io/TrdQbw
  */
 (function( root, factory ) {
@@ -185,7 +185,7 @@ var partsJoin = function( parts ) {
 
 
 var runtimeStringify = function( args ) {
-	return JSON.stringify( args, function( _key, value ) {
+	return JSON.stringify( args, function( key, value ) {
 		if ( value && value.runtimeKey ) {
 			return value.runtimeKey;
 		}

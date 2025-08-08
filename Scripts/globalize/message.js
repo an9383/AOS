@@ -1,16 +1,16 @@
 /**
- * Globalize v1.7.0
+ * Globalize v1.5.0
  *
- * https://github.com/globalizejs/globalize
+ * http://github.com/jquery/globalize
  *
- * Copyright OpenJS Foundation and other contributors
+ * Copyright jQuery Foundation and other contributors
  * Released under the MIT license
- * https://jquery.org/license
+ * http://jquery.org/license
  *
- * Date: 2021-08-02T11:53Z
+ * Date: 2020-03-25T12:19Z
  */
 /*!
- * Globalize v1.7.0 2021-08-02T11:53Z Released under the MIT license
+ * Globalize v1.5.0 2020-03-25T12:19Z Released under the MIT license
  * http://git.io/TrdQbw
  */
 (function( root, factory ) {
@@ -45,7 +45,7 @@ var alwaysArray = Globalize._alwaysArray,
 	validateParameterType = Globalize._validateParameterType,
 	validateParameterTypePlainObject = Globalize._validateParameterTypePlainObject;
 var MessageFormat;
-/* eslint-disable */
+/* jshint ignore:start */
 MessageFormat = (function() {
 MessageFormat._parse = (function() {
 
@@ -1859,7 +1859,7 @@ MessageFormat.prototype.compile = function ( messages, opt ) {
 
 return MessageFormat;
 }());
-/* eslint-enable */
+/* jshint ignore:end */
 
 
 var createErrorPluralModulePresence = function() {

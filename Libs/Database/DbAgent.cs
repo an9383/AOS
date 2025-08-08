@@ -54,9 +54,9 @@ namespace HACCP.Libs.Database
         ///로컬 개발
         //static public string defaultConnectionString = "data source=sf.tascorp.co.kr;initial catalog=RTEGMS_HANPOONG;password=!1Tascorp;persist security info=true;user id=sa;packet size=4096;Connect Timeout=120";
         static public string defaultConnectionString = "";
-        static private string _Data_source = "127.0.0.1";
+        static private string _Data_source = "localhost";
         static private string _DbID = "sa";
-        static private string _DbPWD = "RYdbrtjrh@";
+        static private string _DbPWD = "s9200502";
         static private string _Catalog = "RTEGMS_AOS";
         static private string _ConnectionString = ";persist security info=true;packet size=4096;Connect Timeout=120";
 
